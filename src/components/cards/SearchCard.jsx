@@ -70,7 +70,7 @@ const useStyles = makeStyles((theme) => ({
     },
 }));
 
-export default function SimpleCard() {
+export default function SearchCard(justification) {
     const classes = useStyles();
 
     return (
@@ -97,7 +97,8 @@ export default function SimpleCard() {
                         inputProps={{ "aria-label": "search" }}
                     />
                 </div>
-                <Button variant="contained" color="primary">Search</Button>
+                {justification.id === undefined && <Button variant="contained" disabled>Please provide a justification</Button>}
+                {justification.id !== undefined && <Button variant="contained" color="primary">Search</Button>}
             </CardActions>
         </Card>
     );
