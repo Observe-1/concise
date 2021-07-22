@@ -167,7 +167,7 @@ export default function AppBarWithSearch() {
 
     return (
         <div className={classes.grow}>
-            <AppBar position="static" style={{ background: '#57390b' }}>
+            <AppBar position="static" style={{ background: '#5739bb' }}>
                 <Toolbar>
                     <IconButton
                         edge="start"
@@ -180,7 +180,7 @@ export default function AppBarWithSearch() {
                     <Tooltip title={<h2>The Postcode Infomation Search</h2>} variant="h5" leaveDelay={300} aria-label="add">
                         <Typography className={classes.title} variant="h5" noWrap>
                             Concise
-                    </Typography>
+                        </Typography>
                     </Tooltip>
                     <Tooltip
                         title={<h3>Quick search will provide no extra enrichments: basic infomation only</h3>}
