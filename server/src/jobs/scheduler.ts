@@ -5,8 +5,6 @@ import { refreshMarketValuations } from '../modules/market/service.js';
 import { runDueRecurring } from '../modules/recurring/service.js';
 import { allUserIds, backfillSnapshots } from '../modules/snapshots/service.js';
 
-const TICK_MS = 60_000;
-
 /**
  * In-process background jobs. Every effect is idempotent, so a missed tick
  * (downtime, crash) self-heals on the next one:
@@ -38,7 +36,7 @@ export function startScheduler(ctx: AppContext): () => void {
   };
 
   tick(); // run immediately on startup to catch up after downtime
-  const handle = setInterval(tick, TICK_MS);
+  const handle = setInterval(tick, ctx.config.jobTickMs);
   handle.unref();
   return () => clearInterval(handle);
 }

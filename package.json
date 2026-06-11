@@ -5,7 +5,8 @@
   "description": "Minimalist personal finance tracker",
   "workspaces": [
     "server",
-    "web"
+    "web",
+    "e2e"
   ],
   "engines": {
     "node": ">=24"
@@ -19,6 +20,7 @@
     "build": "npm run build -w server && npm run build -w web",
     "start": "npm run start -w server",
     "test": "npm run test -w server && npm run test -w web",
+    "e2e": "npm run build -w web && npm run test -w e2e",
     "typecheck": "npm run typecheck -w server && npm run typecheck -w web"
   },
   "devDependencies": {

@@ -1,6 +1,6 @@
 # TODO — single source of truth for progress
 
-**Current phase: 6 — Quality assurance**
+**Current phase: 7 — Deployment**
 
 ## Phase 1: System architecture
 - [x] Tech stack decisions (Node 24 + node:sqlite + Express 5 / React 19 + Vite + Tailwind 4)
@@ -54,9 +54,11 @@
 - [x] Security test suite (bypass, injection, type confusion, authz boundaries, forged cookies, oversized payloads)
 
 ## Phase 6: Quality assurance
-- [ ] Playwright e2e: login → asset → liability → recurring → net worth → graph
-- [ ] Regression suite wiring
-- [ ] Performance checks (API latency, UI render)
+- [x] Playwright e2e: login → asset → liability → recurring execution → net worth → graph → settings/sign-out (8 flows × mobile Pixel 7 + desktop Chrome = 16 tests)
+- [x] Regression suite wiring (root npm test = server 79 + web 19; npm run e2e)
+- [x] Performance checks (API p95 tripwires in server/test/perf.test.ts; UI render budget in e2e)
+- [x] Coverage thresholds enforced (server ≥80% stmt/fn/lines, ≥75% branches)
+- [x] E2E knobs: SEED_ON_START, JOB_TICK_MS, LOGIN_RATE_LIMIT envs
 
 ## Phase 7: Deployment
 - [ ] Dockerfile + compose (volume for SQLite)

@@ -3,6 +3,7 @@ import { loadConfig } from './config.js';
 import type { AppContext } from './context.js';
 import { openDatabase } from './db/connection.js';
 import { migrate } from './db/migrate.js';
+import { seed } from './db/seed.js';
 import { startScheduler } from './jobs/scheduler.js';
 import { SimulatedPriceProvider } from './modules/market/provider.js';
 
@@ -10,6 +11,10 @@ const config = loadConfig();
 const db = openDatabase(config.dbPath);
 const applied = migrate(db);
 if (applied.length > 0) console.log(`[db] applied migrations: ${applied.join(', ')}`);
+if (config.seedOnStart) {
+  seed(db);
+  console.log('[db] demo account seeded (SEED_ON_START=1)');
+}
 
 const ctx: AppContext = {
   db,

@@ -1,0 +1,175 @@
+import { expect, test, type Page } from '@playwright/test';
+
+test.describe.configure({ mode: 'serial' });
+
+const todayISO = () => new Date().toISOString().slice(0, 10);
+
+async function login(page: Page) {
+  await page.goto('/login');
+  await page.getByLabel(/username/i).fill('demo');
+  await page.getByLabel(/password/i).fill('demo');
+  await page.getByRole('button', { name: /^sign in$/i }).click();
+  await expect(page.getByText(/welcome back/i)).toBeVisible();
+}
+
+test('rejects invalid credentials with a friendly error', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByLabel(/username/i).fill('demo');
+  await page.getByLabel(/password/i).fill('wrong-password');
+  await page.getByRole('button', { name: /^sign in$/i }).click();
+  await expect(page.getByRole('alert')).toContainText(/invalid username or password/i);
+});
+
+test('logs in and renders the dashboard with an interactive graph', async ({ page }) => {
+  await login(page);
+
+  // Summary cards (scoped to main — nav items share these labels)
+  const main = page.locator('main');
+  await expect(main.getByText('Net worth', { exact: false }).first()).toBeVisible();
+  await expect(main.getByText('Assets', { exact: true }).first()).toBeVisible();
+  await expect(main.getByText('Liabilities', { exact: true }).first()).toBeVisible();
+
+  // Graph renders an SVG area path from seeded history
+  const chart = page.getByRole('img', { name: /net worth history chart/i });
+  await expect(chart).toBeVisible();
+  await expect(chart.locator('svg path').first()).toBeVisible();
+
+  // Range presets
+  const rangeGroup = page.getByRole('group', { name: /history range/i });
+  for (const label of ['1M', '3M', '6M', 'YTD', '1Y', '5Y', 'All']) {
+    await expect(rangeGroup.getByRole('button', { name: label, exact: true })).toBeVisible();
+  }
+  await rangeGroup.getByRole('button', { name: '1Y', exact: true }).click();
+  await expect(rangeGroup.getByRole('button', { name: '1Y', exact: true }))
+    .toHaveAttribute('aria-pressed', 'true');
+  await expect(chart.locator('svg path').first()).toBeVisible();
+
+  // Full-screen graph mode
+  await page.getByRole('button', { name: /view graph full screen/i }).click();
+  await expect(page.getByRole('button', { name: /exit full screen/i })).toBeVisible();
+  await expect(page.getByText(/welcome back/i)).not.toBeVisible();
+  await page.getByRole('button', { name: /exit full screen/i }).click();
+  await expect(page.getByText(/welcome back/i)).toBeVisible();
+});
+
+test('creates an asset and shows it grouped by class', async ({ page }, testInfo) => {
+  const name = `E2E Fund ${testInfo.project.name}`;
+  await login(page);
+  await page.goto('/assets');
+  await page.getByRole('button', { name: /add asset/i }).click();
+
+  const dialog = page.getByRole('dialog', { name: /add asset/i });
+  await dialog.getByLabel(/category/i).selectOption('investments');
+  await dialog.getByLabel(/^name$/i).fill(name);
+  await dialog.getByLabel(/^value$/i).fill('1234.56');
+  await dialog.getByRole('button', { name: /^add$/i }).click();
+
+  const row = page.getByRole('button', { name: new RegExp(name) });
+  await expect(row).toBeVisible();
+  await expect(row).toContainText(/1,234\.56/);
+  await expect(page.getByRole('region', { name: 'Investments' })).toBeVisible();
+});
+
+test('creates a liability mirroring the asset flow', async ({ page }, testInfo) => {
+  const name = `E2E Loan ${testInfo.project.name}`;
+  await login(page);
+  await page.goto('/liabilities');
+  await page.getByRole('button', { name: /add liability/i }).click();
+
+  const dialog = page.getByRole('dialog', { name: /add liability/i });
+  await dialog.getByLabel(/category/i).selectOption('loan');
+  await dialog.getByLabel(/^name$/i).fill(name);
+  await dialog.getByLabel(/^value$/i).fill('500.00');
+  await dialog.getByRole('button', { name: /^add$/i }).click();
+
+  const row = page.getByRole('button', { name: new RegExp(name) });
+  await expect(row).toBeVisible();
+  await expect(row).toContainText(/500\.00/);
+});
+
+test('executes a recurring transaction automatically', async ({ page }, testInfo) => {
+  const assetName = `E2E Recurring Target ${testInfo.project.name}`;
+  await login(page);
+
+  // Target asset at 100.00
+  await page.goto('/assets');
+  await page.getByRole('button', { name: /add asset/i }).click();
+  const assetDialog = page.getByRole('dialog', { name: /add asset/i });
+  await assetDialog.getByLabel(/^name$/i).fill(assetName);
+  await assetDialog.getByLabel(/^value$/i).fill('100.00');
+  await assetDialog.getByRole('button', { name: /^add$/i }).click();
+  await expect(page.getByRole('button', { name: new RegExp(assetName) })).toBeVisible();
+
+  // Schedule +50.00 daily, due today → the 1s job tick applies it
+  await page.goto('/recurring');
+  await page.getByRole('button', { name: /add schedule/i }).click();
+  const dialog = page.getByRole('dialog', { name: /add schedule/i });
+  await dialog.getByLabel(/^name$/i).fill(`E2E Deposit ${testInfo.project.name}`);
+  await dialog.getByLabel(/applies to/i).selectOption('asset');
+  await dialog.getByLabel(/^asset$/i).selectOption({ label: assetName });
+  await dialog.getByLabel(/amount/i).fill('50.00');
+  await dialog.getByLabel(/cadence/i).selectOption('daily');
+  await dialog.getByLabel(/next run/i).fill(todayISO());
+  await dialog.getByRole('button', { name: /add schedule/i }).click();
+
+  await expect(page.getByText(`E2E Deposit ${testInfo.project.name}`)).toBeVisible();
+
+  // Engine applies the occurrence; asset becomes 150.00
+  await page.goto('/assets');
+  const row = page.getByRole('button', { name: new RegExp(assetName) });
+  await expect(async () => {
+    await page.reload();
+    await expect(page.getByRole('button', { name: new RegExp(assetName) })).toContainText(/150\.00/);
+  }).toPass({ timeout: 20_000 });
+  await expect(row).toContainText(/150\.00/);
+});
+
+test('net worth equals assets minus liabilities', async ({ page }) => {
+  await login(page);
+  const summary = await page.evaluate(async () => {
+    const res = await fetch('/api/dashboard/summary');
+    return res.json() as Promise<{ assetsMinor: number; liabilitiesMinor: number; netWorthMinor: number }>;
+  });
+  expect(summary.netWorthMinor).toBe(summary.assetsMinor - summary.liabilitiesMinor);
+  expect(summary.assetsMinor).toBeGreaterThan(0);
+});
+
+test('changes currency in settings and signs out', async ({ page }) => {
+  await login(page);
+  await page.goto('/settings');
+  await page.getByLabel(/currency/i).selectOption('EUR');
+  await page.getByRole('button', { name: /^save$/i }).click();
+  await expect(page.getByRole('status')).toContainText(/saved/i);
+
+  await page.goto('/');
+  await expect(page.getByText('€', { exact: false }).first()).toBeVisible();
+
+  // restore and sign out
+  await page.goto('/settings');
+  await page.getByLabel(/currency/i).selectOption('USD');
+  await page.getByRole('button', { name: /^save$/i }).click();
+  await expect(page.getByRole('status')).toContainText(/saved/i);
+
+  await page.getByRole('button', { name: /sign out/i }).click();
+  await expect(page).toHaveURL(/\/login/);
+  // session is gone server-side
+  await page.goto('/');
+  await expect(page).toHaveURL(/\/login/);
+});
+
+test('dashboard renders within a sane performance budget', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByLabel(/username/i).fill('demo');
+  await page.getByLabel(/password/i).fill('demo');
+  const start = Date.now();
+  await page.getByRole('button', { name: /^sign in$/i }).click();
+  await expect(page.getByRole('img', { name: /net worth history chart/i })).toBeVisible();
+  const elapsed = Date.now() - start;
+  expect(elapsed).toBeLessThan(5_000);
+
+  const t2 = Date.now();
+  await page.getByRole('group', { name: /history range/i })
+    .getByRole('button', { name: 'All', exact: true }).click();
+  await expect(page.getByRole('img', { name: /net worth history chart/i })).toBeVisible();
+  expect(Date.now() - t2).toBeLessThan(2_000);
+});

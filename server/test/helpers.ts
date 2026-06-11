@@ -32,6 +32,8 @@ export function makeTestWorld(opts: { env?: 'test' | 'development' } = {}): Test
       cookieSecure: false,
       dbPath: ':memory:',
       webDistDir: '/nonexistent',
+      // 'development' worlds exercise real limits (rate-limit tests)
+      loginRateLimit: opts.env === 'development' ? 10 : 1000,
     },
     now: () => current,
     prices: new SimulatedPriceProvider(),

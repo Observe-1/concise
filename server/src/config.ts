@@ -14,6 +14,12 @@ export interface Config {
   trustProxy: number;
   /** Directory of built frontend to serve statically, if present. */
   webDistDir: string;
+  /** Background job tick interval (ms). Short in e2e, 60s in production. */
+  jobTickMs: number;
+  /** Max login attempts per IP per 15 minutes. */
+  loginRateLimit: number;
+  /** Run the seed script at startup (resets the demo account). */
+  seedOnStart: boolean;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -28,5 +34,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     cookieSecure: env.COOKIE_SECURE ? env.COOKIE_SECURE === 'true' : nodeEnv === 'production',
     trustProxy: Number(env.TRUST_PROXY ?? 0),
     webDistDir: env.WEB_DIST_DIR ?? path.resolve(process.cwd(), '../web/dist'),
+    jobTickMs: Number(env.JOB_TICK_MS ?? 60_000),
+    loginRateLimit: Number(env.LOGIN_RATE_LIMIT ?? 10),
+    seedOnStart: env.SEED_ON_START === '1',
   };
 }

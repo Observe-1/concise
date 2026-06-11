@@ -17,7 +17,7 @@ export function authRoutes(ctx: AppContext): Router {
 
   const loginLimiter = rateLimit({
     windowMs: 15 * 60_000,
-    limit: ctx.config.env === 'test' ? 1000 : 10,
+    limit: ctx.config.loginRateLimit,
     standardHeaders: true,
     legacyHeaders: false,
     handler: (_req, res) => res.status(429).json({ error: 'Too many login attempts; try again later' }),
