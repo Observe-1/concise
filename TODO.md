@@ -1,6 +1,6 @@
 # TODO — single source of truth for progress
 
-**Current phase: 3 — Backend API**
+**Current phase: 4 — Frontend application**
 
 ## Phase 1: System architecture
 - [x] Tech stack decisions (Node 24 + node:sqlite + Express 5 / React 19 + Vite + Tailwind 4)
@@ -17,19 +17,19 @@
 - [x] Schema smoke tests (constraints, cascades) — 10 tests passing
 
 ## Phase 3: Backend API
-- [ ] App factory with DI (db, clock, price provider), error handling, validation
-- [ ] Auth module (login/logout/me, scrypt, sessions, cookies)
-- [ ] Assets module (CRUD + valuations)
-- [ ] Liabilities module (CRUD + valuations)
-- [ ] Recurring transactions module + engine (catch-up, cadence advance)
-- [ ] Snapshots (daily upsert + on-mutation refresh)
-- [ ] Market valuation module (provider interface + simulated provider + refresh)
-- [ ] Dashboard aggregation (summary + history ranges)
-- [ ] Settings module
-- [ ] Job scheduler (in-process tick)
-- [ ] Unit tests (money, dates, cadence, services)
-- [ ] Integration tests (API + in-memory DB) — 80% coverage target
-- [ ] Security tests (auth bypass, injection, rate limiting)
+- [x] App factory with DI (db, clock, price provider), error handling, validation
+- [x] Auth module (login/logout/me, scrypt, sessions, cookies)
+- [x] Assets module (CRUD + valuations) — shared holdings module
+- [x] Liabilities module (CRUD + valuations) — shared holdings module
+- [x] Recurring transactions module + engine (catch-up, cadence advance, zero floor)
+- [x] Snapshots (daily upsert + on-mutation refresh + downtime backfill)
+- [x] Market valuation module (provider interface + simulated provider + refresh)
+- [x] Dashboard aggregation (summary + history ranges + downsampling)
+- [x] Settings module
+- [x] Job scheduler (in-process tick, idempotent jobs)
+- [x] Unit tests (dates, cadence, passwords, provider, downsample)
+- [x] Integration tests (API + in-memory DB) — 74 tests, 95% stmt / 83% branch coverage
+- [x] Security tests (auth bypass, injection, rate limiting, CSRF, headers)
 
 ## Phase 4: Frontend application
 - [ ] Vite + React + Tailwind scaffold, black/gold theme tokens
