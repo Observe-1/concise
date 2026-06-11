@@ -1,6 +1,6 @@
 # TODO — single source of truth for progress
 
-**Current phase: 4 — Frontend application**
+**Current phase: 5 — Authentication & security review**
 
 ## Phase 1: System architecture
 - [x] Tech stack decisions (Node 24 + node:sqlite + Express 5 / React 19 + Vite + Tailwind 4)
@@ -32,16 +32,17 @@
 - [x] Security tests (auth bypass, injection, rate limiting, CSRF, headers)
 
 ## Phase 4: Frontend application
-- [ ] Vite + React + Tailwind scaffold, black/gold theme tokens
-- [ ] API client + TanStack Query setup
-- [ ] Login page
-- [ ] App shell (mobile bottom nav / desktop rail)
-- [ ] Dashboard (summary cards, interactive graph, range presets, full-screen)
-- [ ] Assets page (grouped by class, add/edit/delete, value updates)
-- [ ] Liabilities page
-- [ ] Recurring management UI
-- [ ] Settings page (profile, currency)
-- [ ] Component + integration tests, accessibility, responsive checks
+- [x] Vite + React + Tailwind scaffold, black/gold theme tokens
+- [x] API client + TanStack Query setup (shared DTO types via @api alias)
+- [x] Login page (demo hint, error states, rate-limit message)
+- [x] App shell (mobile bottom nav / desktop rail, safe-area insets)
+- [x] Dashboard (summary cards, interactive graph, range presets, full-screen)
+- [x] Assets page (grouped by class, add/edit/delete, value updates, market badges)
+- [x] Liabilities page (mirrors assets, liability categories)
+- [x] Recurring management UI (add/edit/delete, active toggle)
+- [x] Settings page (profile, currency, sign out)
+- [x] Component + integration tests (19), accessibility roles/labels, responsive nav
+- [x] Production build served by Express with SPA fallback (assetsDir renamed to avoid /assets clash)
 
 ## Phase 5: Authentication & security
 - [ ] Rate limiting (login + API)

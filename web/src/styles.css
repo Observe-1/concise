@@ -1,0 +1,41 @@
+@import 'tailwindcss';
+
+@theme {
+  /* Concise palette: near-black surfaces, gold accents */
+  --color-ink-950: #09090b;
+  --color-ink-900: #101012;
+  --color-ink-800: #1a1a1e;
+  --color-ink-700: #26262c;
+  --color-ink-600: #3f3f46;
+  --color-ink-400: #8e8e98;
+  --color-ink-300: #b4b4bd;
+  --color-ink-100: #ececf1;
+
+  --color-gold-300: #ecd9a0;
+  --color-gold-400: #ddc06c;
+  --color-gold-500: #d4af37;
+  --color-gold-600: #b3922c;
+
+  --color-gain-400: #4ade80;
+  --color-gain-500: #22c55e;
+  --color-loss-400: #f87171;
+  --color-loss-500: #ef4444;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+}
+
+html {
+  background: var(--color-ink-950);
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-ink-950 text-ink-100 font-sans antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Number-heavy UI looks better with tabular figures */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}

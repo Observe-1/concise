@@ -1,0 +1,94 @@
+import { describe, expect, it } from 'vitest';
+import { screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { App } from '../src/App.js';
+import { mockFetch, renderWithProviders } from './helpers.js';
+
+const demoUser = { id: 1, username: 'demo', displayName: 'Demo User', currency: 'USD' };
+
+const summary = {
+  assetsMinor: 50_000_00,
+  liabilitiesMinor: 20_000_00,
+  netWorthMinor: 30_000_00,
+  currency: 'USD',
+  assetsByCategory: [
+    { category: 'cash', totalMinor: 30_000_00, count: 2 },
+    { category: 'crypto', totalMinor: 20_000_00, count: 1 },
+  ],
+  liabilitiesByCategory: [{ category: 'loan', totalMinor: 20_000_00, count: 1 }],
+};
+
+const history = {
+  range: '6M',
+  points: [
+    { date: '2026-05-01', assetsMinor: 48_000_00, liabilitiesMinor: 21_000_00, netWorthMinor: 27_000_00 },
+    { date: '2026-06-01', assetsMinor: 50_000_00, liabilitiesMinor: 20_000_00, netWorthMinor: 30_000_00 },
+  ],
+};
+
+function mountDashboard() {
+  const calls = mockFetch([
+    [/\/api\/auth\/me/, { user: demoUser }],
+    [/\/api\/dashboard\/summary/, summary],
+    [/\/api\/dashboard\/history/, history],
+  ]);
+  renderWithProviders(<App />, { route: '/' });
+  return calls;
+}
+
+describe('dashboard', () => {
+  it('shows net worth, assets and liabilities totals', async () => {
+    mountDashboard();
+    // currency symbol varies by system locale ($ / US$) — match the number;
+    // totals also appear in the category breakdown, so allow multiple
+    expect((await screen.findAllByText(/30,000\.00/)).length).toBeGreaterThan(0); // net worth
+    expect(screen.getAllByText(/50,000\.00/).length).toBeGreaterThan(0); // assets (green)
+    expect(screen.getAllByText(/20,000\.00/).length).toBeGreaterThan(0); // liabilities (red)
+    expect(screen.getByText(/welcome back, demo user/i)).toBeInTheDocument();
+  });
+
+  it('offers every range preset and requests the chosen one', async () => {
+    const calls = mountDashboard();
+    const group = await screen.findByRole('group', { name: /history range/i });
+    for (const label of ['1M', '3M', '6M', 'YTD', '1Y', '5Y', 'All']) {
+      expect(within(group).getByRole('button', { name: label })).toBeInTheDocument();
+    }
+
+    const user = userEvent.setup();
+    await user.click(within(group).getByRole('button', { name: '1Y' }));
+    expect(calls.some((c) => c.url.includes('range=1Y'))).toBe(true);
+
+    const pressed = within(group).getByRole('button', { name: '1Y' });
+    expect(pressed).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('toggles full-screen graph mode', async () => {
+    mountDashboard();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /view graph full screen/i }));
+    expect(screen.getByRole('button', { name: /exit full screen/i })).toBeInTheDocument();
+    // Summary cards are hidden in full-screen mode
+    expect(screen.queryByText(/welcome back/i)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /exit full screen/i }));
+    expect(await screen.findByText(/welcome back/i)).toBeInTheDocument();
+  });
+
+  it('shows category breakdowns', async () => {
+    mountDashboard();
+    expect(await screen.findByText('Cash')).toBeInTheDocument();
+    expect(screen.getByText('Crypto')).toBeInTheDocument();
+    expect(screen.getByText('Loans')).toBeInTheDocument();
+  });
+
+  it('renders the primary navigation', async () => {
+    mountDashboard();
+    await screen.findAllByText(/30,000\.00/);
+    const navs = screen.getAllByRole('navigation', { name: /primary/i });
+    expect(navs.length).toBeGreaterThan(0);
+    const nav = navs[navs.length - 1]!; // mobile bottom bar
+    for (const label of ['Home', 'Assets', 'Debts', 'Recurring', 'Settings']) {
+      expect(within(nav).getByText(label)).toBeInTheDocument();
+    }
+  });
+});
