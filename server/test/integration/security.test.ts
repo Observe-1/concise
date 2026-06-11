@@ -30,6 +30,43 @@ describe('security', () => {
       const agent = await loginAgent(world.app);
       await agent.get('/api/assets').expect(200);
     });
+
+    it('accepts dev-proxy requests (backend Host, Vite dev-server Origin)', async () => {
+      // Vite proxies /api to the backend, so Host is localhost:3000 while the
+      // browser Origin is the dev server (localhost:5174) — must be accepted
+      // outside production.
+      const dev = makeTestWorld({ env: 'development' });
+      createUser(dev.ctx, 'alice', 'password123');
+      const res = await request(dev.app)
+        .post('/api/auth/login')
+        .set('Host', 'localhost:3000')
+        .set('Origin', 'http://localhost:5174')
+        .send({ username: 'alice', password: 'password123' });
+      expect(res.status).toBe(200);
+    });
+
+    it('rejects loopback origins in production', async () => {
+      const prod = makeTestWorld({ env: 'production' });
+      createUser(prod.ctx, 'alice', 'password123');
+      const res = await request(prod.app)
+        .post('/api/auth/login')
+        .set('Host', 'app.example.com')
+        .set('Origin', 'http://localhost:5174')
+        .send({ username: 'alice', password: 'password123' });
+      expect(res.status).toBe(403);
+    });
+
+    it('honours explicitly configured trusted origins', async () => {
+      const prod = makeTestWorld({ env: 'production' });
+      prod.ctx.config.trustedOrigins = ['https://app.example.com'];
+      createUser(prod.ctx, 'alice', 'password123');
+      const res = await request(prod.app)
+        .post('/api/auth/login')
+        .set('Host', 'api.example.com')
+        .set('Origin', 'https://app.example.com')
+        .send({ username: 'alice', password: 'password123' });
+      expect(res.status).toBe(200);
+    });
   });
 
   describe('injection resistance', () => {

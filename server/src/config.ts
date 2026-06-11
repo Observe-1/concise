@@ -8,6 +8,12 @@ export interface Config {
   /** Set Secure flag on session cookies (required in production over HTTPS). */
   cookieSecure: boolean;
   /**
+   * Origins trusted by the CSRF check beyond same-origin (comma-separated
+   * TRUSTED_ORIGINS, e.g. "https://app.example.com"). Loopback origins are
+   * always trusted outside production for the Vite dev proxy.
+   */
+  trustedOrigins: string[];
+  /**
    * Express trust-proxy setting. Behind a reverse proxy set TRUST_PROXY=1 so
    * req.ip (rate limiting, audit log) reflects the real client address.
    */
@@ -32,6 +38,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     dbPath: env.DB_PATH ?? path.resolve(process.cwd(), '../data/concise.db'),
     sessionTtlHours: Number(env.SESSION_TTL_HOURS ?? 24 * 14),
     cookieSecure: env.COOKIE_SECURE ? env.COOKIE_SECURE === 'true' : nodeEnv === 'production',
+    trustedOrigins: (env.TRUSTED_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
     trustProxy: Number(env.TRUST_PROXY ?? 0),
     webDistDir: env.WEB_DIST_DIR ?? path.resolve(process.cwd(), '../web/dist'),
     jobTickMs: Number(env.JOB_TICK_MS ?? 60_000),

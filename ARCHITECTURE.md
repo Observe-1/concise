@@ -57,7 +57,7 @@ In development the Vite dev server proxies `/api` to the backend.
 | Routing    | React Router v7 (library mode)                    | Standard SPA routing |
 | Charts     | Recharts                                          | Interactive area/line charts |
 | Tests      | Vitest + supertest (API), Vitest + Testing Library (web), Playwright (e2e) | |
-| Deploy     | Docker (single container), GitHub Actions CI      | Single artifact, minimal manual steps |
+| Run (prod) | `npm run build` → `npm start` (one Node process serves API + static SPA) | Single artifact, minimal manual steps |
 
 ## 3. Data model
 
@@ -103,9 +103,11 @@ changes today's totals. Deleting an asset hard-deletes its valuations
    `httpOnly` + `SameSite=Lax` (+ `Secure` in prod) cookie.
 2. `requireAuth` middleware loads the session on every `/api` request,
    rejects expired/unknown tokens, slides expiry.
-3. CSRF: mutating requests must carry an `Origin`/`Referer` matching the host
-   (cookie is also `SameSite=Lax`). Login attempts and all mutations are
-   audit-logged.
+3. CSRF: mutating requests must carry an `Origin`/`Referer` that is trusted —
+   same-origin as the request `Host` (production: the SPA is served by the
+   backend), an entry in `TRUSTED_ORIGINS`, or a loopback origin outside
+   production (so the Vite dev proxy works). Cookie is also `SameSite=Lax`.
+   Login attempts and all mutations are audit-logged.
 
 ### Assets / liabilities
 - CRUD under `/api/assets` and `/api/liabilities` (identical shape).

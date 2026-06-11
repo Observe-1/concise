@@ -1,6 +1,6 @@
 # TODO — single source of truth for progress
 
-**Current phase: 7 — Deployment**
+**Status: complete (phases 1–6). Deployment is out of scope.**
 
 ## Phase 1: System architecture
 - [x] Tech stack decisions (Node 24 + node:sqlite + Express 5 / React 19 + Vite + Tailwind 4)
@@ -60,8 +60,7 @@
 - [x] Coverage thresholds enforced (server ≥80% stmt/fn/lines, ≥75% branches)
 - [x] E2E knobs: SEED_ON_START, JOB_TICK_MS, LOGIN_RATE_LIMIT envs
 
-## Phase 7: Deployment
-- [ ] Dockerfile + compose (volume for SQLite)
-- [ ] GitHub Actions CI (lint, typecheck, tests, build)
-- [ ] Env configuration + production hardening
-- [ ] Backup strategy + runbooks (deploy/)
+## Notes
+- Deployment (Docker/CI/runbooks) is intentionally out of scope. The app still
+  runs in production directly: `npm run build` then `npm start` serves the API
+  and the built SPA from one Node process; back up by copying the SQLite file.

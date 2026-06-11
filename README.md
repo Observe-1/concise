@@ -56,9 +56,26 @@ password: demo
 | `npm run build`      | Production build (server bundle + static web) |
 | `npm start`          | Run the production build (serves API + web)   |
 
-## Deployment
+## Running in production
 
-Single Docker container: the Node process serves the API and the built
-frontend; SQLite lives on a mounted volume (back up by copying the file).
-CI runs lint, typecheck, and the full test suite. See
-[ARCHITECTURE.md](ARCHITECTURE.md) and `deploy/` for details and runbooks.
+The whole app is one Node process. Build, then start:
+
+```bash
+npm run build     # server bundle (esbuild) + static web (Vite)
+npm start         # serves the API and the built SPA on $PORT (default 3000)
+```
+
+Set `NODE_ENV=production` (enables `Secure` cookies — serve over HTTPS) and a
+persistent `DB_PATH`. Behind a reverse proxy, set `TRUST_PROXY=1` so client IPs
+are correct, and `TRUSTED_ORIGINS` if the frontend is hosted on a different
+origin. Back up by copying the SQLite file (WAL mode — copy `*.db`, `*.db-wal`,
+`*.db-shm` together, or checkpoint first). See [ARCHITECTURE.md](ARCHITECTURE.md).
+
+| Env var            | Default            | Purpose                                   |
+|--------------------|--------------------|-------------------------------------------|
+| `PORT`             | `3000`             | HTTP port                                 |
+| `DB_PATH`          | `../data/concise.db` | SQLite file location                    |
+| `NODE_ENV`         | `development`      | `production` enables Secure cookies       |
+| `SESSION_TTL_HOURS`| `336` (14 days)    | Session lifetime                          |
+| `TRUST_PROXY`      | `0`                | Hops to trust for client IP               |
+| `TRUSTED_ORIGINS`  | (none)             | Extra CSRF-trusted origins, comma-sep     |

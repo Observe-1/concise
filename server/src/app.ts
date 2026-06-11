@@ -46,7 +46,7 @@ export function buildApp(ctx: AppContext): express.Express {
     }),
   );
   api.use(express.json({ limit: '100kb' }));
-  api.use(csrfProtection);
+  api.use(csrfProtection(ctx));
   api.use(sessionLoader(ctx));
 
   api.get('/health', (_req, res) => {

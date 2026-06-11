@@ -20,7 +20,7 @@ export interface TestWorld {
   setNow: (iso: string) => void;
 }
 
-export function makeTestWorld(opts: { env?: 'test' | 'development' } = {}): TestWorld {
+export function makeTestWorld(opts: { env?: 'test' | 'development' | 'production' } = {}): TestWorld {
   let current = new Date(FIXED_NOW);
   const db = openDatabase(':memory:');
   migrate(db);
