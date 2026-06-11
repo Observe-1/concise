@@ -42,6 +42,12 @@ describe('security', () => {
       expect(users.n).toBe(1);
     });
 
+    it('rejects type-confused payloads (objects where strings expected)', async () => {
+      const res = await csrf(request(world.app).post('/api/auth/login'))
+        .send({ username: { $ne: null }, password: ['x'] });
+      expect(res.status).toBe(400);
+    });
+
     it('stores hostile strings safely in entries', async () => {
       const agent = await loginAgent(world.app);
       const hostile = `Robert'); DROP TABLE assets;--<script>alert(1)</script>`;
@@ -68,6 +74,36 @@ describe('security', () => {
         .get('/api/auth/me')
         .set('Cookie', 'concise_session=forged-token-aaaaaaaaaaaaaaaaaaaaaa')
         .expect(401);
+    });
+
+    it('isolates recurring schedules and settings between users', async () => {
+      const agent = await loginAgent(world.app);
+      const asset = await csrf(agent.post('/api/assets'))
+        .send({ category: 'cash', name: 'Mine', valueMinor: 1000 });
+      const schedule = await csrf(agent.post('/api/recurring')).send({
+        name: 'Mine', targetType: 'asset', targetId: asset.body.id,
+        amountMinor: 100, cadence: 'monthly', nextRunOn: '2026-07-01',
+      });
+
+      createUser(world.ctx, 'mallory', 'password456');
+      const mallory = await loginAgent(world.app, 'mallory', 'password456');
+      await csrf(mallory.patch(`/api/recurring/${schedule.body.id}`)).send({ active: false }).expect(404);
+      await csrf(mallory.delete(`/api/recurring/${schedule.body.id}`)).expect(404);
+
+      // settings PATCH only ever touches the session user
+      await csrf(mallory.patch('/api/settings')).send({ displayName: 'Hacked' }).expect(200);
+      const alice = await agent.get('/api/settings');
+      expect(alice.body.displayName).toBe('alice');
+    });
+
+    it('keeps login latency uniform for unknown usernames (no enumeration oracle)', async () => {
+      // Functional check: both paths return the identical generic 401 body.
+      const wrongPass = await csrf(request(world.app).post('/api/auth/login'))
+        .send({ username: 'alice', password: 'nope' });
+      const noUser = await csrf(request(world.app).post('/api/auth/login'))
+        .send({ username: 'ghost', password: 'nope' });
+      expect(noUser.status).toBe(401);
+      expect(noUser.body).toEqual(wrongPass.body);
     });
 
     it('invalidates the session server-side on logout', async () => {

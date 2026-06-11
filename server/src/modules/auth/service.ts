@@ -1,9 +1,13 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { AppContext } from '../../context.js';
 import type { SessionUser } from '../../types/api.js';
-import { verifyPassword } from '../../lib/passwords.js';
+import { hashPassword, verifyPassword } from '../../lib/passwords.js';
 
 const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
+
+// Verified against when the username doesn't exist, so login takes the same
+// time either way (no username enumeration via response timing).
+const DUMMY_HASH = hashPassword('dummy-timing-equalizer');
 
 export interface LoginResult {
   user: SessionUser;
@@ -21,7 +25,7 @@ export function login(ctx: AppContext, username: string, password: string): Logi
     .get(username.toLowerCase()) as
     | { id: number; username: string; password_hash: string; display_name: string; currency: string }
     | undefined;
-  if (!row || !verifyPassword(password, row.password_hash)) return null;
+  if (!verifyPassword(password, row?.password_hash ?? DUMMY_HASH) || !row) return null;
 
   const token = randomBytes(32).toString('base64url');
   const expiresAt = new Date(ctx.now().getTime() + ctx.config.sessionTtlHours * 3_600_000).toISOString();

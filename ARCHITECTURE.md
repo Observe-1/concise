@@ -98,7 +98,8 @@ changes today's totals. Deleting an asset hard-deletes its valuations
 
 ### Auth
 1. `POST /api/auth/login` (rate-limited) — verifies scrypt hash with
-   `timingSafeEqual`, creates a session row (token hashed), sets an
+   `timingSafeEqual` (a dummy hash is verified for unknown usernames so
+   timing reveals nothing), creates a session row (token hashed), sets an
    `httpOnly` + `SameSite=Lax` (+ `Secure` in prod) cookie.
 2. `requireAuth` middleware loads the session on every `/api` request,
    rejects expired/unknown tokens, slides expiry.

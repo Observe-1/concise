@@ -18,6 +18,7 @@ import { settingsRoutes } from './modules/settings/routes.js';
 export function buildApp(ctx: AppContext): express.Express {
   const app = express();
   app.disable('x-powered-by');
+  if (ctx.config.trustProxy > 0) app.set('trust proxy', ctx.config.trustProxy);
   app.use(
     helmet({
       contentSecurityPolicy: {

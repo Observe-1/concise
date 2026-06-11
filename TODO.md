@@ -1,6 +1,6 @@
 # TODO — single source of truth for progress
 
-**Current phase: 5 — Authentication & security review**
+**Current phase: 6 — Quality assurance**
 
 ## Phase 1: System architecture
 - [x] Tech stack decisions (Node 24 + node:sqlite + Express 5 / React 19 + Vite + Tailwind 4)
@@ -45,11 +45,13 @@
 - [x] Production build served by Express with SPA fallback (assetsDir renamed to avoid /assets clash)
 
 ## Phase 5: Authentication & security
-- [ ] Rate limiting (login + API)
-- [ ] CSRF protection (origin check)
-- [ ] Security headers (helmet)
-- [ ] Audit logging wired to all mutations
-- [ ] Security test suite (bypass, injection, authz boundaries)
+- [x] Rate limiting (login 10/15min + API 300/min, per IP)
+- [x] CSRF protection (origin check on mutating requests)
+- [x] Security headers (helmet + CSP, x-powered-by removed)
+- [x] Audit logging wired to auth events and all mutations (with IP)
+- [x] Uniform-timing login (dummy-hash verify for unknown usernames)
+- [x] TRUST_PROXY config so req.ip is the real client behind a reverse proxy
+- [x] Security test suite (bypass, injection, type confusion, authz boundaries, forged cookies, oversized payloads)
 
 ## Phase 6: Quality assurance
 - [ ] Playwright e2e: login → asset → liability → recurring → net worth → graph
