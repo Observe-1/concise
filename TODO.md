@@ -60,6 +60,14 @@
 - [x] Coverage thresholds enforced (server ≥80% stmt/fn/lines, ≥75% branches)
 - [x] E2E knobs: SEED_ON_START, JOB_TICK_MS, LOGIN_RATE_LIMIT envs
 
+## Feature batch (2026-06-11)
+- [x] Trend line on graphs — server-computed 91-day centred moving average over the FULL history; stable across range changes (test-enforced)
+- [x] Precious metals asset class with gold/silver/platinum/palladium sub-selection (migration 0002, table rebuild)
+- [x] Symbol verification step on market-asset creation (GET /api/market/lookup + Verify button; save gated on confirmation)
+- [x] Mobile nav: Home centred among the five icons and slightly larger (mobile only)
+- [x] Extended 10Y / 20Y graph ranges through the existing pipeline
+- [x] Birth year setting + muted "Age N" overlay on charts spanning ≥ 5 years (seed extended to 6 years of history)
+
 ## Notes
 - Deployment (Docker/CI/runbooks) is intentionally out of scope. The app still
   runs in production directly: `npm run build` then `npm start` serves the API

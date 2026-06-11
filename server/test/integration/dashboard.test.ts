@@ -62,6 +62,35 @@ describe('dashboard API', () => {
     expect(res.body.points[res.body.points.length - 1].date).toBe('2026-06-11');
   });
 
+  it('accepts the extended 10Y and 20Y ranges', async () => {
+    for (const range of ['10Y', '20Y'] as const) {
+      const res = await agent.get(`/api/dashboard/history?range=${range}`);
+      expect(res.status).toBe(200);
+      expect(res.body.range).toBe(range);
+      expect(res.body.points.length).toBeGreaterThan(0);
+      expect(res.body.points[res.body.points.length - 1].date).toBe('2026-06-11');
+    }
+  });
+
+  it('returns a trend that is stable across range changes (no per-window re-fit)', async () => {
+    const all = await agent.get('/api/dashboard/history?range=ALL');
+    const oneMonth = await agent.get('/api/dashboard/history?range=1M');
+    const fiveYears = await agent.get('/api/dashboard/history?range=5Y');
+
+    type Point = { date: string; trendMinor: number; netWorthMinor: number };
+    const trendByDate = new Map<string, number>(
+      (all.body.points as Point[]).map((p) => [p.date, p.trendMinor]),
+    );
+    for (const res of [oneMonth, fiveYears]) {
+      for (const p of res.body.points as Point[]) {
+        expect(typeof p.trendMinor).toBe('number');
+        if (trendByDate.has(p.date)) {
+          expect(p.trendMinor).toBe(trendByDate.get(p.date)); // identical, not re-fitted
+        }
+      }
+    }
+  });
+
   it('YTD starts on Jan 1', async () => {
     const res = await agent.get('/api/dashboard/history?range=YTD');
     expect(res.body.points[0].date >= '2026-01-01').toBe(true);
@@ -83,6 +112,21 @@ describe('dashboard API', () => {
   });
 });
 
+describe('market symbol lookup', () => {
+  it('resolves, normalises, and rejects symbols', async () => {
+    const world = makeTestWorld();
+    seed(world.ctx.db, world.ctx.now);
+    const agent = await loginAgent(world.app, 'demo', 'demo');
+
+    const known = await agent.get('/api/market/lookup?symbol=vwrl');
+    expect(known.status).toBe(200);
+    expect(known.body).toEqual({ symbol: 'VWRL', name: 'Vanguard FTSE All-World UCITS ETF' });
+
+    await agent.get('/api/market/lookup?symbol=ZZZZZ').expect(404);
+    await agent.get('/api/market/lookup').expect(400);
+  });
+});
+
 describe('market refresh', () => {
   it('reprices market assets once per day', async () => {
     const world = makeTestWorld();
@@ -91,13 +135,13 @@ describe('market refresh', () => {
 
     const first = await csrf(agent.post('/api/market/refresh'));
     expect(first.status).toBe(200);
-    expect(first.body.updated).toBe(2); // VWRL + BTC
+    expect(first.body.updated).toBe(3); // VWRL + BTC + XAU
 
     const second = await csrf(agent.post('/api/market/refresh'));
     expect(second.body.updated).toBe(0); // already priced today
 
     world.advanceDays(1);
     const nextDay = await csrf(agent.post('/api/market/refresh'));
-    expect(nextDay.body.updated).toBe(2);
+    expect(nextDay.body.updated).toBe(3);
   });
 });

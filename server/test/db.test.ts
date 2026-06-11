@@ -98,11 +98,15 @@ describe('seed', () => {
     expect(user).toBeDefined();
 
     const counts = (sql: string) => (db.prepare(sql).get() as { n: number }).n;
-    expect(counts('SELECT COUNT(*) AS n FROM assets')).toBe(7);
+    expect(counts('SELECT COUNT(*) AS n FROM assets')).toBe(8);
     expect(counts('SELECT COUNT(*) AS n FROM liabilities')).toBe(3);
     expect(counts('SELECT COUNT(*) AS n FROM recurring_transactions')).toBe(3);
-    expect(counts('SELECT COUNT(*) AS n FROM snapshots')).toBe(731);
+    expect(counts('SELECT COUNT(*) AS n FROM snapshots')).toBe(2191); // 6 years daily
     expect(counts('SELECT COUNT(*) AS n FROM asset_valuations')).toBeGreaterThan(500);
+    // precious metals entry with a metal sub-selection
+    const gold = db.prepare("SELECT metal FROM assets WHERE category = 'precious_metals'").get() as
+      { metal: string };
+    expect(gold.metal).toBe('gold');
 
     // Today's snapshot must equal the sum of latest valuations.
     const snap = db
@@ -127,7 +131,7 @@ describe('seed', () => {
     const n = (db.prepare("SELECT COUNT(*) AS n FROM users WHERE username = 'demo'").get() as { n: number }).n;
     expect(n).toBe(1);
     const assets = (db.prepare('SELECT COUNT(*) AS n FROM assets').get() as { n: number }).n;
-    expect(assets).toBe(7);
+    expect(assets).toBe(8);
   });
 });
 

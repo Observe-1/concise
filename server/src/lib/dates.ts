@@ -51,7 +51,7 @@ export function daysBetween(fromISO: string, toISO: string): number {
   return Math.round((parseDateISO(toISO).getTime() - parseDateISO(fromISO).getTime()) / 86_400_000);
 }
 
-export type HistoryRange = '1M' | '3M' | '6M' | 'YTD' | '1Y' | '5Y' | 'ALL';
+export type HistoryRange = '1M' | '3M' | '6M' | 'YTD' | '1Y' | '5Y' | '10Y' | '20Y' | 'ALL';
 
 /** Inclusive start date for a dashboard history range, or null for ALL. */
 export function rangeStart(range: HistoryRange, todayIso: string): string | null {
@@ -63,6 +63,8 @@ export function rangeStart(range: HistoryRange, todayIso: string): string | null
     case 'YTD': return `${d.getUTCFullYear()}-01-01`;
     case '1Y': return addMonthsClamped(todayIso, -12);
     case '5Y': return addMonthsClamped(todayIso, -60);
+    case '10Y': return addMonthsClamped(todayIso, -120);
+    case '20Y': return addMonthsClamped(todayIso, -240);
     case 'ALL': return null;
   }
 }

@@ -7,8 +7,8 @@ import { formatMinor } from '../lib/money.js';
 
 const CATEGORY_LABELS: Record<string, string> = {
   cash: 'Cash', investments: 'Investments', property: 'Property', vehicles: 'Vehicles',
-  crypto: 'Crypto', other: 'Other', mortgage: 'Mortgage', loan: 'Loans',
-  credit_card: 'Credit cards', student_loan: 'Student loans',
+  crypto: 'Crypto', precious_metals: 'Precious metals', other: 'Other', mortgage: 'Mortgage',
+  loan: 'Loans', credit_card: 'Credit cards', student_loan: 'Student loans',
 };
 
 export function DashboardPage() {
@@ -41,6 +41,7 @@ export function DashboardPage() {
       <NetWorthChart
         points={history.data?.points ?? []}
         currency={currency}
+        birthYear={me?.birthYear}
         height={fullscreen ? Math.max(300, window.innerHeight - 160) : 240}
       />
     </>

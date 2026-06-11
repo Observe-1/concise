@@ -79,8 +79,8 @@ users 1──* audit_log
 |-------|---------|-----------|
 | `users` | Accounts | `username` unique (lowercased), scrypt `password_hash` |
 | `sessions` | Login sessions | Stores SHA-256 hash of opaque token; expiry; revocable |
-| `settings` | Per-user prefs | `currency` (ISO 4217), `display_name` lives on users |
-| `assets` | Asset entries | `category` ∈ cash, investments, property, vehicles, crypto, other; optional `market_symbol` + `quantity` for market-valued assets (`valuation_mode` manual\|market) |
+| `settings` | Per-user prefs | `currency` (ISO 4217), `birth_year` (age overlay on long-range charts); `display_name` lives on users |
+| `assets` | Asset entries | `category` ∈ cash, investments, property, vehicles, crypto, precious_metals, other; `metal` sub-selection (gold/silver/platinum/palladium) only on precious_metals; optional `market_symbol` + `quantity` for market-valued assets (`valuation_mode` manual\|market) |
 | `asset_valuations` | Value history | Append-only; `source` ∈ manual, recurring, market, seed. Current value = latest row |
 | `liabilities` | Liability entries | `category` ∈ mortgage, loan, credit_card, student_loan, other. Balances stored positive |
 | `liability_valuations` | Balance history | Mirrors asset valuations |
@@ -126,14 +126,22 @@ changes today's totals. Deleting an asset hard-deletes its valuations
 ### Dashboard
 - `GET /api/dashboard/summary` — current totals + per-category breakdown
   computed from latest valuations.
-- `GET /api/dashboard/history?range=1M|3M|6M|YTD|1Y|5Y|ALL` — snapshot series
-  for the graph.
+- `GET /api/dashboard/history?range=1M|3M|6M|YTD|1Y|5Y|10Y|20Y|ALL` —
+  snapshot series for the graph. Every point carries `trendMinor`: a 91-day
+  centred moving average computed over the **full** history before the range
+  is sliced, so a date's trend value is identical whatever range is requested
+  (the trend never re-fits to the visible window).
+- The chart shows a muted age marker (vertical line labelled "Age N") when
+  the user has set a birth year and the visible series spans ≥ 5 years.
 
 ### Market valuations
 - Assets with `valuation_mode='market'` hold a `market_symbol` and `quantity`.
-- A `PriceProvider` interface supplies prices; the default
-  `SimulatedPriceProvider` is a deterministic seeded random walk (no API keys,
-  stable for tests). A real provider can be swapped in via one factory.
+- A `PriceProvider` interface supplies prices and symbol lookup; the default
+  `SimulatedPriceProvider` is a deterministic seeded random walk with a fixed
+  instrument list (no API keys, stable for tests). A real provider can be
+  swapped in via one factory.
+- `GET /api/market/lookup?symbol=` resolves a ticker to its instrument name;
+  the asset form requires this verification before a market entry is saved.
 - Daily job + `POST /api/market/refresh` append market-sourced valuations.
 
 ## 5. Folder structure

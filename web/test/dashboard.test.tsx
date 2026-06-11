@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { App } from '../src/App.js';
 import { mockFetch, renderWithProviders } from './helpers.js';
 
-const demoUser = { id: 1, username: 'demo', displayName: 'Demo User', currency: 'USD' };
+const demoUser = { id: 1, username: 'demo', displayName: 'Demo User', currency: 'USD', birthYear: null };
 
 const summary = {
   assetsMinor: 50_000_00,
@@ -21,8 +21,8 @@ const summary = {
 const history = {
   range: '6M',
   points: [
-    { date: '2026-05-01', assetsMinor: 48_000_00, liabilitiesMinor: 21_000_00, netWorthMinor: 27_000_00 },
-    { date: '2026-06-01', assetsMinor: 50_000_00, liabilitiesMinor: 20_000_00, netWorthMinor: 30_000_00 },
+    { date: '2026-05-01', assetsMinor: 48_000_00, liabilitiesMinor: 21_000_00, netWorthMinor: 27_000_00, trendMinor: 27_500_00 },
+    { date: '2026-06-01', assetsMinor: 50_000_00, liabilitiesMinor: 20_000_00, netWorthMinor: 30_000_00, trendMinor: 28_500_00 },
   ],
 };
 
@@ -47,10 +47,10 @@ describe('dashboard', () => {
     expect(screen.getByText(/welcome back, demo user/i)).toBeInTheDocument();
   });
 
-  it('offers every range preset and requests the chosen one', async () => {
+  it('offers every range preset (including 10Y/20Y) and requests the chosen one', async () => {
     const calls = mountDashboard();
     const group = await screen.findByRole('group', { name: /history range/i });
-    for (const label of ['1M', '3M', '6M', 'YTD', '1Y', '5Y', 'All']) {
+    for (const label of ['1M', '3M', '6M', 'YTD', '1Y', '5Y', '10Y', '20Y', 'All']) {
       expect(within(group).getByRole('button', { name: label })).toBeInTheDocument();
     }
 

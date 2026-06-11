@@ -4,17 +4,22 @@ import userEvent from '@testing-library/user-event';
 import { App } from '../src/App.js';
 import { mockFetch, renderWithProviders } from './helpers.js';
 
-const demoUser = { id: 1, username: 'demo', displayName: 'Demo User', currency: 'USD' };
+const demoUser = { id: 1, username: 'demo', displayName: 'Demo User', currency: 'USD', birthYear: null };
 
 const assets = [
   {
-    id: 1, category: 'cash', name: 'Checking', notes: null, valuationMode: 'manual',
+    id: 1, category: 'cash', name: 'Checking', notes: null, metal: null, valuationMode: 'manual',
     marketSymbol: null, quantity: null, currentValueMinor: 4_250_00,
     lastValuedAt: '2026-06-11T12:00:00.000Z', createdAt: '2024-06-11T12:00:00.000Z',
   },
   {
-    id: 2, category: 'crypto', name: 'Bitcoin', notes: null, valuationMode: 'market',
+    id: 2, category: 'crypto', name: 'Bitcoin', notes: null, metal: null, valuationMode: 'market',
     marketSymbol: 'BTC', quantity: 0.15, currentValueMinor: 2_099_097,
+    lastValuedAt: '2026-06-11T12:00:00.000Z', createdAt: '2024-06-11T12:00:00.000Z',
+  },
+  {
+    id: 3, category: 'precious_metals', name: 'Gold coins', notes: null, metal: 'gold',
+    valuationMode: 'manual', marketSymbol: null, quantity: null, currentValueMinor: 920_000,
     lastValuedAt: '2026-06-11T12:00:00.000Z', createdAt: '2024-06-11T12:00:00.000Z',
   },
 ];
@@ -34,6 +39,80 @@ describe('assets page', () => {
     expect(screen.queryByRole('region', { name: 'Property' })).not.toBeInTheDocument();
     expect(screen.getByText('BTC × 0.15')).toBeInTheDocument(); // market badge
     expect(screen.getByRole('button', { name: /refresh prices/i })).toBeInTheDocument();
+    // precious metals class with metal sub-label
+    expect(screen.getByRole('region', { name: 'Precious metals' })).toBeInTheDocument();
+    expect(screen.getByText('Gold')).toBeInTheDocument();
+  });
+
+  it('offers a metal sub-selection for precious metals and sends it on create', async () => {
+    const calls = mockFetch([
+      [/\/api\/auth\/me/, { user: demoUser }],
+      [/\/api\/assets$/, []],
+    ]);
+    renderWithProviders(<App />, { route: '/assets' });
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /add asset/i }));
+    await user.selectOptions(screen.getByLabelText(/category/i), 'precious_metals');
+
+    const metalSelect = await screen.findByLabelText(/^metal$/i);
+    await user.selectOptions(metalSelect, 'silver');
+    await user.type(screen.getByLabelText(/^name$/i), 'Silver bars');
+    await user.type(screen.getByLabelText(/^value$/i), '3000');
+    await user.click(screen.getByRole('button', { name: /^add$/i }));
+
+    await waitFor(() => {
+      const post = calls.find((c) => c.method === 'POST' && /\/api\/assets$/.test(c.url));
+      expect(post!.body).toMatchObject({ category: 'precious_metals', metal: 'silver' });
+    });
+  });
+
+  it('requires symbol verification before saving a market asset', async () => {
+    const calls = mockFetch([
+      [/\/api\/auth\/me/, { user: demoUser }],
+      [/\/api\/market\/lookup\?symbol=VWRL/, { symbol: 'VWRL', name: 'Vanguard FTSE All-World UCITS ETF' }],
+      [/\/api\/assets$/, []],
+    ]);
+    renderWithProviders(<App />, { route: '/assets' });
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /add asset/i }));
+    await user.type(screen.getByLabelText(/^name$/i), 'World ETF');
+    await user.selectOptions(screen.getByLabelText(/valuation/i), 'market');
+    await user.type(await screen.findByLabelText(/symbol/i), 'vwrl');
+    await user.type(screen.getByLabelText(/quantity/i), '10');
+
+    // saving without verification is blocked
+    await user.click(screen.getByRole('button', { name: /^add$/i }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/verify the symbol/i);
+    expect(calls.some((c) => c.method === 'POST' && /\/api\/assets$/.test(c.url))).toBe(false);
+
+    // verify resolves and shows the instrument name with a confirmation
+    await user.click(screen.getByRole('button', { name: /^verify$/i }));
+    expect(await screen.findByRole('status')).toHaveTextContent(/VWRL — Vanguard FTSE All-World UCITS ETF/);
+
+    await user.click(screen.getByRole('button', { name: /^add$/i }));
+    await waitFor(() => {
+      const post = calls.find((c) => c.method === 'POST' && /\/api\/assets$/.test(c.url));
+      expect(post!.body).toMatchObject({ valuationMode: 'market', marketSymbol: 'VWRL', quantity: 10 });
+    });
+  });
+
+  it('rejects unknown symbols at the verification step', async () => {
+    mockFetch([
+      [/\/api\/auth\/me/, { user: demoUser }],
+      [/\/api\/market\/lookup/, { error: 'Unknown symbol: ZZZZ' }, 404],
+      [/\/api\/assets$/, []],
+    ]);
+    renderWithProviders(<App />, { route: '/assets' });
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /add asset/i }));
+    await user.selectOptions(screen.getByLabelText(/valuation/i), 'market');
+    await user.type(await screen.findByLabelText(/symbol/i), 'zzzz');
+    await user.click(screen.getByRole('button', { name: /^verify$/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/not recognised/i);
   });
 
   it('shows an empty state when there is no data', async () => {
@@ -95,8 +174,8 @@ describe('liabilities page', () => {
     mockFetch([
       [/\/api\/auth\/me/, { user: demoUser }],
       [/\/api\/liabilities$/, [{
-        id: 9, category: 'mortgage', name: 'Home mortgage', notes: null, valuationMode: 'manual',
-        marketSymbol: null, quantity: null, currentValueMinor: 248_000_00,
+        id: 9, category: 'mortgage', name: 'Home mortgage', notes: null, metal: null,
+        valuationMode: 'manual', marketSymbol: null, quantity: null, currentValueMinor: 248_000_00,
         lastValuedAt: '2026-06-11T12:00:00.000Z', createdAt: '2024-06-11T12:00:00.000Z',
       }]],
     ]);

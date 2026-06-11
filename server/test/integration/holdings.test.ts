@@ -71,6 +71,26 @@ describe('assets & liabilities API', () => {
       .send({ category: 'crypto', name: 'X', valuationMode: 'market' }).expect(400);
   });
 
+  it('creates precious metal assets with a metal sub-selection', async () => {
+    const res = await csrf(agent.post('/api/assets')).send({
+      category: 'precious_metals', name: 'Krugerrands', metal: 'gold', valueMinor: 950_000,
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.metal).toBe('gold');
+    expect(res.body.category).toBe('precious_metals');
+
+    // metal is rejected on other categories
+    await csrf(agent.post('/api/assets'))
+      .send({ category: 'cash', name: 'X', metal: 'gold', valueMinor: 1 }).expect(400);
+    // unknown metals rejected
+    await csrf(agent.post('/api/assets'))
+      .send({ category: 'precious_metals', name: 'X', metal: 'copper', valueMinor: 1 }).expect(400);
+
+    // moving the asset to another category clears the metal
+    const moved = await csrf(agent.patch(`/api/assets/${res.body.id}`)).send({ category: 'other' });
+    expect(moved.body.metal).toBeNull();
+  });
+
   it('mirrors the structure for liabilities (no market mode)', async () => {
     const created = await csrf(agent.post('/api/liabilities'))
       .send({ category: 'mortgage', name: 'Home loan', valueMinor: 250_000_00 });

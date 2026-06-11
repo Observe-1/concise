@@ -15,19 +15,31 @@ export function migrate(db: DatabaseSync, migrationsDir: string = DEFAULT_DIR): 
   );
   const files = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort();
   const newlyApplied: string[] = [];
-  for (const file of files) {
-    if (applied.has(file)) continue;
-    const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
-    db.exec('BEGIN');
-    try {
-      db.exec(sql);
-      db.prepare('INSERT INTO schema_migrations (id) VALUES (?)').run(file);
-      db.exec('COMMIT');
-    } catch (err) {
-      db.exec('ROLLBACK');
-      throw new Error(`Migration ${file} failed: ${(err as Error).message}`);
+  // Table rebuilds (the only way to change CHECK constraints in SQLite)
+  // require foreign keys off for the duration; integrity is verified with
+  // foreign_key_check before each commit.
+  db.exec('PRAGMA foreign_keys = OFF');
+  try {
+    for (const file of files) {
+      if (applied.has(file)) continue;
+      const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
+      db.exec('BEGIN');
+      try {
+        db.exec(sql);
+        const violations = db.prepare('PRAGMA foreign_key_check').all();
+        if (violations.length > 0) {
+          throw new Error(`foreign key violations: ${JSON.stringify(violations.slice(0, 3))}`);
+        }
+        db.prepare('INSERT INTO schema_migrations (id) VALUES (?)').run(file);
+        db.exec('COMMIT');
+      } catch (err) {
+        db.exec('ROLLBACK');
+        throw new Error(`Migration ${file} failed: ${(err as Error).message}`);
+      }
+      newlyApplied.push(file);
     }
-    newlyApplied.push(file);
+  } finally {
+    db.exec('PRAGMA foreign_keys = ON');
   }
   return newlyApplied;
 }

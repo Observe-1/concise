@@ -34,9 +34,9 @@ test('logs in and renders the dashboard with an interactive graph', async ({ pag
   await expect(chart).toBeVisible();
   await expect(chart.locator('svg path').first()).toBeVisible();
 
-  // Range presets
+  // Range presets, including the extended 10Y/20Y options
   const rangeGroup = page.getByRole('group', { name: /history range/i });
-  for (const label of ['1M', '3M', '6M', 'YTD', '1Y', '5Y', 'All']) {
+  for (const label of ['1M', '3M', '6M', 'YTD', '1Y', '5Y', '10Y', '20Y', 'All']) {
     await expect(rangeGroup.getByRole('button', { name: label, exact: true })).toBeVisible();
   }
   await rangeGroup.getByRole('button', { name: '1Y', exact: true }).click();
@@ -122,6 +122,72 @@ test('executes a recurring transaction automatically', async ({ page }, testInfo
     await expect(page.getByRole('button', { name: new RegExp(assetName) })).toContainText(/150\.00/);
   }).toPass({ timeout: 20_000 });
   await expect(row).toContainText(/150\.00/);
+});
+
+test('verifies a market symbol before saving the asset', async ({ page }, testInfo) => {
+  const name = `E2E Verified ETF ${testInfo.project.name}`;
+  await login(page);
+  await page.goto('/assets');
+  await page.getByRole('button', { name: /add asset/i }).click();
+
+  const dialog = page.getByRole('dialog', { name: /add asset/i });
+  await dialog.getByLabel(/category/i).selectOption('investments');
+  await dialog.getByLabel(/^name$/i).fill(name);
+  await dialog.getByLabel(/valuation/i).selectOption('market');
+  await dialog.getByLabel(/symbol/i).fill('vwrl');
+  await dialog.getByLabel(/quantity/i).fill('5');
+
+  // Saving before verification is blocked with a clear message
+  await dialog.getByRole('button', { name: /^add$/i }).click();
+  await expect(dialog.getByRole('alert')).toContainText(/verify the symbol/i);
+
+  // Verify resolves the ticker to the instrument name
+  await dialog.getByRole('button', { name: /^verify$/i }).click();
+  await expect(dialog.getByRole('status')).toContainText('VWRL — Vanguard FTSE All-World UCITS ETF');
+
+  await dialog.getByRole('button', { name: /^add$/i }).click();
+  const row = page.getByRole('button', { name: new RegExp(name) });
+  await expect(row).toBeVisible();
+  await expect(row).toContainText('VWRL × 5');
+});
+
+test('creates a precious metals asset with a metal sub-selection', async ({ page }, testInfo) => {
+  const name = `E2E Bullion ${testInfo.project.name}`;
+  await login(page);
+  await page.goto('/assets');
+  await page.getByRole('button', { name: /add asset/i }).click();
+
+  const dialog = page.getByRole('dialog', { name: /add asset/i });
+  await dialog.getByLabel(/category/i).selectOption('precious_metals');
+  await dialog.getByLabel(/^metal$/i).selectOption('platinum');
+  await dialog.getByLabel(/^name$/i).fill(name);
+  await dialog.getByLabel(/^value$/i).fill('4200.00');
+  await dialog.getByRole('button', { name: /^add$/i }).click();
+
+  const row = page.getByRole('button', { name: new RegExp(name) });
+  await expect(row).toBeVisible();
+  await expect(row).toContainText('Platinum');
+  await expect(page.getByRole('region', { name: 'Precious metals' })).toBeVisible();
+});
+
+test('shows the age overlay on long ranges once a birth year is set', async ({ page }) => {
+  await login(page);
+
+  await page.goto('/settings');
+  await page.getByLabel(/birth year/i).fill('1990');
+  await page.getByRole('button', { name: /^save$/i }).click();
+  await expect(page.getByRole('status')).toContainText(/saved/i);
+
+  await page.goto('/');
+  const rangeGroup = page.getByRole('group', { name: /history range/i });
+
+  // 5Y+ → age marker visible (seeded history spans 6 years)
+  await rangeGroup.getByRole('button', { name: '5Y', exact: true }).click();
+  await expect(page.getByText(/^Age \d+$/)).toBeVisible();
+
+  // short ranges → no age marker
+  await rangeGroup.getByRole('button', { name: '1M', exact: true }).click();
+  await expect(page.getByText(/^Age \d+$/)).not.toBeVisible();
 });
 
 test('net worth equals assets minus liabilities', async ({ page }) => {

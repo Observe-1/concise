@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import type { AppContext } from '../../context.js';
+import { METALS } from '../../types/api.js';
 import type { HoldingKind } from './kind.js';
 import { audit } from '../../lib/audit.js';
 import { badRequest, idParam, parseBody } from '../../lib/http.js';
@@ -20,18 +21,25 @@ function buildSchemas(k: HoldingKind) {
   };
   const market = k.supportsMarket
     ? {
+        metal: z.enum(METALS).nullable().optional(),
         valuationMode: z.enum(['manual', 'market']).optional(),
         marketSymbol: z.string().trim().min(1).max(20).optional(),
         quantity: z.number().positive().finite().optional(),
       }
     : {};
-  const create = z.object({ ...base, ...market, valueMinor: valueSchema.optional() });
+  // metal only makes sense on the precious_metals class (DB CHECK mirrors this)
+  const create = z.object({ ...base, ...market, valueMinor: valueSchema.optional() })
+    .refine((data) => {
+      const d = data as { category?: string; metal?: string | null };
+      return !d.metal || d.category === 'precious_metals';
+    }, { message: 'metal requires the precious_metals category', path: ['metal'] });
   const update = z.object({
     category: base.category.optional(),
     name: base.name.optional(),
     notes: base.notes,
     ...(k.supportsMarket
       ? {
+          metal: z.enum(METALS).nullable().optional(),
           valuationMode: z.enum(['manual', 'market']).optional(),
           marketSymbol: z.string().trim().min(1).max(20).nullable().optional(),
           quantity: z.number().positive().finite().nullable().optional(),

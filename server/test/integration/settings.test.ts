@@ -13,7 +13,25 @@ describe('settings API', () => {
 
   it('returns profile and preferences', async () => {
     const res = await agent.get('/api/settings');
-    expect(res.body).toEqual({ username: 'alice', displayName: 'alice', currency: 'USD' });
+    expect(res.body).toEqual({ username: 'alice', displayName: 'alice', currency: 'USD', birthYear: null });
+  });
+
+  it('sets, exposes and clears the birth year', async () => {
+    const set = await csrf(agent.patch('/api/settings')).send({ birthYear: 1990 });
+    expect(set.body.birthYear).toBe(1990);
+
+    // flows into the session user for the chart age overlay
+    const me = await agent.get('/api/auth/me');
+    expect(me.body.user.birthYear).toBe(1990);
+
+    const cleared = await csrf(agent.patch('/api/settings')).send({ birthYear: null });
+    expect(cleared.body.birthYear).toBeNull();
+  });
+
+  it('validates birth year bounds', async () => {
+    await csrf(agent.patch('/api/settings')).send({ birthYear: 1800 }).expect(400);
+    await csrf(agent.patch('/api/settings')).send({ birthYear: 2150 }).expect(400);
+    await csrf(agent.patch('/api/settings')).send({ birthYear: 1990.5 }).expect(400);
   });
 
   it('updates display name and currency', async () => {

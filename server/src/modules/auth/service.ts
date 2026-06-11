@@ -18,12 +18,14 @@ export interface LoginResult {
 export function login(ctx: AppContext, username: string, password: string): LoginResult | null {
   const row = ctx.db
     .prepare(
-      `SELECT u.id, u.username, u.password_hash, u.display_name, COALESCE(s.currency, 'USD') AS currency
+      `SELECT u.id, u.username, u.password_hash, u.display_name,
+              COALESCE(s.currency, 'USD') AS currency, s.birth_year
        FROM users u LEFT JOIN settings s ON s.user_id = u.id
        WHERE u.username = ?`,
     )
     .get(username.toLowerCase()) as
-    | { id: number; username: string; password_hash: string; display_name: string; currency: string }
+    | { id: number; username: string; password_hash: string; display_name: string;
+        currency: string; birth_year: number | null }
     | undefined;
   if (!verifyPassword(password, row?.password_hash ?? DUMMY_HASH) || !row) return null;
 
@@ -35,7 +37,10 @@ export function login(ctx: AppContext, username: string, password: string): Logi
   return {
     token,
     expiresAt,
-    user: { id: row.id, username: row.username, displayName: row.display_name, currency: row.currency },
+    user: {
+      id: row.id, username: row.username, displayName: row.display_name,
+      currency: row.currency, birthYear: row.birth_year ?? null,
+    },
   };
 }
 
@@ -49,14 +54,15 @@ export function resolveSession(ctx: AppContext, token: string): SessionUser | nu
   const row = ctx.db
     .prepare(
       `SELECT s.id AS session_id, s.expires_at, u.id, u.username, u.display_name,
-              COALESCE(st.currency, 'USD') AS currency
+              COALESCE(st.currency, 'USD') AS currency, st.birth_year
        FROM sessions s
        JOIN users u ON u.id = s.user_id
        LEFT JOIN settings st ON st.user_id = u.id
        WHERE s.token_hash = ? AND s.expires_at > ?`,
     )
     .get(hashToken(token), nowIso) as
-    | { session_id: number; expires_at: string; id: number; username: string; display_name: string; currency: string }
+    | { session_id: number; expires_at: string; id: number; username: string; display_name: string;
+        currency: string; birth_year: number | null }
     | undefined;
   if (!row) return null;
 
@@ -67,7 +73,10 @@ export function resolveSession(ctx: AppContext, token: string): SessionUser | nu
       .prepare('UPDATE sessions SET expires_at = ? WHERE id = ?')
       .run(new Date(ctx.now().getTime() + ttlMs).toISOString(), row.session_id);
   }
-  return { id: row.id, username: row.username, displayName: row.display_name, currency: row.currency };
+  return {
+    id: row.id, username: row.username, displayName: row.display_name,
+    currency: row.currency, birthYear: row.birth_year ?? null,
+  };
 }
 
 export function purgeExpiredSessions(ctx: AppContext): void {

@@ -7,4 +7,4 @@ const config = loadConfig();
 const db = openDatabase(config.dbPath);
 migrate(db);
 seed(db);
-console.log('Seeded demo account (demo / demo) with sample portfolio and 2 years of history.');
+console.log('Seeded demo account (demo / demo) with sample portfolio and 6 years of history.');

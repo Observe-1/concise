@@ -41,6 +41,8 @@ describe('rangeStart', () => {
     expect(rangeStart('YTD', today)).toBe('2026-01-01');
     expect(rangeStart('1Y', today)).toBe('2025-06-11');
     expect(rangeStart('5Y', today)).toBe('2021-06-11');
+    expect(rangeStart('10Y', today)).toBe('2016-06-11');
+    expect(rangeStart('20Y', today)).toBe('2006-06-11');
     expect(rangeStart('ALL', today)).toBeNull();
   });
 

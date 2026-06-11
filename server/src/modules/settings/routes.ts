@@ -8,16 +8,22 @@ import { parseBody } from '../../lib/http.js';
 const updateSchema = z.object({
   displayName: z.string().trim().min(1).max(80).optional(),
   currency: z.string().trim().length(3).regex(/^[A-Za-z]{3}$/, 'Expected ISO 4217 code').optional(),
+  birthYear: z.number().int().min(1900).max(2100).nullable().optional(),
 });
 
 function getSettings(ctx: AppContext, userId: number): SettingsDto {
   const row = ctx.db
     .prepare(
-      `SELECT u.username, u.display_name, COALESCE(s.currency, 'USD') AS currency
+      `SELECT u.username, u.display_name, COALESCE(s.currency, 'USD') AS currency, s.birth_year
        FROM users u LEFT JOIN settings s ON s.user_id = u.id WHERE u.id = ?`,
     )
-    .get(userId) as { username: string; display_name: string; currency: string };
-  return { username: row.username, displayName: row.display_name, currency: row.currency };
+    .get(userId) as { username: string; display_name: string; currency: string; birth_year: number | null };
+  return {
+    username: row.username,
+    displayName: row.display_name,
+    currency: row.currency,
+    birthYear: row.birth_year ?? null,
+  };
 }
 
 export function settingsRoutes(ctx: AppContext): Router {
@@ -40,6 +46,14 @@ export function settingsRoutes(ctx: AppContext): Router {
            ON CONFLICT (user_id) DO UPDATE SET currency = excluded.currency`,
         )
         .run(userId, patch.currency.toUpperCase());
+    }
+    if (patch.birthYear !== undefined) {
+      ctx.db
+        .prepare(
+          `INSERT INTO settings (user_id, birth_year) VALUES (?, ?)
+           ON CONFLICT (user_id) DO UPDATE SET birth_year = excluded.birth_year`,
+        )
+        .run(userId, patch.birthYear);
     }
     audit(ctx.db, { userId, action: 'settings.update', detail: patch, ip: req.ip });
     res.json(getSettings(ctx, userId));

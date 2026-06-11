@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { App } from '../src/App.js';
 import { mockFetch, renderWithProviders } from './helpers.js';
 
-const demoUser = { id: 1, username: 'demo', displayName: 'Demo User', currency: 'USD' };
+const demoUser = { id: 1, username: 'demo', displayName: 'Demo User', currency: 'USD', birthYear: null };
 
 describe('login flow', () => {
   it('shows the login form with accessible labels for anonymous visitors', async () => {

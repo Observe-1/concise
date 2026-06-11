@@ -5,7 +5,9 @@ import { addDays, toDateISO } from '../lib/dates.js';
 import { hashString, mulberry32 } from '../lib/rng.js';
 import { SimulatedPriceProvider, holdingValueMinor } from '../modules/market/provider.js';
 
-const HISTORY_DAYS = 730;
+// Six years of backdated history so long ranges (5Y/10Y) and the age overlay
+// have something to show in the demo.
+const HISTORY_DAYS = 2190;
 const POINT_EVERY_DAYS = 7;
 
 interface SeriesPoint { date: string; valueMinor: number }
@@ -47,6 +49,7 @@ interface SeedEntry {
   category: string;
   name: string;
   notes?: string;
+  metal?: string;
   series: SeriesPoint[];
   market?: { symbol: string; quantity: number };
 }
@@ -82,6 +85,9 @@ export function seed(db: DatabaseSync, now: () => Date = () => new Date()): void
     { table: 'assets', category: 'crypto', name: 'Bitcoin',
       market: { symbol: 'BTC', quantity: 0.15 },
       series: marketSeries('BTC', 0.15, todayIso) },
+    { table: 'assets', category: 'precious_metals', name: 'Gold coins', metal: 'gold',
+      market: { symbol: 'XAU', quantity: 4 },
+      series: marketSeries('XAU', 4, todayIso) },
     { table: 'liabilities', category: 'mortgage', name: 'Home mortgage',
       series: genSeries('demo:mortgage', 27_600_000, 24_800_000, todayIso, 0.001) },
     { table: 'liabilities', category: 'loan', name: 'Car loan',
@@ -100,8 +106,8 @@ export function seed(db: DatabaseSync, now: () => Date = () => new Date()): void
     db.prepare('INSERT INTO settings (user_id, currency) VALUES (?, ?)').run(userId, 'USD');
 
     const insertAsset = db.prepare(
-      `INSERT INTO assets (user_id, category, name, notes, valuation_mode, market_symbol, quantity)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO assets (user_id, category, name, notes, metal, valuation_mode, market_symbol, quantity)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     const insertLiability = db.prepare(
       'INSERT INTO liabilities (user_id, category, name, notes) VALUES (?, ?, ?, ?)',
@@ -120,7 +126,7 @@ export function seed(db: DatabaseSync, now: () => Date = () => new Date()): void
       let id: number;
       if (e.table === 'assets') {
         id = insertAsset.run(
-          userId, e.category, e.name, e.notes ?? null,
+          userId, e.category, e.name, e.notes ?? null, e.metal ?? null,
           e.market ? 'market' : 'manual',
           e.market?.symbol ?? null, e.market?.quantity ?? null,
         ).lastInsertRowid as number;

@@ -13,12 +13,14 @@ export function SettingsPage() {
 
   const [displayName, setDisplayName] = useState('');
   const [currency, setCurrency] = useState('USD');
+  const [birthYear, setBirthYear] = useState('');
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     if (settings.data) {
       setDisplayName(settings.data.displayName);
       setCurrency(settings.data.currency);
+      setBirthYear(settings.data.birthYear?.toString() ?? '');
     }
   }, [settings.data]);
 
@@ -29,7 +31,7 @@ export function SettingsPage() {
     e.preventDefault();
     setSaved(false);
     update.mutate(
-      { displayName, currency },
+      { displayName, currency, birthYear: birthYear ? Number(birthYear) : null },
       { onSuccess: () => setSaved(true) },
     );
   };
@@ -56,6 +58,22 @@ export function SettingsPage() {
                   <option key={c} value={c}>{c}</option>
                 ))}
               </Select>
+            )}
+          </Field>
+          <Field
+            label="Birth year"
+            hint="Optional. Charts spanning 5+ years show a subtle marker with your age. Leave blank to disable."
+          >
+            {(id) => (
+              <Input
+                id={id}
+                type="number"
+                min={1900}
+                max={2100}
+                value={birthYear}
+                onChange={(e) => setBirthYear(e.target.value)}
+                placeholder="e.g. 1990"
+              />
             )}
           </Field>
           {update.isError ? <ErrorNote message="Could not save settings." /> : null}

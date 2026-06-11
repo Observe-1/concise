@@ -1,17 +1,21 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import type { HoldingDto } from '@api';
-import { ASSET_CATEGORIES, LIABILITY_CATEGORIES } from '@api';
+import { ASSET_CATEGORIES, LIABILITY_CATEGORIES, METALS } from '@api';
 import {
   useCreateHolding, useDeleteHolding, useHoldings, useMarketRefresh, useMe,
-  useRevalueHolding, useUpdateHolding, type HoldingKind,
+  useRevalueHolding, useSymbolLookup, useUpdateHolding, type HoldingKind,
 } from '../api/queries.js';
 import { Button, Card, EmptyState, ErrorNote, Field, Input, Modal, Select, Spinner } from '../components/ui.js';
 import { formatMinor, minorToInput, parseToMinor } from '../lib/money.js';
 
 const CATEGORY_LABELS: Record<string, string> = {
   cash: 'Cash', investments: 'Investments', property: 'Property', vehicles: 'Vehicles',
-  crypto: 'Crypto', other: 'Other', mortgage: 'Mortgage', loan: 'Loans',
-  credit_card: 'Credit cards', student_loan: 'Student loans',
+  crypto: 'Crypto', precious_metals: 'Precious metals', other: 'Other', mortgage: 'Mortgage',
+  loan: 'Loans', credit_card: 'Credit cards', student_loan: 'Student loans',
+};
+
+const METAL_LABELS: Record<string, string> = {
+  gold: 'Gold', silver: 'Silver', platinum: 'Platinum', palladium: 'Palladium',
 };
 
 interface PageCopy {
@@ -102,13 +106,20 @@ export function HoldingsPage({ kind }: { kind: HoldingKind }) {
                     >
                       <span className="min-w-0">
                         <span className="block truncate text-sm text-ink-100">{h.name}</span>
-                        {h.valuationMode === 'market' ? (
-                          <span className="mt-0.5 inline-block rounded bg-gold-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-gold-400">
-                            {h.marketSymbol} × {h.quantity}
-                          </span>
-                        ) : h.notes ? (
-                          <span className="block truncate text-xs text-ink-400">{h.notes}</span>
-                        ) : null}
+                        <span className="flex items-center gap-1.5">
+                          {h.metal && (
+                            <span className="mt-0.5 inline-block rounded bg-ink-700/60 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-ink-300">
+                              {METAL_LABELS[h.metal] ?? h.metal}
+                            </span>
+                          )}
+                          {h.valuationMode === 'market' ? (
+                            <span className="mt-0.5 inline-block rounded bg-gold-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-gold-400">
+                              {h.marketSymbol} × {h.quantity}
+                            </span>
+                          ) : !h.metal && h.notes ? (
+                            <span className="block truncate text-xs text-ink-400">{h.notes}</span>
+                          ) : null}
+                        </span>
                       </span>
                       <span className={`tabular shrink-0 text-sm font-semibold ${copy.tone === 'gain' ? 'text-gain-400' : 'text-loss-400'}`}>
                         {formatMinor(h.currentValueMinor, currency)}
@@ -136,17 +147,35 @@ function HoldingForm({
   const update = useUpdateHolding(kind);
   const remove = useDeleteHolding(kind);
   const revalue = useRevalueHolding(kind);
+  const lookup = useSymbolLookup();
 
   const [category, setCategory] = useState<string>(existing?.category ?? categories[0]);
   const [name, setName] = useState(existing?.name ?? '');
   const [notes, setNotes] = useState(existing?.notes ?? '');
+  const [metal, setMetal] = useState(existing?.metal ?? METALS[0]);
   const [isMarket, setIsMarket] = useState(existing?.valuationMode === 'market');
   const [symbol, setSymbol] = useState(existing?.marketSymbol ?? '');
   const [quantity, setQuantity] = useState(existing?.quantity?.toString() ?? '');
   const [value, setValue] = useState(existing ? minorToInput(existing.currentValueMinor) : '');
   const [formError, setFormError] = useState<string | null>(null);
+  // Symbol the user has confirmed via lookup. Editing an existing market
+  // asset without touching the symbol needs no re-verification.
+  const [verified, setVerified] = useState<{ symbol: string; name: string } | null>(null);
 
   const busy = create.isPending || update.isPending || remove.isPending || revalue.isPending;
+  const symbolUpper = symbol.trim().toUpperCase();
+  const symbolUnchanged = existing?.marketSymbol === symbolUpper;
+  const symbolVerified = verified?.symbol === symbolUpper;
+  const needsVerification = isMarket && !symbolUnchanged && !symbolVerified;
+
+  const onVerifySymbol = () => {
+    setFormError(null);
+    lookup.mutate(symbolUpper, {
+      onSuccess: (result) => setVerified(result),
+      onError: () =>
+        setFormError(`Symbol "${symbolUpper}" was not recognised — check the ticker and try again.`),
+    });
+  };
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -158,6 +187,10 @@ function HoldingForm({
         setFormError('Market entries need a symbol and a positive quantity.');
         return;
       }
+      if (needsVerification) {
+        setFormError('Verify the symbol first so we can confirm the instrument.');
+        return;
+      }
     } else if (valueMinor === null) {
       setFormError('Enter a valid amount, e.g. 1250.00');
       return;
@@ -166,12 +199,15 @@ function HoldingForm({
     const onError = (err: unknown) =>
       setFormError(err instanceof Error ? err.message : 'Something went wrong');
 
+    const metalField = category === 'precious_metals' ? { metal } : { metal: null };
+
     if (!existing) {
       create.mutate(
         {
           category, name, notes: notes || null,
+          ...(kind === 'assets' ? metalField : {}),
           ...(isMarket
-            ? { valuationMode: 'market' as const, marketSymbol: symbol, quantity: Number(quantity) }
+            ? { valuationMode: 'market' as const, marketSymbol: symbolUpper, quantity: Number(quantity) }
             : { valueMinor: valueMinor! }),
         },
         { onSuccess: onClose, onError },
@@ -183,9 +219,12 @@ function HoldingForm({
       {
         id: existing.id, category, name, notes: notes || null,
         ...(kind === 'assets'
-          ? isMarket
-            ? { valuationMode: 'market' as const, marketSymbol: symbol, quantity: Number(quantity) }
-            : { valuationMode: 'manual' as const }
+          ? {
+              ...metalField,
+              ...(isMarket
+                ? { valuationMode: 'market' as const, marketSymbol: symbolUpper, quantity: Number(quantity) }
+                : { valuationMode: 'manual' as const }),
+            }
           : {}),
       },
       {
@@ -229,6 +268,18 @@ function HoldingForm({
           )}
         </Field>
 
+        {kind === 'assets' && category === 'precious_metals' && (
+          <Field label="Metal">
+            {(id) => (
+              <Select id={id} value={metal ?? METALS[0]} onChange={(e) => setMetal(e.target.value as typeof metal)}>
+                {METALS.map((m) => (
+                  <option key={m} value={m}>{METAL_LABELS[m]}</option>
+                ))}
+              </Select>
+            )}
+          </Field>
+        )}
+
         {kind === 'assets' && (
           <Field label="Valuation">
             {(id) => (
@@ -245,20 +296,42 @@ function HoldingForm({
         )}
 
         {isMarket ? (
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Symbol">
-              {(id) => (
-                <Input id={id} value={symbol} onChange={(e) => setSymbol(e.target.value.toUpperCase())}
-                  placeholder="VWRL" required />
-              )}
-            </Field>
+          <>
+            <div className="grid grid-cols-[1fr_auto] items-end gap-2">
+              <Field label="Symbol">
+                {(id) => (
+                  <Input id={id} value={symbol}
+                    onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+                    placeholder="VWRL" required />
+                )}
+              </Field>
+              <Button
+                variant="ghost"
+                onClick={onVerifySymbol}
+                disabled={!symbol.trim() || lookup.isPending || symbolVerified || symbolUnchanged}
+              >
+                {lookup.isPending ? 'Checking…' : 'Verify'}
+              </Button>
+            </div>
+            {symbolVerified && (
+              <p role="status" className="flex items-center gap-1.5 text-sm text-gain-400">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                  <path d="M2 7.5L5.5 11L12 3.5" stroke="currentColor" strokeWidth="1.8"
+                    strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                {verified!.symbol} — {verified!.name}
+              </p>
+            )}
+            {!symbolVerified && symbolUnchanged && existing && (
+              <p className="text-xs text-ink-400">Symbol unchanged — no re-verification needed.</p>
+            )}
             <Field label="Quantity">
               {(id) => (
                 <Input id={id} value={quantity} onChange={(e) => setQuantity(e.target.value)}
                   inputMode="decimal" placeholder="100" required />
               )}
             </Field>
-          </div>
+          </>
         ) : (
           <Field label={existing ? 'Current value' : 'Value'} hint={existing ? 'Changing this records a new valuation.' : undefined}>
             {(id) => (

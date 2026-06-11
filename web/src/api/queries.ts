@@ -3,7 +3,7 @@ import {
 } from '@tanstack/react-query';
 import type {
   DashboardSummaryDto, HistoryDto, HistoryRange, HoldingDetailDto, HoldingDto,
-  RecurringDto, SessionUser, SettingsDto,
+  RecurringDto, SessionUser, SettingsDto, SymbolLookupDto,
 } from '@api';
 import { api, ApiError } from './client.js';
 
@@ -98,6 +98,7 @@ export interface HoldingInput {
   category: string;
   name: string;
   notes?: string | null;
+  metal?: string | null;
   valueMinor?: number;
   valuationMode?: 'manual' | 'market';
   marketSymbol?: string | null;
@@ -193,11 +194,19 @@ export function useSettings() {
 export function useUpdateSettings() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (patch: { displayName?: string; currency?: string }) =>
+    mutationFn: (patch: { displayName?: string; currency?: string; birthYear?: number | null }) =>
       api<SettingsDto>('/api/settings', { method: 'PATCH', body: patch }),
     onSuccess: () => {
       void qc.invalidateQueries();
     },
+  });
+}
+
+/** Resolve a ticker to its instrument name (asset-creation verification). */
+export function useSymbolLookup() {
+  return useMutation({
+    mutationFn: (symbol: string) =>
+      api<SymbolLookupDto>(`/api/market/lookup?symbol=${encodeURIComponent(symbol)}`),
   });
 }
 

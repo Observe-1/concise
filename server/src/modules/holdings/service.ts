@@ -1,5 +1,5 @@
 import type { AppContext } from '../../context.js';
-import type { HoldingDto, HoldingDetailDto, ValuationDto, ValuationSource } from '../../types/api.js';
+import type { HoldingDto, HoldingDetailDto, Metal, ValuationDto, ValuationSource } from '../../types/api.js';
 import type { HoldingKind } from './kind.js';
 import { withTransaction } from '../../db/connection.js';
 import { notFound } from '../../lib/http.js';
@@ -12,6 +12,7 @@ interface HoldingRow {
   category: string;
   name: string;
   notes: string | null;
+  metal?: Metal | null;
   valuation_mode?: 'manual' | 'market';
   market_symbol?: string | null;
   quantity?: number | null;
@@ -24,6 +25,7 @@ export interface CreateHoldingInput {
   category: string;
   name: string;
   notes?: string | null;
+  metal?: Metal | null;
   valueMinor?: number;
   valuationMode?: 'manual' | 'market';
   marketSymbol?: string;
@@ -34,6 +36,7 @@ export interface UpdateHoldingInput {
   category?: string;
   name?: string;
   notes?: string | null;
+  metal?: Metal | null;
   valuationMode?: 'manual' | 'market';
   marketSymbol?: string | null;
   quantity?: number | null;
@@ -41,7 +44,7 @@ export interface UpdateHoldingInput {
 
 function selectColumns(k: HoldingKind): string {
   const marketCols = k.supportsMarket
-    ? 'h.valuation_mode, h.market_symbol, h.quantity,'
+    ? 'h.metal, h.valuation_mode, h.market_symbol, h.quantity,'
     : '';
   return `
     SELECT h.id, h.category, h.name, h.notes, ${marketCols} h.created_at,
@@ -58,6 +61,7 @@ function toDto(row: HoldingRow): HoldingDto {
     category: row.category,
     name: row.name,
     notes: row.notes,
+    metal: row.metal ?? null,
     valuationMode: row.valuation_mode ?? 'manual',
     marketSymbol: row.market_symbol ?? null,
     quantity: row.quantity ?? null,
@@ -132,11 +136,12 @@ export function createHolding(
     if (k.supportsMarket) {
       id = ctx.db
         .prepare(
-          `INSERT INTO assets (user_id, category, name, notes, valuation_mode, market_symbol, quantity)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO assets (user_id, category, name, notes, metal, valuation_mode, market_symbol, quantity)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           userId, input.category, input.name, input.notes ?? null,
+          input.category === 'precious_metals' ? input.metal ?? null : null,
           isMarket ? 'market' : 'manual',
           isMarket ? input.marketSymbol!.toUpperCase() : null,
           isMarket ? input.quantity! : null,
@@ -177,13 +182,16 @@ export function updateHolding(
           ? patch.marketSymbol?.toUpperCase() ?? null
           : existing.market_symbol ?? null;
       const quantity = patch.quantity !== undefined ? patch.quantity : existing.quantity ?? null;
+      const metal = patch.metal !== undefined ? patch.metal : existing.metal ?? null;
       ctx.db
         .prepare(
-          `UPDATE assets SET name = ?, category = ?, notes = ?, valuation_mode = ?,
+          `UPDATE assets SET name = ?, category = ?, notes = ?, metal = ?, valuation_mode = ?,
              market_symbol = ?, quantity = ?, updated_at = ?
            WHERE id = ?`,
         )
-        .run(name, category, notes, mode,
+        .run(name, category, notes,
+          category === 'precious_metals' ? metal : null,
+          mode,
           mode === 'market' ? symbol : null,
           mode === 'market' ? quantity : null,
           nowIso, id);
