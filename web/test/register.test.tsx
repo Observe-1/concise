@@ -42,6 +42,34 @@ describe('create account', () => {
     });
   });
 
+  it('shows an error message when the password requirements are not met', async () => {
+    const calls = mockFetch([[/\/api\/auth\/me/, { error: 'Not authenticated' }, 401]]);
+    renderWithProviders(<App />, { route: '/register' });
+
+    const user = userEvent.setup();
+    await user.type(await screen.findByLabelText(/username/i), 'newbie');
+    await user.type(screen.getByLabelText(/^password$/i), 'short1');
+    await user.type(screen.getByLabelText(/confirm password/i), 'short1');
+    await user.click(screen.getByRole('button', { name: /create account/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/at least 8 characters/i);
+    expect(calls.some((c) => c.url.includes('/register'))).toBe(false);
+  });
+
+  it('shows an error message for an invalid username', async () => {
+    const calls = mockFetch([[/\/api\/auth\/me/, { error: 'Not authenticated' }, 401]]);
+    renderWithProviders(<App />, { route: '/register' });
+
+    const user = userEvent.setup();
+    await user.type(await screen.findByLabelText(/username/i), 'a b');
+    await user.type(screen.getByLabelText(/^password$/i), 'longenough1');
+    await user.type(screen.getByLabelText(/confirm password/i), 'longenough1');
+    await user.click(screen.getByRole('button', { name: /create account/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/username must be/i);
+    expect(calls.some((c) => c.url.includes('/register'))).toBe(false);
+  });
+
   it('blocks mismatched passwords client-side', async () => {
     const calls = mockFetch([[/\/api\/auth\/me/, { error: 'Not authenticated' }, 401]]);
     renderWithProviders(<App />, { route: '/register' });

@@ -16,13 +16,25 @@ export function RegisterPage() {
 
   if (!isLoading && me) return <Navigate to="/" replace />;
 
+  // Mirrors the server's registerSchema so failed requirements surface as a
+  // visible message instead of relying on native validation tooltips.
+  const validate = (): string | null => {
+    const name = username.trim();
+    if (name.length < 3 || name.length > 32 || !/^[a-zA-Z0-9_.-]+$/.test(name)) {
+      return 'Username must be 3–32 characters using only letters, numbers, dots, dashes or underscores.';
+    }
+    if (password.length < 8) {
+      return 'Password does not meet the requirements — it must be at least 8 characters.';
+    }
+    if (password !== confirm) return 'Passwords do not match.';
+    return null;
+  };
+
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
-    setFormError(null);
-    if (password !== confirm) {
-      setFormError('Passwords do not match.');
-      return;
-    }
+    const error = validate();
+    setFormError(error);
+    if (error) return;
     registerMutation.mutate(
       { username, password, ...(displayName.trim() ? { displayName } : {}) },
       {
@@ -41,7 +53,9 @@ export function RegisterPage() {
           <p className="mt-2 text-sm text-ink-400">Create your account.</p>
         </header>
 
-        <form onSubmit={onSubmit} className="space-y-4 rounded-3xl border border-ink-800 bg-ink-900 p-6">
+        {/* noValidate: requirement failures must render as a visible error
+            message, not a browser tooltip (inconsistent on mobile). */}
+        <form onSubmit={onSubmit} noValidate className="space-y-4 rounded-3xl border border-ink-800 bg-ink-900 p-6">
           <Field label="Username" hint="3–32 characters: letters, numbers, dots, dashes, underscores.">
             {(id) => (
               <Input

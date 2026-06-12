@@ -1,6 +1,6 @@
 # TODO — single source of truth for progress
 
-**Status: complete (phases 1–6). Deployment is out of scope.**
+**Status: feature batch (2026-06-12 #2) in progress. Deployment is out of scope.**
 
 ## Phase 1: System architecture
 - [x] Tech stack decisions (Node 24 + node:sqlite + Express 5 / React 19 + Vite + Tailwind 4)
@@ -76,6 +76,33 @@
 - [x] Settings: legacy wealth input ("on X date my net worth was Y")
 - [x] Optional backdate field when adding an asset/liability
 - [x] Settings: view all historic entries and alter them
+
+## Feature batch (2026-06-12 #2)
+Implemented strictly in order; one commit per feature.
+- [x] 1. Create account page: explicit error message when password requirements
+      are not met on submit (no silent native-validation-only behaviour)
+- [ ] 2. Trend line: slider (left of the expand button, also in full-screen)
+      controlling the rolling-average window of the dotted trend line
+- [ ] 3. Cash assets: no valuation method choice — always manual input
+- [ ] 4. Graph: a single data point in the selected period renders as a normal
+      (full-strength gold) flat line through that point, not a lone dot
+- [ ] 5. Valuation-method holdings are historically accurate when backdated
+      (per-date prices over the whole backfill); entries whose historical
+      prices could not be found get a hoverable error label on the
+      assets/liabilities page
+- [ ] 6. Historical view mode: draggable red circle under each graph; subtle
+      red page accent while active; all data shown as of the chosen date;
+      survives page changes; floating reset button on every page
+- [ ] 7. Property assets: valuation method applying a country's yearly average
+      property price change
+- [ ] 8. Vehicle assets: valuation method applying average vehicle
+      depreciation, with a manufacture-date field for correct depreciation
+- [ ] 9. Recurring: percentage amounts (e.g. +0.4% monthly) besides fixed
+- [ ] 10. Recurring: quarterly cadence
+- [ ] 11. Settings overhaul: sub pages (User account / History / Calculation)
+      selectable by buttons at the top
+- [ ] 12. Graph: deltas between sparse manual entries are smoothed over the
+      gap instead of a one-day vertical step
 
 ## Notes
 - Deployment (Docker/CI/runbooks) is intentionally out of scope. The app still
