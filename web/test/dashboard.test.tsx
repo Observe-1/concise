@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { screen, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from '../src/App.js';
 import { mockFetch, renderWithProviders } from './helpers.js';
@@ -62,6 +62,18 @@ describe('dashboard', () => {
     expect(pressed).toHaveAttribute('aria-pressed', 'true');
   });
 
+  it('adjusts the trend rolling-average window from the slider', async () => {
+    const calls = mountDashboard();
+    const slider = await screen.findByRole('slider', { name: /trend rolling average window/i });
+    fireEvent.change(slider, { target: { value: '30' } });
+
+    expect(screen.getByText(/trend 30d/i)).toBeInTheDocument();
+    // The request is debounced — wait for it to land with the new window.
+    await waitFor(() => {
+      expect(calls.some((c) => c.url.includes('trendWindow=30'))).toBe(true);
+    });
+  });
+
   it('toggles full-screen graph mode', async () => {
     mountDashboard();
     const user = userEvent.setup();
@@ -69,6 +81,8 @@ describe('dashboard', () => {
     expect(screen.getByRole('button', { name: /exit full screen/i })).toBeInTheDocument();
     // Summary cards are hidden in full-screen mode
     expect(screen.queryByText(/welcome back/i)).not.toBeInTheDocument();
+    // The trend window slider stays available in full-screen mode
+    expect(screen.getByRole('slider', { name: /trend rolling average window/i })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /exit full screen/i }));
     expect(await screen.findByText(/welcome back/i)).toBeInTheDocument();

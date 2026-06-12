@@ -140,11 +140,13 @@ changes today's totals. Deleting an asset hard-deletes its valuations
 ### Dashboard
 - `GET /api/dashboard/summary` — current totals + per-category breakdown
   computed from latest valuations.
-- `GET /api/dashboard/history?range=1M|3M|6M|YTD|1Y|5Y|10Y|20Y|ALL` —
-  snapshot series for the graph. Every point carries `trendMinor`: a 91-day
-  centred moving average computed over the **full** history before the range
-  is sliced, so a date's trend value is identical whatever range is requested
-  (the trend never re-fits to the visible window).
+- `GET /api/dashboard/history?range=1M|3M|6M|YTD|1Y|5Y|10Y|20Y|ALL&trendWindow=N` —
+  snapshot series for the graph. Every point carries `trendMinor`: a centred
+  moving average (window `trendWindow` days, 7–365, default 91 — the UI
+  exposes it as a slider next to the graph's expand button) computed over the
+  **full** history before the range is sliced, so a date's trend value is
+  identical whatever range is requested (the trend never re-fits to the
+  visible window).
 - The chart shows a muted age marker (vertical line labelled "Age N") when
   the user has set a birth year and the visible series spans ≥ 5 years.
 

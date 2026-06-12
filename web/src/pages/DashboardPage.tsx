@@ -3,15 +3,24 @@ import type { HistoryRange } from '@api';
 import { useHistory, useMe, useSummary } from '../api/queries.js';
 import { NetWorthChart, RangePicker } from '../components/NetWorthChart.js';
 import { Card, Spinner } from '../components/ui.js';
+import { useDebouncedValue } from '../hooks/useDebouncedValue.js';
 import { categoryDisplay, type HoldingSide } from '../lib/categories.js';
 import { formatMinor } from '../lib/money.js';
+
+// Rolling-average window (days) for the trend line — slider bounds mirror the
+// server's accepted trendWindow range; 91 is the server default.
+const TREND_WINDOW_MIN = 7;
+const TREND_WINDOW_MAX = 365;
+const TREND_WINDOW_DEFAULT = 91;
 
 export function DashboardPage() {
   const { data: me } = useMe();
   const summary = useSummary();
   const [range, setRange] = useState<HistoryRange>('6M');
   const [fullscreen, setFullscreen] = useState(false);
-  const history = useHistory(range);
+  const [trendWindow, setTrendWindow] = useState(TREND_WINDOW_DEFAULT);
+  // Debounced so dragging the slider doesn't fire a request per step.
+  const history = useHistory(range, useDebouncedValue(trendWindow));
 
   if (summary.isLoading) return <Spinner label="Loading dashboard" />;
   if (summary.isError || !summary.data) {
@@ -24,14 +33,33 @@ export function DashboardPage() {
     <>
       <div className="mb-3 flex items-center justify-between gap-2">
         <RangePicker value={range} onChange={setRange} />
-        <button
-          type="button"
-          onClick={() => setFullscreen(!fullscreen)}
-          aria-label={fullscreen ? 'Exit full screen' : 'View graph full screen'}
-          className="rounded-lg p-2 text-ink-400 hover:text-gold-400"
-        >
-          {fullscreen ? <CollapseIcon /> : <ExpandIcon />}
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <label
+            className="flex items-center gap-2"
+            title="Rolling-average window of the trend line"
+          >
+            <span className="tabular whitespace-nowrap text-[10px] font-medium uppercase tracking-wider text-ink-400">
+              Trend {trendWindow}d
+            </span>
+            <input
+              type="range"
+              min={TREND_WINDOW_MIN}
+              max={TREND_WINDOW_MAX}
+              value={trendWindow}
+              onChange={(e) => setTrendWindow(Number(e.target.value))}
+              aria-label="Trend rolling average window in days"
+              className="h-1 w-20 cursor-pointer accent-gold-500 sm:w-28"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={() => setFullscreen(!fullscreen)}
+            aria-label={fullscreen ? 'Exit full screen' : 'View graph full screen'}
+            className="rounded-lg p-2 text-ink-400 hover:text-gold-400"
+          >
+            {fullscreen ? <CollapseIcon /> : <ExpandIcon />}
+          </button>
+        </div>
       </div>
       <NetWorthChart
         points={history.data?.points ?? []}

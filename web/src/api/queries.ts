@@ -72,10 +72,13 @@ export function useSummary() {
   });
 }
 
-export function useHistory(range: HistoryRange) {
+export function useHistory(range: HistoryRange, trendWindow?: number) {
   return useQuery({
-    queryKey: ['dashboard', 'history', range],
-    queryFn: () => api<HistoryDto>(`/api/dashboard/history?range=${range}`),
+    queryKey: ['dashboard', 'history', range, trendWindow ?? null],
+    queryFn: () =>
+      api<HistoryDto>(
+        `/api/dashboard/history?range=${range}${trendWindow ? `&trendWindow=${trendWindow}` : ''}`,
+      ),
     placeholderData: keepPreviousData,
   });
 }

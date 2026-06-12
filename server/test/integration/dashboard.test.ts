@@ -91,6 +91,40 @@ describe('dashboard API', () => {
     }
   });
 
+  it('applies a custom trend rolling-average window', async () => {
+    const def = await agent.get('/api/dashboard/history?range=1Y');
+    const tight = await agent.get('/api/dashboard/history?range=1Y&trendWindow=7');
+    expect(def.body.trendWindow).toBe(91);
+    expect(tight.body.trendWindow).toBe(7);
+
+    type Point = { date: string; trendMinor: number; netWorthMinor: number };
+    const defPoints = def.body.points as Point[];
+    const tightPoints = tight.body.points as Point[];
+    // Same series, different smoothing: dates and net worth identical,
+    // trend values different.
+    expect(tightPoints.map((p) => p.date)).toEqual(defPoints.map((p) => p.date));
+    expect(tightPoints.map((p) => p.netWorthMinor)).toEqual(defPoints.map((p) => p.netWorthMinor));
+    expect(tightPoints.map((p) => p.trendMinor)).not.toEqual(defPoints.map((p) => p.trendMinor));
+  });
+
+  it('keeps a custom trend window stable across range changes', async () => {
+    const all = await agent.get('/api/dashboard/history?range=ALL&trendWindow=30');
+    const oneMonth = await agent.get('/api/dashboard/history?range=1M&trendWindow=30');
+    type Point = { date: string; trendMinor: number };
+    const trendByDate = new Map<string, number>(
+      (all.body.points as Point[]).map((p) => [p.date, p.trendMinor]),
+    );
+    for (const p of oneMonth.body.points as Point[]) {
+      if (trendByDate.has(p.date)) expect(p.trendMinor).toBe(trendByDate.get(p.date));
+    }
+  });
+
+  it('rejects invalid trend windows', async () => {
+    for (const bad of ['3', '400', 'abc', '1.5']) {
+      await agent.get(`/api/dashboard/history?range=1M&trendWindow=${bad}`).expect(400);
+    }
+  });
+
   it('YTD starts on Jan 1', async () => {
     const res = await agent.get('/api/dashboard/history?range=YTD');
     expect(res.body.points[0].date >= '2026-01-01').toBe(true);

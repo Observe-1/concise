@@ -81,7 +81,7 @@
 Implemented strictly in order; one commit per feature.
 - [x] 1. Create account page: explicit error message when password requirements
       are not met on submit (no silent native-validation-only behaviour)
-- [ ] 2. Trend line: slider (left of the expand button, also in full-screen)
+- [x] 2. Trend line: slider (left of the expand button, also in full-screen)
       controlling the rolling-average window of the dotted trend line
 - [ ] 3. Cash assets: no valuation method choice — always manual input
 - [ ] 4. Graph: a single data point in the selected period renders as a normal

@@ -11,17 +11,20 @@ import { listHoldings } from '../holdings/service.js';
 const MAX_GRAPH_POINTS = 400;
 const RANGES: ReadonlySet<string> = new Set(['1M', '3M', '6M', 'YTD', '1Y', '5Y', '10Y', '20Y', 'ALL']);
 
-// Trend smoothing window in days. Fixed and applied to the FULL history so a
-// date's trend value is identical whatever range the client requests — the
-// trend must never re-fit to the visible window.
-const TREND_WINDOW_DAYS = 91;
+// Trend smoothing window in days. The client may override per request via
+// ?trendWindow= within these bounds; whatever the window, it is applied to
+// the FULL history so a date's trend value is identical whatever range the
+// client requests — the trend must never re-fit to the visible window.
+export const TREND_WINDOW_DEFAULT_DAYS = 91;
+export const TREND_WINDOW_MIN_DAYS = 7;
+export const TREND_WINDOW_MAX_DAYS = 365;
 
 /**
  * Centred moving average over the full daily series. Returns one trend value
  * per input row (edges use the partial window). O(n) via prefix sums.
  */
-export function computeTrend(values: number[]): number[] {
-  const half = Math.floor(TREND_WINDOW_DAYS / 2);
+export function computeTrend(values: number[], windowDays = TREND_WINDOW_DEFAULT_DAYS): number[] {
+  const half = Math.floor(windowDays / 2);
   const prefix = new Array<number>(values.length + 1);
   prefix[0] = 0;
   for (let i = 0; i < values.length; i++) prefix[i + 1] = prefix[i]! + values[i]!;
@@ -81,6 +84,16 @@ export function dashboardRoutes(ctx: AppContext): Router {
   router.get('/history', (req, res) => {
     const range = String(req.query.range ?? 'ALL').toUpperCase();
     if (!RANGES.has(range)) throw badRequest(`Invalid range; expected one of ${[...RANGES].join(', ')}`);
+    let trendWindow = TREND_WINDOW_DEFAULT_DAYS;
+    if (req.query.trendWindow !== undefined) {
+      trendWindow = Number(req.query.trendWindow);
+      if (!Number.isInteger(trendWindow)
+        || trendWindow < TREND_WINDOW_MIN_DAYS || trendWindow > TREND_WINDOW_MAX_DAYS) {
+        throw badRequest(
+          `Invalid trendWindow; expected an integer between ${TREND_WINDOW_MIN_DAYS} and ${TREND_WINDOW_MAX_DAYS}`,
+        );
+      }
+    }
     const start = rangeStart(range as HistoryRange, todayISO(ctx.now));
 
     // Always load the FULL history: the trend is derived from the whole
@@ -95,7 +108,7 @@ export function dashboardRoutes(ctx: AppContext): Router {
       .all(req.user!.id) as unknown as {
         date: string; assets_minor: number; liabilities_minor: number; net_worth_minor: number;
       }[];
-    const trend = computeTrend(rows.map((r) => r.net_worth_minor));
+    const trend = computeTrend(rows.map((r) => r.net_worth_minor), trendWindow);
 
     const points: HistoryPointDto[] = [];
     rows.forEach((r, i) => {
@@ -108,7 +121,11 @@ export function dashboardRoutes(ctx: AppContext): Router {
         trendMinor: trend[i]!,
       });
     });
-    const dto: HistoryDto = { range: range as HistoryRange, points: downsample(points, MAX_GRAPH_POINTS) };
+    const dto: HistoryDto = {
+      range: range as HistoryRange,
+      trendWindow,
+      points: downsample(points, MAX_GRAPH_POINTS),
+    };
     res.json(dto);
   });
 

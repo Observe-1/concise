@@ -88,15 +88,18 @@ export interface HistoryPointDto {
   liabilitiesMinor: number;
   netWorthMinor: number;
   /**
-   * Smoothed net-worth trend, computed once over the user's FULL history
-   * (91-day centred moving average) so it is identical for a given date
-   * regardless of the requested range — the trend never re-fits per window.
+   * Smoothed net-worth trend: a centred moving average over the user's FULL
+   * history (window set by the `trendWindow` request param, default 91 days)
+   * so it is identical for a given date regardless of the requested range —
+   * the trend never re-fits to the visible window.
    */
   trendMinor: number;
 }
 
 export interface HistoryDto {
   range: HistoryRange;
+  /** Rolling-average window (days) the trend was computed with. */
+  trendWindow: number;
   points: HistoryPointDto[];
 }
 
