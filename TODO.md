@@ -84,7 +84,7 @@ Implemented strictly in order; one commit per feature.
 - [x] 2. Trend line: slider (left of the expand button, also in full-screen)
       controlling the rolling-average window of the dotted trend line
 - [x] 3. Cash assets: no valuation method choice — always manual input
-- [ ] 4. Graph: a single data point in the selected period renders as a normal
+- [x] 4. Graph: a single data point in the selected period renders as a normal
       (full-strength gold) flat line through that point, not a lone dot
 - [ ] 5. Valuation-method holdings are historically accurate when backdated
       (per-date prices over the whole backfill); entries whose historical

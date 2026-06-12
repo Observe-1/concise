@@ -5,6 +5,7 @@ import {
 } from 'recharts';
 import type { HistoryPointDto, HistoryRange } from '@api';
 import { ageMarkers } from '../lib/ageMarkers.js';
+import { expandSinglePoint } from '../lib/flatline.js';
 import { formatMinor, formatMinorCompact } from '../lib/money.js';
 
 export const RANGES: HistoryRange[] = ['1M', '3M', '6M', 'YTD', '1Y', '5Y', '10Y', '20Y', 'ALL'];
@@ -48,9 +49,26 @@ interface ChartProps {
 }
 
 export function NetWorthChart({ points, currency, range, birthYear, height = 240 }: ChartProps) {
-  const ages = useMemo(() => ageMarkers(points, birthYear, range), [points, birthYear, range]);
+  // A single point in the window is duplicated into a flat full-width series
+  // so it draws as the normal gold line rather than a lone dot.
+  const data = useMemo(
+    () => expandSinglePoint(points, new Date().toISOString().slice(0, 10)),
+    [points],
+  );
+  const ages = useMemo(() => ageMarkers(data, birthYear, range), [data, birthYear, range]);
+  // A constant series needs an explicit padded domain — 'auto' would collapse
+  // the Y range to a single value and pin the flat line to the plot edge.
+  const yDomain = useMemo((): [number | 'auto', number | 'auto'] => {
+    if (data.length === 0) return ['auto', 'auto'];
+    const values = data.map((p) => p.netWorthMinor);
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    if (min !== max) return ['auto', 'auto'];
+    const pad = Math.max(Math.round(Math.abs(min) * 0.1), 100);
+    return [min - pad, max + pad];
+  }, [data]);
 
-  if (points.length === 0) {
+  if (data.length === 0) {
     return (
       <div className="flex items-center justify-center py-16 text-sm text-ink-400">
         No history yet — add your first asset to start tracking.
@@ -60,7 +78,7 @@ export function NetWorthChart({ points, currency, range, birthYear, height = 240
   return (
     <div style={{ height }} aria-label="Net worth history chart" role="img">
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={points} margin={{ top: 8, right: 4, left: 4, bottom: 0 }}>
+        <ComposedChart data={data} margin={{ top: 8, right: 4, left: 4, bottom: 0 }}>
           <defs>
             <linearGradient id="goldFill" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="#d4af37" stopOpacity={0.35} />
@@ -85,7 +103,7 @@ export function NetWorthChart({ points, currency, range, birthYear, height = 240
             tickLine={false}
             axisLine={false}
             width={56}
-            domain={['auto', 'auto']}
+            domain={yDomain}
           />
           <Tooltip content={<ChartTooltip currency={currency} />} />
           {ages.map((marker) => (

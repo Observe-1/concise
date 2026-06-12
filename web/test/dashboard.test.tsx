@@ -95,6 +95,22 @@ describe('dashboard', () => {
     expect(screen.getByText('💸 Loans')).toBeInTheDocument();
   });
 
+  it('renders the chart (not the empty state) when only one point exists', async () => {
+    mockFetch([
+      [/\/api\/auth\/me/, { user: demoUser }],
+      [/\/api\/dashboard\/summary/, summary],
+      [/\/api\/dashboard\/history/, {
+        range: '6M',
+        trendWindow: 91,
+        points: [history.points[0]],
+      }],
+    ]);
+    renderWithProviders(<App />, { route: '/' });
+
+    expect(await screen.findByRole('img', { name: /net worth history chart/i })).toBeInTheDocument();
+    expect(screen.queryByText(/no history yet/i)).not.toBeInTheDocument();
+  });
+
   it('renders the primary navigation', async () => {
     mountDashboard();
     await screen.findAllByText(/30,000\.00/);
