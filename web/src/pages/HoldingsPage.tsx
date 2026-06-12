@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react';
-import type { HoldingDto } from '@api';
-import { ASSET_CATEGORIES, LIABILITY_CATEGORIES, METALS } from '@api';
+import type { AssetCategory, HoldingDto } from '@api';
+import { ASSET_CATEGORIES, ASSET_VALUATION_MODES, LIABILITY_CATEGORIES, METALS } from '@api';
 import {
   useCreateHolding, useDeleteHolding, useHoldings, useMarketRefresh, useMe,
   useRevalueHolding, useSymbolLookup, useUpdateHolding, type HoldingKind,
@@ -12,6 +12,12 @@ import { formatMinor, minorToInput, parseToMinor } from '../lib/money.js';
 const METAL_LABELS: Record<string, string> = {
   gold: 'Gold', silver: 'Silver', platinum: 'Platinum', palladium: 'Palladium',
 };
+
+/** Valuation methods an asset category may use (cash: manual only). */
+function modesFor(kind: HoldingKind, category: string): readonly string[] {
+  if (kind !== 'assets') return ['manual'];
+  return ASSET_VALUATION_MODES[category as AssetCategory] ?? ['manual'];
+}
 
 interface PageCopy {
   title: string;
@@ -160,6 +166,7 @@ function HoldingForm({
   const [verified, setVerified] = useState<{ symbol: string; name: string } | null>(null);
 
   const busy = create.isPending || update.isPending || remove.isPending || revalue.isPending;
+  const allowedModes = modesFor(kind, category);
   const symbolUpper = symbol.trim().toUpperCase();
   const symbolUnchanged = existing?.marketSymbol === symbolUpper;
   const symbolVerified = verified?.symbol === symbolUpper;
@@ -253,7 +260,17 @@ function HoldingForm({
       <form onSubmit={onSubmit} className="space-y-4">
         <Field label="Category">
           {(id) => (
-            <Select id={id} value={category} onChange={(e) => setCategory(e.target.value)}>
+            <Select
+              id={id}
+              value={category}
+              onChange={(e) => {
+                const next = e.target.value;
+                setCategory(next);
+                // The new category may not support the selected method
+                // (e.g. cash is manual-only) — fall back to manual input.
+                if (!modesFor(kind, next).includes('market')) setIsMarket(false);
+              }}
+            >
               {categories.map((c) => (
                 <option key={c} value={c}>
                   {categoryDisplay(kind === 'assets' ? 'asset' : 'liability', c)}
@@ -280,7 +297,7 @@ function HoldingForm({
           </Field>
         )}
 
-        {kind === 'assets' && (
+        {kind === 'assets' && allowedModes.length > 1 && (
           <Field label="Valuation">
             {(id) => (
               <Select

@@ -67,6 +67,33 @@ describe('assets page', () => {
     });
   });
 
+  it('offers no valuation method for cash — manual input only', async () => {
+    mockFetch([
+      [/\/api\/auth\/me/, { user: demoUser }],
+      [/\/api\/assets$/, []],
+    ]);
+    renderWithProviders(<App />, { route: '/assets' });
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /add asset/i }));
+
+    // Default category is cash: no valuation selector, just the value input.
+    expect(screen.queryByLabelText(/valuation/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/^value$/i)).toBeInTheDocument();
+
+    // Market-capable categories get the selector back…
+    await user.selectOptions(screen.getByLabelText(/category/i), 'investments');
+    expect(await screen.findByLabelText(/valuation/i)).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText(/valuation/i), 'market');
+    expect(await screen.findByLabelText(/symbol/i)).toBeInTheDocument();
+
+    // …and switching back to cash drops the method and the market fields.
+    await user.selectOptions(screen.getByLabelText(/category/i), 'cash');
+    expect(screen.queryByLabelText(/valuation/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/symbol/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/^value$/i)).toBeInTheDocument();
+  });
+
   it('requires symbol verification before saving a market asset', async () => {
     const calls = mockFetch([
       [/\/api\/auth\/me/, { user: demoUser }],
@@ -77,6 +104,7 @@ describe('assets page', () => {
 
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: /add asset/i }));
+    await user.selectOptions(screen.getByLabelText(/category/i), 'investments');
     await user.type(screen.getByLabelText(/^name$/i), 'World ETF');
     await user.selectOptions(screen.getByLabelText(/valuation/i), 'market');
     await user.type(await screen.findByLabelText(/symbol/i), 'vwrl');
@@ -108,6 +136,7 @@ describe('assets page', () => {
 
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: /add asset/i }));
+    await user.selectOptions(screen.getByLabelText(/category/i), 'crypto');
     await user.selectOptions(screen.getByLabelText(/valuation/i), 'market');
     await user.type(await screen.findByLabelText(/symbol/i), 'zzzz');
     await user.click(screen.getByRole('button', { name: /^verify$/i }));

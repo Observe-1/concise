@@ -10,6 +10,22 @@ export type LiabilityCategory = (typeof LIABILITY_CATEGORIES)[number];
 export const METALS = ['gold', 'silver', 'platinum', 'palladium'] as const;
 export type Metal = (typeof METALS)[number];
 
+export type ValuationMode = 'manual' | 'market';
+
+/**
+ * Valuation methods available per asset category. Cash is a number you type
+ * in — it never has a valuation method. Liabilities are always manual.
+ */
+export const ASSET_VALUATION_MODES: Record<AssetCategory, readonly ValuationMode[]> = {
+  cash: ['manual'],
+  investments: ['manual', 'market'],
+  property: ['manual', 'market'],
+  vehicles: ['manual', 'market'],
+  crypto: ['manual', 'market'],
+  precious_metals: ['manual', 'market'],
+  other: ['manual', 'market'],
+};
+
 export type Cadence = 'daily' | 'weekly' | 'monthly' | 'yearly';
 export type HistoryRange = '1M' | '3M' | '6M' | 'YTD' | '1Y' | '5Y' | '10Y' | '20Y' | 'ALL';
 export type ValuationSource = 'manual' | 'recurring' | 'market' | 'seed';

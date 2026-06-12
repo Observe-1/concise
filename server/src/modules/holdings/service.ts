@@ -1,5 +1,8 @@
 import type { AppContext } from '../../context.js';
-import type { HoldingDto, HoldingDetailDto, Metal, ValuationDto, ValuationSource } from '../../types/api.js';
+import type {
+  AssetCategory, HoldingDto, HoldingDetailDto, Metal, ValuationDto, ValuationSource,
+} from '../../types/api.js';
+import { ASSET_VALUATION_MODES } from '../../types/api.js';
 import type { HoldingKind } from './kind.js';
 import { withTransaction } from '../../db/connection.js';
 import { badRequest, notFound } from '../../lib/http.js';
@@ -122,6 +125,14 @@ function insertValuation(
     .run(holdingId, valueMinor, source, recordedAt ?? ctx.now().toISOString());
 }
 
+/** Some categories restrict how they may be valued (cash is manual-only). */
+function assertModeAllowed(category: string, mode: string): void {
+  const allowed = ASSET_VALUATION_MODES[category as AssetCategory] ?? ['manual'];
+  if (!allowed.includes(mode as (typeof allowed)[number])) {
+    throw badRequest(`The ${mode} valuation method is not available for ${category} entries`);
+  }
+}
+
 /** Value of a market-mode holding from the price provider, as of a date. */
 function marketValue(ctx: AppContext, symbol: string, quantity: number, dateISO?: string): number {
   return holdingValueMinor(
@@ -140,6 +151,7 @@ export function createHolding(
   if (input.asOf && input.asOf > today) throw badRequest('Backdate cannot be in the future');
   return withTransaction(ctx.db, () => {
     const isMarket = k.supportsMarket && input.valuationMode === 'market';
+    if (k.supportsMarket) assertModeAllowed(input.category, isMarket ? 'market' : 'manual');
     let id: number;
     if (k.supportsMarket) {
       id = ctx.db
@@ -195,6 +207,7 @@ export function updateHolding(
 
     if (k.supportsMarket) {
       const mode = patch.valuationMode ?? existing.valuation_mode ?? 'manual';
+      assertModeAllowed(category, mode);
       const symbol =
         patch.marketSymbol !== undefined
           ? patch.marketSymbol?.toUpperCase() ?? null

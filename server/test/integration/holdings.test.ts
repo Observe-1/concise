@@ -71,6 +71,23 @@ describe('assets & liabilities API', () => {
       .send({ category: 'crypto', name: 'X', valuationMode: 'market' }).expect(400);
   });
 
+  it('cash entries are always manual — the market method is rejected', async () => {
+    await csrf(agent.post('/api/assets')).send({
+      category: 'cash', name: 'X', valuationMode: 'market', marketSymbol: 'BTC', quantity: 1,
+    }).expect(400);
+
+    // moving a market-valued asset into cash is rejected
+    const market = await csrf(agent.post('/api/assets')).send({
+      category: 'crypto', name: 'BTC', valuationMode: 'market', marketSymbol: 'BTC', quantity: 1,
+    });
+    await csrf(agent.patch(`/api/assets/${market.body.id}`)).send({ category: 'cash' }).expect(400);
+
+    // switching an existing cash asset to market valuation is rejected
+    const cash = await csrf(agent.post('/api/assets')).send({ category: 'cash', name: 'C', valueMinor: 100 });
+    await csrf(agent.patch(`/api/assets/${cash.body.id}`))
+      .send({ valuationMode: 'market', marketSymbol: 'BTC', quantity: 1 }).expect(400);
+  });
+
   it('creates precious metal assets with a metal sub-selection', async () => {
     const res = await csrf(agent.post('/api/assets')).send({
       category: 'precious_metals', name: 'Krugerrands', metal: 'gold', valueMinor: 950_000,
