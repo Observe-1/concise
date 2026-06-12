@@ -40,6 +40,18 @@ export function useLogin() {
   });
 }
 
+export function useRegister() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { username: string; password: string; displayName?: string }) =>
+      api<{ user: SessionUser }>('/api/auth/register', { method: 'POST', body: input }),
+    onSuccess: (data) => {
+      qc.setQueryData(['me'], data.user);
+      void qc.invalidateQueries();
+    },
+  });
+}
+
 export function useLogout() {
   const qc = useQueryClient();
   return useMutation({

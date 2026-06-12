@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { useLogin, useMe } from '../api/queries.js';
 import { ApiError } from '../api/client.js';
 import { Button, ErrorNote, Field, Input } from '../components/ui.js';
@@ -70,6 +70,12 @@ export function LoginPage() {
           <p className="text-center text-xs text-ink-400">
             Demo account: <span className="text-ink-300">demo / demo</span>
           </p>
+          <Link
+            to="/register"
+            className="block w-full rounded-xl border border-ink-700 px-4 py-2.5 text-center text-sm text-ink-100 transition-colors hover:border-gold-500 hover:text-gold-400"
+          >
+            Create account
+          </Link>
         </form>
       </div>
     </div>

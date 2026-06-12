@@ -7,6 +7,7 @@ import { DashboardPage } from './pages/DashboardPage.js';
 import { HoldingsPage } from './pages/HoldingsPage.js';
 import { LoginPage } from './pages/LoginPage.js';
 import { RecurringPage } from './pages/RecurringPage.js';
+import { RegisterPage } from './pages/RegisterPage.js';
 import { SettingsPage } from './pages/SettingsPage.js';
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -26,6 +27,7 @@ export function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
       <Route
         element={
           <RequireAuth>

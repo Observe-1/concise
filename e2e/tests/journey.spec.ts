@@ -20,6 +20,33 @@ test('rejects invalid credentials with a friendly error', async ({ page }) => {
   await expect(page.getByRole('alert')).toContainText(/invalid username or password/i);
 });
 
+test('registers a new account from the login page', async ({ page }, testInfo) => {
+  const username = `e2e-${testInfo.project.name === 'mobile-chromium' ? 'm' : 'd'}-${Date.now() % 100000}`;
+  await page.goto('/login');
+  await page.getByRole('link', { name: /create account/i }).click();
+  await expect(page).toHaveURL(/\/register/);
+
+  await page.getByLabel(/username/i).fill(username);
+  await page.getByLabel(/display name/i).fill('E2E Person');
+  await page.getByLabel(/^password$/i).fill('longenough1');
+  await page.getByLabel(/confirm password/i).fill('longenough1');
+  await page.getByRole('button', { name: /create account/i }).click();
+
+  // lands signed-in on an empty dashboard
+  await expect(page.getByText(/welcome back, e2e person/i)).toBeVisible();
+  await expect(page.getByText(/no history yet/i)).toBeVisible();
+
+  // duplicate registration is rejected
+  await page.goto('/settings');
+  await page.getByRole('button', { name: /sign out/i }).click();
+  await page.goto('/register');
+  await page.getByLabel(/username/i).fill(username);
+  await page.getByLabel(/^password$/i).fill('longenough1');
+  await page.getByLabel(/confirm password/i).fill('longenough1');
+  await page.getByRole('button', { name: /create account/i }).click();
+  await expect(page.getByRole('alert')).toContainText(/already taken/i);
+});
+
 test('logs in and renders the dashboard with an interactive graph', async ({ page }) => {
   await login(page);
 

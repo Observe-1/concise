@@ -44,6 +44,31 @@ export function login(ctx: AppContext, username: string, password: string): Logi
   };
 }
 
+export interface RegisterInput {
+  username: string;
+  password: string;
+  displayName?: string;
+}
+
+/**
+ * Create an account and log it straight in. Returns null when the username
+ * is already taken (case-insensitive).
+ */
+export function register(ctx: AppContext, input: RegisterInput): LoginResult | null {
+  const username = input.username.toLowerCase();
+  try {
+    const userId = ctx.db
+      .prepare('INSERT INTO users (username, password_hash, display_name) VALUES (?, ?, ?)')
+      .run(username, hashPassword(input.password), input.displayName?.trim() || input.username)
+      .lastInsertRowid as number;
+    ctx.db.prepare('INSERT INTO settings (user_id, currency) VALUES (?, ?)').run(userId, 'USD');
+  } catch (err) {
+    if (err instanceof Error && err.message.includes('UNIQUE')) return null;
+    throw err;
+  }
+  return login(ctx, username, input.password);
+}
+
 export function logout(ctx: AppContext, token: string): void {
   ctx.db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(hashToken(token));
 }
