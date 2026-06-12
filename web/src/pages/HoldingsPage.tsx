@@ -6,13 +6,8 @@ import {
   useRevalueHolding, useSymbolLookup, useUpdateHolding, type HoldingKind,
 } from '../api/queries.js';
 import { Button, Card, EmptyState, ErrorNote, Field, Input, Modal, Select, Spinner } from '../components/ui.js';
+import { categoryDisplay, categoryLabel, type HoldingSide } from '../lib/categories.js';
 import { formatMinor, minorToInput, parseToMinor } from '../lib/money.js';
-
-const CATEGORY_LABELS: Record<string, string> = {
-  cash: 'Cash', investments: 'Investments', property: 'Property', vehicles: 'Vehicles',
-  crypto: 'Crypto', precious_metals: 'Precious metals', other: 'Other', mortgage: 'Mortgage',
-  loan: 'Loans', credit_card: 'Credit cards', student_loan: 'Student loans',
-};
 
 const METAL_LABELS: Record<string, string> = {
   gold: 'Gold', silver: 'Silver', platinum: 'Platinum', palladium: 'Palladium',
@@ -45,6 +40,7 @@ const COPY: Record<HoldingKind, PageCopy> = {
 
 export function HoldingsPage({ kind }: { kind: HoldingKind }) {
   const copy = COPY[kind];
+  const side: HoldingSide = kind === 'assets' ? 'asset' : 'liability';
   const { data: me } = useMe();
   const holdings = useHoldings(kind);
   const marketRefresh = useMarketRefresh();
@@ -86,10 +82,10 @@ export function HoldingsPage({ kind }: { kind: HoldingKind }) {
         <EmptyState title={copy.emptyTitle} hint={copy.emptyHint} />
       ) : (
         groups.map(([category, items]) => (
-          <section key={category} aria-label={CATEGORY_LABELS[category] ?? category}>
+          <section key={category} aria-label={categoryLabel(side, category)}>
             <div className="mb-2 flex items-baseline justify-between px-1">
               <h2 className="text-xs font-medium uppercase tracking-widest text-ink-400">
-                {CATEGORY_LABELS[category] ?? category}
+                {categoryDisplay(side, category)}
               </h2>
               <span className={`tabular text-xs font-medium ${copy.tone === 'gain' ? 'text-gain-400' : 'text-loss-400'}`}>
                 {formatMinor(items.reduce((s, i) => s + i.currentValueMinor, 0), currency)}
@@ -257,7 +253,9 @@ function HoldingForm({
           {(id) => (
             <Select id={id} value={category} onChange={(e) => setCategory(e.target.value)}>
               {categories.map((c) => (
-                <option key={c} value={c}>{CATEGORY_LABELS[c] ?? c}</option>
+                <option key={c} value={c}>
+                  {categoryDisplay(kind === 'assets' ? 'asset' : 'liability', c)}
+                </option>
               ))}
             </Select>
           )}

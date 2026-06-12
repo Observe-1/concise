@@ -3,13 +3,8 @@ import type { HistoryRange } from '@api';
 import { useHistory, useMe, useSummary } from '../api/queries.js';
 import { NetWorthChart, RangePicker } from '../components/NetWorthChart.js';
 import { Card, Spinner } from '../components/ui.js';
+import { categoryDisplay, type HoldingSide } from '../lib/categories.js';
 import { formatMinor } from '../lib/money.js';
-
-const CATEGORY_LABELS: Record<string, string> = {
-  cash: 'Cash', investments: 'Investments', property: 'Property', vehicles: 'Vehicles',
-  crypto: 'Crypto', precious_metals: 'Precious metals', other: 'Other', mortgage: 'Mortgage',
-  loan: 'Loans', credit_card: 'Credit cards', student_loan: 'Student loans',
-};
 
 export function DashboardPage() {
   const { data: me } = useMe();
@@ -94,8 +89,8 @@ export function DashboardPage() {
 
       {(s.assetsByCategory.length > 0 || s.liabilitiesByCategory.length > 0) && (
         <div className="grid gap-5 sm:grid-cols-2">
-          <BreakdownCard title="Assets" tone="gain" items={s.assetsByCategory} currency={currency} />
-          <BreakdownCard title="Liabilities" tone="loss" items={s.liabilitiesByCategory} currency={currency} />
+          <BreakdownCard title="Assets" tone="gain" side="asset" items={s.assetsByCategory} currency={currency} />
+          <BreakdownCard title="Liabilities" tone="loss" side="liability" items={s.liabilitiesByCategory} currency={currency} />
         </div>
       )}
     </div>
@@ -103,10 +98,11 @@ export function DashboardPage() {
 }
 
 function BreakdownCard({
-  title, tone, items, currency,
+  title, tone, side, items, currency,
 }: {
   title: string;
   tone: 'gain' | 'loss';
+  side: HoldingSide;
   items: { category: string; totalMinor: number; count: number }[];
   currency: string;
 }) {
@@ -118,7 +114,7 @@ function BreakdownCard({
         {items.map((item) => (
           <li key={item.category} className="flex items-baseline justify-between gap-3 text-sm">
             <span className="text-ink-300">
-              {CATEGORY_LABELS[item.category] ?? item.category}
+              {categoryDisplay(side, item.category)}
               <span className="ml-1.5 text-xs text-ink-600">×{item.count}</span>
             </span>
             <span className={`tabular font-medium ${tone === 'gain' ? 'text-gain-400' : 'text-loss-400'}`}>

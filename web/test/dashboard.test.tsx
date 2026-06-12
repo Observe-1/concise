@@ -74,11 +74,11 @@ describe('dashboard', () => {
     expect(await screen.findByText(/welcome back/i)).toBeInTheDocument();
   });
 
-  it('shows category breakdowns', async () => {
+  it('shows category breakdowns with unique emoji prefixes', async () => {
     mountDashboard();
-    expect(await screen.findByText('Cash')).toBeInTheDocument();
-    expect(screen.getByText('Crypto')).toBeInTheDocument();
-    expect(screen.getByText('Loans')).toBeInTheDocument();
+    expect(await screen.findByText('💵 Cash')).toBeInTheDocument();
+    expect(screen.getByText('🪙 Crypto')).toBeInTheDocument();
+    expect(screen.getByText('💸 Loans')).toBeInTheDocument();
   });
 
   it('renders the primary navigation', async () => {

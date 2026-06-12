@@ -70,7 +70,7 @@
 
 ## Feature batch (2026-06-12)
 - [x] Age lines: one per new age at 5Y, every 2nd age at 10Y, every 4th at 20Y, every 5th at All
-- [ ] Unique emoji prefix for every asset and liability type (no emoji reused)
+- [x] Unique emoji prefix for every asset and liability type (no emoji reused)
 - [ ] Rename "Investments" to "Stock investments"
 - [ ] Create account page + register endpoint, button on login page
 - [ ] Settings: legacy wealth input ("on X date my net worth was Y")

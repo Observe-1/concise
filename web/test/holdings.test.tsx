@@ -190,8 +190,8 @@ describe('liabilities page', () => {
     await user.click(screen.getByRole('button', { name: /add liability/i }));
     const dialog = await screen.findByRole('dialog', { name: /add liability/i });
     expect(dialog).toBeInTheDocument();
-    // liability categories offered, asset categories absent
-    expect(screen.getByRole('option', { name: 'Mortgage' })).toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: 'Crypto' })).not.toBeInTheDocument();
+    // liability categories offered (emoji-prefixed), asset categories absent
+    expect(screen.getByRole('option', { name: '🏦 Mortgage' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /Crypto/ })).not.toBeInTheDocument();
   });
 });
