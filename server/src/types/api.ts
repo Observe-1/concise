@@ -10,18 +10,19 @@ export type LiabilityCategory = (typeof LIABILITY_CATEGORIES)[number];
 export const METALS = ['gold', 'silver', 'platinum', 'palladium'] as const;
 export type Metal = (typeof METALS)[number];
 
-export type ValuationMode = 'manual' | 'market' | 'property_index';
+export type ValuationMode = 'manual' | 'market' | 'property_index' | 'depreciation';
 
 /**
  * Valuation methods available per asset category. Cash is a number you type
  * in — it never has a valuation method. Property may auto-apply a country's
- * yearly average price change. Liabilities are always manual.
+ * yearly average price change; vehicles may auto-apply average age-based
+ * depreciation. Liabilities are always manual.
  */
 export const ASSET_VALUATION_MODES: Record<AssetCategory, readonly ValuationMode[]> = {
   cash: ['manual'],
   investments: ['manual', 'market'],
   property: ['manual', 'market', 'property_index'],
-  vehicles: ['manual', 'market'],
+  vehicles: ['manual', 'market', 'depreciation'],
   crypto: ['manual', 'market'],
   precious_metals: ['manual', 'market'],
   other: ['manual', 'market'],
@@ -51,6 +52,8 @@ export interface HoldingDto {
   quantity: number | null;
   /** ISO 3166-1 alpha-2 code — set only for the property_index method. */
   country: string | null;
+  /** YYYY-MM-DD — set only for the vehicle depreciation method. */
+  manufactureDate: string | null;
   /**
    * True when the provider had no price for part of this entry's backdated
    * history — the UI flags the entry as historically incomplete.

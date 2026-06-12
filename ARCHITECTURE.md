@@ -80,7 +80,7 @@ users 1──* audit_log
 | `users` | Accounts | `username` unique (lowercased), scrypt `password_hash` |
 | `sessions` | Login sessions | Stores SHA-256 hash of opaque token; expiry; revocable |
 | `settings` | Per-user prefs | `currency` (ISO 4217), `birth_year` (age overlay on long-range charts); `display_name` lives on users |
-| `assets` | Asset entries | `category` ∈ cash, investments, property, vehicles, crypto, precious_metals, other; `metal` sub-selection (gold/silver/platinum/palladium) only on precious_metals; `market_symbol` + `quantity` for market-valued assets, `country` for property-index assets (`valuation_mode` manual\|market\|property_index). Valuation methods are category-gated (`ASSET_VALUATION_MODES`): cash is manual-only, property_index only on property |
+| `assets` | Asset entries | `category` ∈ cash, investments, property, vehicles, crypto, precious_metals, other; `metal` sub-selection (gold/silver/platinum/palladium) only on precious_metals; `market_symbol` + `quantity` for market-valued assets, `country` for property-index assets, `manufacture_date` for depreciating vehicles (`valuation_mode` manual\|market\|property_index\|depreciation). Valuation methods are category-gated (`ASSET_VALUATION_MODES`): cash is manual-only, property_index only on property, depreciation only on vehicles |
 | `asset_valuations` | Value history | Append-only; `source` ∈ manual, recurring, market, seed. Current value = latest row |
 | `liabilities` | Liability entries | `category` ∈ mortgage, loan, credit_card, student_loan, other. Balances stored positive |
 | `liability_valuations` | Balance history | Mirrors asset valuations |
@@ -180,6 +180,9 @@ changes today's totals. Deleting an asset hard-deletes its valuations
   `valuation_mode='property_index'` — the value grows from the entry's first
   (base) valuation by the chosen country's long-run yearly average property
   price change (`GET /api/market/property-countries` lists the static table).
+  Vehicle assets may use `valuation_mode='depreciation'` — average age-based
+  depreciation (20%/yr under 1 year old, 15%/yr to 5 years, 10%/yr after,
+  floored at 5% scrap value) derived from the required `manufacture_date`.
   Backdated model entries backfill one valuation per day like market entries.
 - Daily job + `POST /api/market/refresh` append valuations for every
   auto-valued asset (market price or model formula), at most one per day.

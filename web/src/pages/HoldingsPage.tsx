@@ -24,6 +24,7 @@ const MODE_LABELS: Record<string, string> = {
   manual: 'Manual value',
   market: 'Market price (symbol × quantity)',
   property_index: 'Country property index (yearly average price change)',
+  depreciation: 'Automatic depreciation (average value loss by age)',
 };
 
 interface PageCopy {
@@ -141,6 +142,10 @@ export function HoldingsPage({ kind }: { kind: HoldingKind }) {
                             <span className="mt-0.5 inline-block rounded bg-gold-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-gold-400">
                               {h.country} property index
                             </span>
+                          ) : h.valuationMode === 'depreciation' ? (
+                            <span className="mt-0.5 inline-block rounded bg-gold-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-gold-400">
+                              Depreciating · built {h.manufactureDate?.slice(0, 4)}
+                            </span>
                           ) : !h.metal && h.notes ? (
                             <span className="block truncate text-xs text-ink-400">{h.notes}</span>
                           ) : null}
@@ -190,6 +195,7 @@ function HoldingForm({
   const [symbol, setSymbol] = useState(existing?.marketSymbol ?? '');
   const [quantity, setQuantity] = useState(existing?.quantity?.toString() ?? '');
   const [country, setCountry] = useState(existing?.country ?? '');
+  const [manufactureDate, setManufactureDate] = useState(existing?.manufactureDate ?? '');
   const [value, setValue] = useState(existing ? minorToInput(existing.currentValueMinor) : '');
   const [asOf, setAsOf] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
@@ -237,6 +243,10 @@ function HoldingForm({
       setFormError('Choose a country for the property index.');
       return;
     }
+    if (mode === 'depreciation' && !manufactureDate) {
+      setFormError('Enter the manufacture date so depreciation can be applied correctly.');
+      return;
+    }
 
     const onError = (err: unknown) =>
       setFormError(err instanceof Error ? err.message : 'Something went wrong');
@@ -246,7 +256,9 @@ function HoldingForm({
       ? { valuationMode: 'market' as const, marketSymbol: symbolUpper, quantity: Number(quantity) }
       : mode === 'property_index'
         ? { valuationMode: 'property_index' as const, country, valueMinor: valueMinor! }
-        : { valuationMode: 'manual' as const, valueMinor: valueMinor! };
+        : mode === 'depreciation'
+          ? { valuationMode: 'depreciation' as const, manufactureDate, valueMinor: valueMinor! }
+          : { valuationMode: 'manual' as const, valueMinor: valueMinor! };
 
     if (!existing) {
       create.mutate(
@@ -270,7 +282,9 @@ function HoldingForm({
                 ? { valuationMode: 'market' as const, marketSymbol: symbolUpper, quantity: Number(quantity) }
                 : mode === 'property_index'
                   ? { valuationMode: 'property_index' as const, country }
-                  : { valuationMode: 'manual' as const }),
+                  : mode === 'depreciation'
+                    ? { valuationMode: 'depreciation' as const, manufactureDate }
+                    : { valuationMode: 'manual' as const }),
             }
           : {}),
       },
@@ -351,6 +365,24 @@ function HoldingForm({
           </Field>
         )}
 
+        {mode === 'depreciation' && (
+          <Field
+            label="Manufacture date"
+            hint="Depreciation steepens for newer vehicles — the age determines the rate applied."
+          >
+            {(id) => (
+              <Input
+                id={id}
+                type="date"
+                value={manufactureDate}
+                max={new Date().toISOString().slice(0, 10)}
+                onChange={(e) => setManufactureDate(e.target.value)}
+                required
+              />
+            )}
+          </Field>
+        )}
+
         {mode === 'property_index' && (
           <Field
             label="Country"
@@ -406,7 +438,7 @@ function HoldingForm({
               )}
             </Field>
           </>
-        ) : mode === 'property_index' && existing ? null : (
+        ) : (mode === 'property_index' || mode === 'depreciation') && existing ? null : (
           <Field
             label={existing ? 'Current value' : 'Value'}
             hint={
@@ -414,7 +446,9 @@ function HoldingForm({
                 ? 'Changing this records a new valuation.'
                 : mode === 'property_index'
                   ? 'Value on the start date — the index applies the average change from there.'
-                  : undefined
+                  : mode === 'depreciation'
+                    ? 'Value on the start date — depreciation is applied from there by vehicle age.'
+                    : undefined
             }
           >
             {(id) => (

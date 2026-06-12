@@ -4,7 +4,7 @@ import {
 import type {
   DashboardSummaryDto, HistoryDto, HistoryEntryDto, HistoryRange, HoldingDetailDto,
   HoldingDto, LegacySnapshotDto, PropertyCountryDto, RecurringDto, SessionUser, SettingsDto,
-  SymbolLookupDto,
+  SymbolLookupDto, ValuationMode,
 } from '@api';
 import { api, ApiError } from './client.js';
 
@@ -119,10 +119,11 @@ export interface HoldingInput {
   notes?: string | null;
   metal?: string | null;
   valueMinor?: number;
-  valuationMode?: 'manual' | 'market' | 'property_index';
+  valuationMode?: ValuationMode;
   marketSymbol?: string | null;
   quantity?: number | null;
   country?: string | null;
+  manufactureDate?: string | null;
   asOf?: string;
 }
 

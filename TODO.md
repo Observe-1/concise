@@ -95,7 +95,7 @@ Implemented strictly in order; one commit per feature.
       survives page changes; floating reset button on every page
 - [x] 7. Property assets: valuation method applying a country's yearly average
       property price change
-- [ ] 8. Vehicle assets: valuation method applying average vehicle
+- [x] 8. Vehicle assets: valuation method applying average vehicle
       depreciation, with a manufacture-date field for correct depreciation
 - [ ] 9. Recurring: percentage amounts (e.g. +0.4% monthly) besides fixed
 - [ ] 10. Recurring: quarterly cadence

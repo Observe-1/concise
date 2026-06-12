@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from '../src/App.js';
 import { mockFetch, renderWithProviders } from './helpers.js';
@@ -138,6 +138,35 @@ describe('assets page', () => {
       const post = calls.find((c) => c.method === 'POST' && /\/api\/assets$/.test(c.url));
       expect(post!.body).toMatchObject({
         category: 'property', valuationMode: 'property_index', country: 'GB', valueMinor: 30_000_000,
+      });
+    });
+  });
+
+  it('offers automatic depreciation for vehicles with a manufacture date field', async () => {
+    const calls = mockFetch([
+      [/\/api\/auth\/me/, { user: demoUser }],
+      [/\/api\/market\/property-countries/, []],
+      [/\/api\/assets$/, []],
+    ]);
+    renderWithProviders(<App />, { route: '/assets' });
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /add asset/i }));
+    await user.selectOptions(screen.getByLabelText(/category/i), 'vehicles');
+    await user.selectOptions(await screen.findByLabelText(/valuation/i), 'depreciation');
+
+    // the manufacture date field appears only when the method is ticked
+    const manufacture = await screen.findByLabelText(/manufacture date/i);
+    await user.type(screen.getByLabelText(/^name$/i), 'Car');
+    await user.type(screen.getByLabelText(/^value$/i), '20000');
+    fireEvent.change(manufacture, { target: { value: '2023-06-11' } });
+    await user.click(screen.getByRole('button', { name: /^add$/i }));
+
+    await waitFor(() => {
+      const post = calls.find((c) => c.method === 'POST' && /\/api\/assets$/.test(c.url));
+      expect(post!.body).toMatchObject({
+        category: 'vehicles', valuationMode: 'depreciation',
+        manufactureDate: '2023-06-11', valueMinor: 2_000_000,
       });
     });
   });

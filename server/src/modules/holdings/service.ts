@@ -7,7 +7,7 @@ import type { HoldingKind } from './kind.js';
 import { withTransaction } from '../../db/connection.js';
 import { badRequest, notFound } from '../../lib/http.js';
 import { addDays, todayISO } from '../../lib/dates.js';
-import { PROPERTY_COUNTRIES, propertyValueMinor } from '../market/models.js';
+import { PROPERTY_COUNTRIES, propertyValueMinor, vehicleValueMinor } from '../market/models.js';
 import { holdingValueMinor } from '../market/provider.js';
 import { recomputeSnapshotRange, refreshTodaySnapshot } from '../snapshots/service.js';
 
@@ -21,6 +21,7 @@ interface HoldingRow {
   market_symbol?: string | null;
   quantity?: number | null;
   country?: string | null;
+  manufacture_date?: string | null;
   history_price_missing?: number;
   created_at: string;
   current_value_minor: number | null;
@@ -37,6 +38,7 @@ export interface CreateHoldingInput {
   marketSymbol?: string;
   quantity?: number;
   country?: string;
+  manufactureDate?: string;
   /** Optional backdate (YYYY-MM-DD): records the first valuation on this past date. */
   asOf?: string;
 }
@@ -50,13 +52,14 @@ export interface UpdateHoldingInput {
   marketSymbol?: string | null;
   quantity?: number | null;
   country?: string | null;
+  manufactureDate?: string | null;
 }
 
 /** With `withCutoff`, the value subqueries each take a cutoff timestamp
  *  parameter so a holding reads as of a past moment (historical view). */
 function selectColumns(k: HoldingKind, withCutoff = false): string {
   const marketCols = k.supportsMarket
-    ? 'h.metal, h.valuation_mode, h.market_symbol, h.quantity, h.country, h.history_price_missing,'
+    ? 'h.metal, h.valuation_mode, h.market_symbol, h.quantity, h.country, h.manufacture_date, h.history_price_missing,'
     : '';
   const cutoff = withCutoff ? ' AND v.recorded_at <= ?' : '';
   return `
@@ -79,6 +82,7 @@ function toDto(row: HoldingRow): HoldingDto {
     marketSymbol: row.market_symbol ?? null,
     quantity: row.quantity ?? null,
     country: row.country ?? null,
+    manufactureDate: row.manufacture_date ?? null,
     historicalPriceMissing: row.history_price_missing === 1,
     currentValueMinor: row.current_value_minor ?? 0,
     lastValuedAt: row.last_valued_at ?? row.created_at,
@@ -176,6 +180,13 @@ function requireCountry(raw: string | null | undefined): string {
   return code;
 }
 
+/** Validate a depreciation manufacture date (needed to derive vehicle age). */
+function requireManufactureDate(raw: string | null | undefined, today: string): string {
+  if (!raw) throw badRequest('A manufacture date is required for the depreciation method');
+  if (raw > today) throw badRequest('Manufacture date cannot be in the future');
+  return raw;
+}
+
 /** Earliest valuation of a holding — the base point model methods grow from. */
 function firstValuation(
   ctx: AppContext,
@@ -258,12 +269,15 @@ export function createHolding(
     if (k.supportsMarket) assertModeAllowed(input.category, mode);
     const isMarket = mode === 'market';
     const country = mode === 'property_index' ? requireCountry(input.country) : null;
+    const manufactureDate = mode === 'depreciation'
+      ? requireManufactureDate(input.manufactureDate, today)
+      : null;
     let id: number;
     if (k.supportsMarket) {
       id = ctx.db
         .prepare(
-          `INSERT INTO assets (user_id, category, name, notes, metal, valuation_mode, market_symbol, quantity, country)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO assets (user_id, category, name, notes, metal, valuation_mode, market_symbol, quantity, country, manufacture_date)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           userId, input.category, input.name, input.notes ?? null,
@@ -272,6 +286,7 @@ export function createHolding(
           isMarket ? input.marketSymbol!.toUpperCase() : null,
           isMarket ? input.quantity! : null,
           country,
+          manufactureDate,
         ).lastInsertRowid as number;
     } else {
       id = ctx.db
@@ -294,13 +309,14 @@ export function createHolding(
       if (missing) {
         ctx.db.prepare('UPDATE assets SET history_price_missing = 1 WHERE id = ?').run(id);
       }
-    } else if (mode === 'property_index') {
+    } else if (mode === 'property_index' || mode === 'depreciation') {
       const base = input.valueMinor ?? 0;
       insertValuation(ctx, k, id, base, 'manual', start ? `${start}T12:00:00.000Z` : undefined);
       if (start) {
-        const rate = PROPERTY_COUNTRIES[country!]!.annualRatePct;
-        backfillModelValuations(ctx, k, id, addDays(start, 1), today,
-          (d) => propertyValueMinor(base, start, d, rate));
+        const valueOn = mode === 'property_index'
+          ? (d: string) => propertyValueMinor(base, start, d, PROPERTY_COUNTRIES[country!]!.annualRatePct)
+          : (d: string) => vehicleValueMinor(base, start, manufactureDate!, d);
+        backfillModelValuations(ctx, k, id, addDays(start, 1), today, valueOn);
       }
     } else {
       const value = isMarket
@@ -347,10 +363,17 @@ export function updateHolding(
       const country = mode === 'property_index'
         ? requireCountry(patch.country !== undefined ? patch.country : existing.country ?? null)
         : null;
+      const today = todayISO(ctx.now);
+      const manufactureDate = mode === 'depreciation'
+        ? requireManufactureDate(
+            patch.manufactureDate !== undefined ? patch.manufactureDate : existing.manufacture_date ?? null,
+            today,
+          )
+        : null;
       ctx.db
         .prepare(
           `UPDATE assets SET name = ?, category = ?, notes = ?, metal = ?, valuation_mode = ?,
-             market_symbol = ?, quantity = ?, country = ?, updated_at = ?
+             market_symbol = ?, quantity = ?, country = ?, manufacture_date = ?, updated_at = ?
            WHERE id = ?`,
         )
         .run(name, category, notes,
@@ -359,6 +382,7 @@ export function updateHolding(
           mode === 'market' ? symbol : null,
           mode === 'market' ? quantity : null,
           country,
+          manufactureDate,
           nowIso, id);
       const marketInputsChanged =
         mode === 'market' &&
@@ -369,18 +393,22 @@ export function updateHolding(
         insertValuation(ctx, k, id, marketValue(ctx, symbol, quantity), 'market');
         refreshTodaySnapshot(ctx, userId);
       }
-      // Turning the property index on (or changing country) revalues today
+      // Turning a model method on (or changing its inputs) revalues today
       // from the base valuation under the new model.
-      const propertyInputsChanged =
-        mode === 'property_index' &&
-        (mode !== (existing.valuation_mode ?? 'manual') || country !== (existing.country ?? null));
-      if (propertyInputsChanged) {
+      const modelInputsChanged =
+        (mode === 'property_index' &&
+          (mode !== (existing.valuation_mode ?? 'manual') || country !== (existing.country ?? null))) ||
+        (mode === 'depreciation' &&
+          (mode !== (existing.valuation_mode ?? 'manual') ||
+            manufactureDate !== (existing.manufacture_date ?? null)));
+      if (modelInputsChanged) {
         const base = firstValuation(ctx, k, id);
         if (base) {
-          const rate = PROPERTY_COUNTRIES[country!]!.annualRatePct;
-          insertValuation(ctx, k, id,
-            propertyValueMinor(base.value_minor, base.recorded_at.slice(0, 10), todayISO(ctx.now), rate),
-            'market');
+          const baseDate = base.recorded_at.slice(0, 10);
+          const value = mode === 'property_index'
+            ? propertyValueMinor(base.value_minor, baseDate, today, PROPERTY_COUNTRIES[country!]!.annualRatePct)
+            : vehicleValueMinor(base.value_minor, baseDate, manufactureDate!, today);
+          insertValuation(ctx, k, id, value, 'market');
           refreshTodaySnapshot(ctx, userId);
         }
       }

@@ -2,16 +2,17 @@ import type { AppContext } from '../../context.js';
 import { withTransaction } from '../../db/connection.js';
 import { todayISO } from '../../lib/dates.js';
 import { upsertSnapshot } from '../snapshots/service.js';
-import { PROPERTY_COUNTRIES, propertyValueMinor } from './models.js';
+import { PROPERTY_COUNTRIES, propertyValueMinor, vehicleValueMinor } from './models.js';
 import { holdingValueMinor } from './provider.js';
 
 interface AutoValuedRow {
   id: number;
   user_id: number;
-  valuation_mode: 'market' | 'property_index';
+  valuation_mode: 'market' | 'property_index' | 'depreciation';
   market_symbol: string | null;
   quantity: number | null;
   country: string | null;
+  manufacture_date: string | null;
 }
 
 /**
@@ -24,7 +25,7 @@ export function refreshMarketValuations(ctx: AppContext, userId?: number): numbe
   const today = todayISO(ctx.now);
   const rows = ctx.db
     .prepare(
-      `SELECT id, user_id, valuation_mode, market_symbol, quantity, country FROM assets
+      `SELECT id, user_id, valuation_mode, market_symbol, quantity, country, manufacture_date FROM assets
        WHERE valuation_mode != 'manual'${userId ? ' AND user_id = ?' : ''}`,
     )
     .all(...(userId ? [userId] : [])) as unknown as AutoValuedRow[];
@@ -51,12 +52,19 @@ export function refreshMarketValuations(ctx: AppContext, userId?: number): numbe
         const price = ctx.prices.getPriceMinor(row.market_symbol!, today);
         return price === null ? null : holdingValueMinor(price, row.quantity!);
       }
-      const rate = PROPERTY_COUNTRIES[row.country ?? '']?.annualRatePct;
       const base = firstValuation.get(row.id) as
         | { value_minor: number; recorded_at: string }
         | undefined;
-      if (rate === undefined || !base) return null;
-      return propertyValueMinor(base.value_minor, base.recorded_at.slice(0, 10), today, rate);
+      if (!base) return null;
+      const baseDate = base.recorded_at.slice(0, 10);
+      if (row.valuation_mode === 'property_index') {
+        const rate = PROPERTY_COUNTRIES[row.country ?? '']?.annualRatePct;
+        return rate === undefined
+          ? null
+          : propertyValueMinor(base.value_minor, baseDate, today, rate);
+      }
+      if (!row.manufacture_date) return null;
+      return vehicleValueMinor(base.value_minor, baseDate, row.manufacture_date, today);
     };
     for (const row of rows) {
       if (alreadyToday.get(row.id, `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`)) continue;

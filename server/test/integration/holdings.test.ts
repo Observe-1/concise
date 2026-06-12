@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createUser, csrf, loginAgent, makeTestWorld, type TestWorld } from '../helpers.js';
-import { PROPERTY_COUNTRIES, propertyValueMinor } from '../../src/modules/market/models.js';
+import { PROPERTY_COUNTRIES, propertyValueMinor, vehicleValueMinor } from '../../src/modules/market/models.js';
 
 describe('assets & liabilities API', () => {
   let world: TestWorld;
@@ -269,6 +269,64 @@ describe('assets & liabilities API', () => {
       await csrf(agent.post('/api/assets')).send({
         category: 'cash', name: 'X', valuationMode: 'property_index', country: 'GB', valueMinor: 1,
       }).expect(400); // method gated to the property category
+    });
+  });
+
+  describe('vehicle depreciation valuation', () => {
+    it('creates a depreciating vehicle with its manufacture date', async () => {
+      const res = await csrf(agent.post('/api/assets')).send({
+        category: 'vehicles', name: 'Car', valuationMode: 'depreciation',
+        manufactureDate: '2023-06-11', valueMinor: 2_000_000,
+      });
+      expect(res.status).toBe(201);
+      expect(res.body.valuationMode).toBe('depreciation');
+      expect(res.body.manufactureDate).toBe('2023-06-11');
+      expect(res.body.currentValueMinor).toBe(2_000_000);
+    });
+
+    it('backfills daily depreciation for backdated vehicles', async () => {
+      const res = await csrf(agent.post('/api/assets')).send({
+        category: 'vehicles', name: 'Old car', valuationMode: 'depreciation',
+        manufactureDate: '2024-06-11', valueMinor: 2_000_000, asOf: '2025-06-11',
+      });
+      expect(res.status).toBe(201);
+      expect(res.body.currentValueMinor).toBe(
+        vehicleValueMinor(2_000_000, '2025-06-11', '2024-06-11', '2026-06-11'),
+      );
+
+      // snapshots fall through the backfilled period
+      const snap = (d: string) => (world.ctx.db
+        .prepare('SELECT assets_minor FROM snapshots WHERE snapshot_date = ?')
+        .get(d) as { assets_minor: number }).assets_minor;
+      expect(snap('2025-06-11')).toBe(2_000_000);
+      expect(snap('2025-12-01')).toBeLessThan(snap('2025-06-11'));
+      expect(snap('2026-06-01')).toBeLessThan(snap('2025-12-01'));
+    });
+
+    it('the daily refresh re-prices depreciating vehicles downwards', async () => {
+      await csrf(agent.post('/api/assets')).send({
+        category: 'vehicles', name: 'Car', valuationMode: 'depreciation',
+        manufactureDate: '2026-01-01', valueMinor: 3_000_000,
+      });
+      world.advanceDays(10);
+      const refresh = await csrf(agent.post('/api/market/refresh'));
+      expect(refresh.body.updated).toBe(1);
+      const list = await agent.get('/api/assets');
+      expect(list.body[0].currentValueMinor).toBeLessThan(3_000_000);
+    });
+
+    it('validates the manufacture date and the category', async () => {
+      await csrf(agent.post('/api/assets')).send({
+        category: 'vehicles', name: 'X', valuationMode: 'depreciation', valueMinor: 1,
+      }).expect(400); // manufacture date required
+      await csrf(agent.post('/api/assets')).send({
+        category: 'vehicles', name: 'X', valuationMode: 'depreciation',
+        manufactureDate: '2030-01-01', valueMinor: 1,
+      }).expect(400); // future manufacture date
+      await csrf(agent.post('/api/assets')).send({
+        category: 'crypto', name: 'X', valuationMode: 'depreciation',
+        manufactureDate: '2020-01-01', valueMinor: 1,
+      }).expect(400); // method gated to the vehicles category
     });
   });
 
