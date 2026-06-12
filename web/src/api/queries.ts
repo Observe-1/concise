@@ -3,7 +3,8 @@ import {
 } from '@tanstack/react-query';
 import type {
   DashboardSummaryDto, HistoryDto, HistoryEntryDto, HistoryRange, HoldingDetailDto,
-  HoldingDto, LegacySnapshotDto, RecurringDto, SessionUser, SettingsDto, SymbolLookupDto,
+  HoldingDto, LegacySnapshotDto, PropertyCountryDto, RecurringDto, SessionUser, SettingsDto,
+  SymbolLookupDto,
 } from '@api';
 import { api, ApiError } from './client.js';
 
@@ -118,9 +119,10 @@ export interface HoldingInput {
   notes?: string | null;
   metal?: string | null;
   valueMinor?: number;
-  valuationMode?: 'manual' | 'market';
+  valuationMode?: 'manual' | 'market' | 'property_index';
   marketSymbol?: string | null;
   quantity?: number | null;
+  country?: string | null;
   asOf?: string;
 }
 
@@ -296,6 +298,16 @@ export function useDeleteLegacyWealth() {
       void qc.invalidateQueries({ queryKey: ['history'] });
       void qc.invalidateQueries({ queryKey: ['dashboard'] });
     },
+  });
+}
+
+/** Countries selectable for the property-index valuation method. */
+export function usePropertyCountries(enabled = true) {
+  return useQuery({
+    queryKey: ['market', 'property-countries'],
+    queryFn: () => api<PropertyCountryDto[]>('/api/market/property-countries'),
+    staleTime: Infinity,
+    enabled,
   });
 }
 

@@ -93,7 +93,7 @@ Implemented strictly in order; one commit per feature.
 - [x] 6. Historical view mode: draggable red circle under each graph; subtle
       red page accent while active; all data shown as of the chosen date;
       survives page changes; floating reset button on every page
-- [ ] 7. Property assets: valuation method applying a country's yearly average
+- [x] 7. Property assets: valuation method applying a country's yearly average
       property price change
 - [ ] 8. Vehicle assets: valuation method applying average vehicle
       depreciation, with a manufacture-date field for correct depreciation

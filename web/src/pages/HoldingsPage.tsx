@@ -3,7 +3,7 @@ import type { AssetCategory, HoldingDto } from '@api';
 import { ASSET_CATEGORIES, ASSET_VALUATION_MODES, LIABILITY_CATEGORIES, METALS } from '@api';
 import {
   useCreateHolding, useDeleteHolding, useHoldings, useMarketRefresh, useMe,
-  useRevalueHolding, useSymbolLookup, useUpdateHolding, type HoldingKind,
+  usePropertyCountries, useRevalueHolding, useSymbolLookup, useUpdateHolding, type HoldingKind,
 } from '../api/queries.js';
 import { Button, Card, EmptyState, ErrorNote, Field, Input, Modal, Select, Spinner } from '../components/ui.js';
 import { useHistoricalView } from '../contexts/HistoricalView.js';
@@ -19,6 +19,12 @@ function modesFor(kind: HoldingKind, category: string): readonly string[] {
   if (kind !== 'assets') return ['manual'];
   return ASSET_VALUATION_MODES[category as AssetCategory] ?? ['manual'];
 }
+
+const MODE_LABELS: Record<string, string> = {
+  manual: 'Manual value',
+  market: 'Market price (symbol × quantity)',
+  property_index: 'Country property index (yearly average price change)',
+};
 
 interface PageCopy {
   title: string;
@@ -131,6 +137,10 @@ export function HoldingsPage({ kind }: { kind: HoldingKind }) {
                             <span className="mt-0.5 inline-block rounded bg-gold-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-gold-400">
                               {h.marketSymbol} × {h.quantity}
                             </span>
+                          ) : h.valuationMode === 'property_index' ? (
+                            <span className="mt-0.5 inline-block rounded bg-gold-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-gold-400">
+                              {h.country} property index
+                            </span>
                           ) : !h.metal && h.notes ? (
                             <span className="block truncate text-xs text-ink-400">{h.notes}</span>
                           ) : null}
@@ -176,9 +186,10 @@ function HoldingForm({
   const [name, setName] = useState(existing?.name ?? '');
   const [notes, setNotes] = useState(existing?.notes ?? '');
   const [metal, setMetal] = useState(existing?.metal ?? METALS[0]);
-  const [isMarket, setIsMarket] = useState(existing?.valuationMode === 'market');
+  const [mode, setMode] = useState<string>(existing?.valuationMode ?? 'manual');
   const [symbol, setSymbol] = useState(existing?.marketSymbol ?? '');
   const [quantity, setQuantity] = useState(existing?.quantity?.toString() ?? '');
+  const [country, setCountry] = useState(existing?.country ?? '');
   const [value, setValue] = useState(existing ? minorToInput(existing.currentValueMinor) : '');
   const [asOf, setAsOf] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
@@ -188,6 +199,8 @@ function HoldingForm({
 
   const busy = create.isPending || update.isPending || remove.isPending || revalue.isPending;
   const allowedModes = modesFor(kind, category);
+  const isMarket = mode === 'market';
+  const countries = usePropertyCountries(kind === 'assets');
   const symbolUpper = symbol.trim().toUpperCase();
   const symbolUnchanged = existing?.marketSymbol === symbolUpper;
   const symbolVerified = verified?.symbol === symbolUpper;
@@ -220,21 +233,27 @@ function HoldingForm({
       setFormError('Enter a valid amount, e.g. 1250.00');
       return;
     }
+    if (mode === 'property_index' && !country) {
+      setFormError('Choose a country for the property index.');
+      return;
+    }
 
     const onError = (err: unknown) =>
       setFormError(err instanceof Error ? err.message : 'Something went wrong');
 
     const metalField = category === 'precious_metals' ? { metal } : { metal: null };
+    const modeFields = isMarket
+      ? { valuationMode: 'market' as const, marketSymbol: symbolUpper, quantity: Number(quantity) }
+      : mode === 'property_index'
+        ? { valuationMode: 'property_index' as const, country, valueMinor: valueMinor! }
+        : { valuationMode: 'manual' as const, valueMinor: valueMinor! };
 
     if (!existing) {
       create.mutate(
         {
           category, name, notes: notes || null,
-          ...(kind === 'assets' ? metalField : {}),
+          ...(kind === 'assets' ? { ...metalField, ...modeFields } : { valueMinor: valueMinor! }),
           ...(asOf ? { asOf } : {}),
-          ...(isMarket
-            ? { valuationMode: 'market' as const, marketSymbol: symbolUpper, quantity: Number(quantity) }
-            : { valueMinor: valueMinor! }),
         },
         { onSuccess: onClose, onError },
       );
@@ -249,14 +268,16 @@ function HoldingForm({
               ...metalField,
               ...(isMarket
                 ? { valuationMode: 'market' as const, marketSymbol: symbolUpper, quantity: Number(quantity) }
-                : { valuationMode: 'manual' as const }),
+                : mode === 'property_index'
+                  ? { valuationMode: 'property_index' as const, country }
+                  : { valuationMode: 'manual' as const }),
             }
           : {}),
       },
       {
         onSuccess: () => {
           // Manual value changed? Record a new valuation (history preserved).
-          if (!isMarket && valueMinor !== null && valueMinor !== existing.currentValueMinor) {
+          if (mode === 'manual' && valueMinor !== null && valueMinor !== existing.currentValueMinor) {
             revalue.mutate({ id: existing.id, valueMinor }, { onSuccess: onClose, onError });
           } else {
             onClose();
@@ -289,7 +310,7 @@ function HoldingForm({
                 setCategory(next);
                 // The new category may not support the selected method
                 // (e.g. cash is manual-only) — fall back to manual input.
-                if (!modesFor(kind, next).includes('market')) setIsMarket(false);
+                if (!modesFor(kind, next).includes(mode)) setMode('manual');
               }}
             >
               {categories.map((c) => (
@@ -321,13 +342,28 @@ function HoldingForm({
         {kind === 'assets' && allowedModes.length > 1 && (
           <Field label="Valuation">
             {(id) => (
-              <Select
-                id={id}
-                value={isMarket ? 'market' : 'manual'}
-                onChange={(e) => setIsMarket(e.target.value === 'market')}
-              >
-                <option value="manual">Manual value</option>
-                <option value="market">Market price (symbol × quantity)</option>
+              <Select id={id} value={mode} onChange={(e) => setMode(e.target.value)}>
+                {allowedModes.map((m) => (
+                  <option key={m} value={m}>{MODE_LABELS[m] ?? m}</option>
+                ))}
+              </Select>
+            )}
+          </Field>
+        )}
+
+        {mode === 'property_index' && (
+          <Field
+            label="Country"
+            hint="The country's yearly average property price change is applied automatically."
+          >
+            {(id) => (
+              <Select id={id} value={country} onChange={(e) => setCountry(e.target.value)} required>
+                <option value="" disabled>Choose…</option>
+                {(countries.data ?? []).map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.name} ({c.annualRatePct >= 0 ? '+' : ''}{c.annualRatePct}%/yr)
+                  </option>
+                ))}
               </Select>
             )}
           </Field>
@@ -370,8 +406,17 @@ function HoldingForm({
               )}
             </Field>
           </>
-        ) : (
-          <Field label={existing ? 'Current value' : 'Value'} hint={existing ? 'Changing this records a new valuation.' : undefined}>
+        ) : mode === 'property_index' && existing ? null : (
+          <Field
+            label={existing ? 'Current value' : 'Value'}
+            hint={
+              existing
+                ? 'Changing this records a new valuation.'
+                : mode === 'property_index'
+                  ? 'Value on the start date — the index applies the average change from there.'
+                  : undefined
+            }
+          >
             {(id) => (
               <Input id={id} value={value} onChange={(e) => setValue(e.target.value)}
                 inputMode="decimal" placeholder="0.00" required />

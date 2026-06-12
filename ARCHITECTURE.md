@@ -80,7 +80,7 @@ users 1──* audit_log
 | `users` | Accounts | `username` unique (lowercased), scrypt `password_hash` |
 | `sessions` | Login sessions | Stores SHA-256 hash of opaque token; expiry; revocable |
 | `settings` | Per-user prefs | `currency` (ISO 4217), `birth_year` (age overlay on long-range charts); `display_name` lives on users |
-| `assets` | Asset entries | `category` ∈ cash, investments, property, vehicles, crypto, precious_metals, other; `metal` sub-selection (gold/silver/platinum/palladium) only on precious_metals; optional `market_symbol` + `quantity` for market-valued assets (`valuation_mode` manual\|market). Valuation methods are category-gated (`ASSET_VALUATION_MODES`): cash is manual-only |
+| `assets` | Asset entries | `category` ∈ cash, investments, property, vehicles, crypto, precious_metals, other; `metal` sub-selection (gold/silver/platinum/palladium) only on precious_metals; `market_symbol` + `quantity` for market-valued assets, `country` for property-index assets (`valuation_mode` manual\|market\|property_index). Valuation methods are category-gated (`ASSET_VALUATION_MODES`): cash is manual-only, property_index only on property |
 | `asset_valuations` | Value history | Append-only; `source` ∈ manual, recurring, market, seed. Current value = latest row |
 | `liabilities` | Liability entries | `category` ∈ mortgage, loan, credit_card, student_loan, other. Balances stored positive |
 | `liability_valuations` | Balance history | Mirrors asset valuations |
@@ -176,7 +176,13 @@ changes today's totals. Deleting an asset hard-deletes its valuations
   begins 2020-01-01. A real provider can be swapped in via one factory.
 - `GET /api/market/lookup?symbol=` resolves a ticker to its instrument name;
   the asset form requires this verification before a market entry is saved.
-- Daily job + `POST /api/market/refresh` append market-sourced valuations.
+- **Model methods** (`modules/market/models.ts`): property assets may use
+  `valuation_mode='property_index'` — the value grows from the entry's first
+  (base) valuation by the chosen country's long-run yearly average property
+  price change (`GET /api/market/property-countries` lists the static table).
+  Backdated model entries backfill one valuation per day like market entries.
+- Daily job + `POST /api/market/refresh` append valuations for every
+  auto-valued asset (market price or model formula), at most one per day.
 
 ## 5. Folder structure
 

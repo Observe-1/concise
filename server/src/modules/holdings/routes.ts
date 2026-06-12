@@ -19,9 +19,10 @@ function buildSchemas(k: HoldingKind) {
   const market = k.supportsMarket
     ? {
         metal: z.enum(METALS).nullable().optional(),
-        valuationMode: z.enum(['manual', 'market']).optional(),
+        valuationMode: z.enum(['manual', 'market', 'property_index']).optional(),
         marketSymbol: z.string().trim().min(1).max(20).optional(),
         quantity: z.number().positive().finite().optional(),
+        country: z.string().trim().length(2).optional(),
       }
     : {};
   // metal only makes sense on the precious_metals class (DB CHECK mirrors this)
@@ -41,9 +42,10 @@ function buildSchemas(k: HoldingKind) {
     ...(k.supportsMarket
       ? {
           metal: z.enum(METALS).nullable().optional(),
-          valuationMode: z.enum(['manual', 'market']).optional(),
+          valuationMode: z.enum(['manual', 'market', 'property_index']).optional(),
           marketSymbol: z.string().trim().min(1).max(20).nullable().optional(),
           quantity: z.number().positive().finite().nullable().optional(),
+          country: z.string().trim().length(2).nullable().optional(),
         }
       : {}),
   });

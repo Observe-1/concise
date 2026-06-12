@@ -10,16 +10,17 @@ export type LiabilityCategory = (typeof LIABILITY_CATEGORIES)[number];
 export const METALS = ['gold', 'silver', 'platinum', 'palladium'] as const;
 export type Metal = (typeof METALS)[number];
 
-export type ValuationMode = 'manual' | 'market';
+export type ValuationMode = 'manual' | 'market' | 'property_index';
 
 /**
  * Valuation methods available per asset category. Cash is a number you type
- * in — it never has a valuation method. Liabilities are always manual.
+ * in — it never has a valuation method. Property may auto-apply a country's
+ * yearly average price change. Liabilities are always manual.
  */
 export const ASSET_VALUATION_MODES: Record<AssetCategory, readonly ValuationMode[]> = {
   cash: ['manual'],
   investments: ['manual', 'market'],
-  property: ['manual', 'market'],
+  property: ['manual', 'market', 'property_index'],
   vehicles: ['manual', 'market'],
   crypto: ['manual', 'market'],
   precious_metals: ['manual', 'market'],
@@ -45,9 +46,11 @@ export interface HoldingDto {
   notes: string | null;
   /** Set only for precious_metals assets. */
   metal: Metal | null;
-  valuationMode: 'manual' | 'market';
+  valuationMode: ValuationMode;
   marketSymbol: string | null;
   quantity: number | null;
+  /** ISO 3166-1 alpha-2 code — set only for the property_index method. */
+  country: string | null;
   /**
    * True when the provider had no price for part of this entry's backdated
    * history — the UI flags the entry as historically incomplete.
@@ -62,6 +65,13 @@ export interface HoldingDto {
 export interface SymbolLookupDto {
   symbol: string;
   name: string;
+}
+
+/** A country selectable for the property-index valuation method. */
+export interface PropertyCountryDto {
+  code: string;
+  name: string;
+  annualRatePct: number;
 }
 
 export interface ValuationDto {

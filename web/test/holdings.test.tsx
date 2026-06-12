@@ -111,6 +111,37 @@ describe('assets page', () => {
     expect(screen.getByLabelText(/^value$/i)).toBeInTheDocument();
   });
 
+  it('offers the property index method with a country selector', async () => {
+    const calls = mockFetch([
+      [/\/api\/auth\/me/, { user: demoUser }],
+      [/\/api\/market\/property-countries/, [
+        { code: 'GB', name: 'United Kingdom', annualRatePct: 3.7 },
+        { code: 'US', name: 'United States', annualRatePct: 4.6 },
+      ]],
+      [/\/api\/assets$/, []],
+    ]);
+    renderWithProviders(<App />, { route: '/assets' });
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /add asset/i }));
+    await user.selectOptions(screen.getByLabelText(/category/i), 'property');
+    await user.selectOptions(await screen.findByLabelText(/valuation/i), 'property_index');
+
+    const countrySelect = await screen.findByLabelText(/country/i);
+    expect(screen.getByRole('option', { name: /united kingdom \(\+3\.7%\/yr\)/i })).toBeInTheDocument();
+    await user.selectOptions(countrySelect, 'GB');
+    await user.type(screen.getByLabelText(/^name$/i), 'Home');
+    await user.type(screen.getByLabelText(/^value$/i), '300000');
+    await user.click(screen.getByRole('button', { name: /^add$/i }));
+
+    await waitFor(() => {
+      const post = calls.find((c) => c.method === 'POST' && /\/api\/assets$/.test(c.url));
+      expect(post!.body).toMatchObject({
+        category: 'property', valuationMode: 'property_index', country: 'GB', valueMinor: 30_000_000,
+      });
+    });
+  });
+
   it('requires symbol verification before saving a market asset', async () => {
     const calls = mockFetch([
       [/\/api\/auth\/me/, { user: demoUser }],

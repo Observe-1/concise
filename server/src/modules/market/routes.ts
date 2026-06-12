@@ -1,11 +1,21 @@
 import { Router } from 'express';
 import type { AppContext } from '../../context.js';
+import type { PropertyCountryDto } from '../../types/api.js';
 import { audit } from '../../lib/audit.js';
 import { badRequest, notFound } from '../../lib/http.js';
+import { PROPERTY_COUNTRIES } from './models.js';
 import { refreshMarketValuations } from './service.js';
 
 export function marketRoutes(ctx: AppContext): Router {
   const router = Router();
+
+  // Countries selectable for the property-index valuation method.
+  router.get('/property-countries', (_req, res) => {
+    const list: PropertyCountryDto[] = Object.entries(PROPERTY_COUNTRIES)
+      .map(([code, c]) => ({ code, name: c.name, annualRatePct: c.annualRatePct }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    res.json(list);
+  });
 
   // Resolve a ticker to its instrument name (asset-creation verification step).
   router.get('/lookup', (req, res) => {

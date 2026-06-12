@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createUser, csrf, loginAgent, makeTestWorld, type TestWorld } from '../helpers.js';
+import { PROPERTY_COUNTRIES, propertyValueMinor } from '../../src/modules/market/models.js';
 
 describe('assets & liabilities API', () => {
   let world: TestWorld;
@@ -203,6 +204,71 @@ describe('assets & liabilities API', () => {
         .prepare("SELECT net_worth_minor, source FROM snapshots WHERE snapshot_date = '2026-02-01'")
         .get() as { net_worth_minor: number; source: string };
       expect(legacy).toEqual({ net_worth_minor: 42, source: 'legacy' });
+    });
+  });
+
+  describe('property index valuation', () => {
+    it('lists selectable countries with their yearly rates', async () => {
+      const res = await agent.get('/api/market/property-countries');
+      expect(res.status).toBe(200);
+      const gb = res.body.find((c: { code: string }) => c.code === 'GB');
+      expect(gb).toMatchObject({ name: 'United Kingdom' });
+      expect(gb.annualRatePct).toBeGreaterThan(0);
+    });
+
+    it('creates a property-index asset valued from its base entry', async () => {
+      const res = await csrf(agent.post('/api/assets')).send({
+        category: 'property', name: 'Home', valuationMode: 'property_index',
+        country: 'gb', valueMinor: 30_000_000,
+      });
+      expect(res.status).toBe(201);
+      expect(res.body.valuationMode).toBe('property_index');
+      expect(res.body.country).toBe('GB');
+      expect(res.body.currentValueMinor).toBe(30_000_000);
+    });
+
+    it('backfills daily index growth for backdated properties', async () => {
+      const res = await csrf(agent.post('/api/assets')).send({
+        category: 'property', name: 'Old home', valuationMode: 'property_index',
+        country: 'GB', valueMinor: 30_000_000, asOf: '2025-06-11',
+      });
+      expect(res.status).toBe(201);
+      const rate = PROPERTY_COUNTRIES.GB!.annualRatePct;
+      expect(res.body.currentValueMinor).toBe(
+        propertyValueMinor(30_000_000, '2025-06-11', '2026-06-11', rate),
+      );
+
+      // snapshots rise through the backfilled period
+      const snap = (d: string) => (world.ctx.db
+        .prepare('SELECT assets_minor FROM snapshots WHERE snapshot_date = ?')
+        .get(d) as { assets_minor: number }).assets_minor;
+      expect(snap('2025-06-11')).toBe(30_000_000);
+      expect(snap('2025-12-01')).toBeGreaterThan(snap('2025-06-11'));
+      expect(snap('2026-06-01')).toBeGreaterThan(snap('2025-12-01'));
+    });
+
+    it('the daily refresh re-prices property-index assets', async () => {
+      await csrf(agent.post('/api/assets')).send({
+        category: 'property', name: 'Home', valuationMode: 'property_index',
+        country: 'US', valueMinor: 50_000_000,
+      });
+      world.advanceDays(10); // stay inside the session TTL
+      const refresh = await csrf(agent.post('/api/market/refresh'));
+      expect(refresh.body.updated).toBe(1);
+      const list = await agent.get('/api/assets');
+      expect(list.body[0].currentValueMinor).toBeGreaterThan(50_000_000);
+    });
+
+    it('validates the country and the category', async () => {
+      await csrf(agent.post('/api/assets')).send({
+        category: 'property', name: 'X', valuationMode: 'property_index', valueMinor: 1,
+      }).expect(400); // country required
+      await csrf(agent.post('/api/assets')).send({
+        category: 'property', name: 'X', valuationMode: 'property_index', country: 'XX', valueMinor: 1,
+      }).expect(400); // unknown country
+      await csrf(agent.post('/api/assets')).send({
+        category: 'cash', name: 'X', valuationMode: 'property_index', country: 'GB', valueMinor: 1,
+      }).expect(400); // method gated to the property category
     });
   });
 
