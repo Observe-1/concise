@@ -4,7 +4,7 @@ import type {
   CategoryTotalDto, DashboardSummaryDto, HistoryDto, HistoryPointDto, HistoryRange, HoldingDto,
 } from '../../types/api.js';
 import { rangeStart, todayISO } from '../../lib/dates.js';
-import { badRequest } from '../../lib/http.js';
+import { asOfParam, badRequest } from '../../lib/http.js';
 import { ASSET_KIND, LIABILITY_KIND } from '../holdings/kind.js';
 import { listHoldings } from '../holdings/service.js';
 
@@ -66,8 +66,10 @@ export function dashboardRoutes(ctx: AppContext): Router {
 
   router.get('/summary', (req, res) => {
     const userId = req.user!.id;
-    const assets = listHoldings(ctx, ASSET_KIND, userId);
-    const liabilities = listHoldings(ctx, LIABILITY_KIND, userId);
+    // Historical view: totals and breakdowns as the portfolio stood on asOf.
+    const asOf = asOfParam(req);
+    const assets = listHoldings(ctx, ASSET_KIND, userId, asOf);
+    const liabilities = listHoldings(ctx, LIABILITY_KIND, userId, asOf);
     const assetsMinor = assets.reduce((sum, a) => sum + a.currentValueMinor, 0);
     const liabilitiesMinor = liabilities.reduce((sum, l) => sum + l.currentValueMinor, 0);
     const summary: DashboardSummaryDto = {

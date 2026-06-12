@@ -6,6 +6,7 @@ import {
   useRevalueHolding, useSymbolLookup, useUpdateHolding, type HoldingKind,
 } from '../api/queries.js';
 import { Button, Card, EmptyState, ErrorNote, Field, Input, Modal, Select, Spinner } from '../components/ui.js';
+import { useHistoricalView } from '../contexts/HistoricalView.js';
 import { categoryDisplay, categoryLabel, type HoldingSide } from '../lib/categories.js';
 import { formatMinor, minorToInput, parseToMinor } from '../lib/money.js';
 
@@ -48,7 +49,11 @@ export function HoldingsPage({ kind }: { kind: HoldingKind }) {
   const copy = COPY[kind];
   const side: HoldingSide = kind === 'assets' ? 'asset' : 'liability';
   const { data: me } = useMe();
-  const holdings = useHoldings(kind);
+  // Historical view: the list reads as of the pinned date and is read-only —
+  // mutating the past from here would be misleading.
+  const { asOf } = useHistoricalView();
+  const historical = asOf !== null;
+  const holdings = useHoldings(kind, asOf);
   const marketRefresh = useMarketRefresh();
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<HoldingDto | null>(null);
@@ -71,7 +76,7 @@ export function HoldingsPage({ kind }: { kind: HoldingKind }) {
       <header className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">{copy.title}</h1>
         <div className="flex gap-2">
-          {hasMarketEntries && (
+          {hasMarketEntries && !historical && (
             <Button
               variant="ghost"
               onClick={() => marketRefresh.mutate()}
@@ -80,9 +85,15 @@ export function HoldingsPage({ kind }: { kind: HoldingKind }) {
               {marketRefresh.isPending ? 'Refreshing…' : 'Refresh prices'}
             </Button>
           )}
-          <Button onClick={() => setAdding(true)}>{copy.addLabel}</Button>
+          {!historical && <Button onClick={() => setAdding(true)}>{copy.addLabel}</Button>}
         </div>
       </header>
+
+      {historical && (
+        <p className="tabular text-xs font-medium uppercase tracking-wider text-loss-400">
+          Historical view · as of {asOf} — read-only
+        </p>
+      )}
 
       {groups.length === 0 ? (
         <EmptyState title={copy.emptyTitle} hint={copy.emptyHint} />
@@ -103,8 +114,10 @@ export function HoldingsPage({ kind }: { kind: HoldingKind }) {
                   <li key={h.id}>
                     <button
                       type="button"
-                      onClick={() => setEditing(h)}
-                      className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left hover:bg-ink-800/50"
+                      onClick={() => !historical && setEditing(h)}
+                      disabled={historical}
+                      title={historical ? 'Read-only in historical view — exit the mode to edit.' : undefined}
+                      className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left hover:bg-ink-800/50 disabled:hover:bg-transparent"
                     >
                       <span className="min-w-0">
                         <span className="block truncate text-sm text-ink-100">{h.name}</span>

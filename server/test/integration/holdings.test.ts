@@ -206,6 +206,39 @@ describe('assets & liabilities API', () => {
     });
   });
 
+  describe('historical view (asOf)', () => {
+    it('lists holdings as they stood on a past date', async () => {
+      await csrf(agent.post('/api/assets'))
+        .send({ category: 'cash', name: 'Old savings', valueMinor: 100_00, asOf: '2026-03-01' });
+      await csrf(agent.post('/api/assets'))
+        .send({ category: 'cash', name: 'Brand new', valueMinor: 50_00 });
+
+      // entries whose history starts after the date are omitted entirely
+      const past = await agent.get('/api/assets?asOf=2026-04-01');
+      expect(past.body.map((a: { name: string }) => a.name)).toEqual(['Old savings']);
+      expect(past.body[0].currentValueMinor).toBe(100_00);
+
+      const now = await agent.get('/api/assets');
+      expect(now.body).toHaveLength(2);
+    });
+
+    it('values holdings at the latest valuation on or before the date', async () => {
+      const created = await csrf(agent.post('/api/assets'))
+        .send({ category: 'cash', name: 'Savings', valueMinor: 100_00, asOf: '2026-01-01' });
+      await csrf(agent.post(`/api/assets/${created.body.id}/valuations`)).send({ valueMinor: 999_00 });
+
+      const past = await agent.get('/api/assets?asOf=2026-02-01');
+      expect(past.body[0].currentValueMinor).toBe(100_00);
+      const now = await agent.get('/api/assets');
+      expect(now.body[0].currentValueMinor).toBe(999_00);
+    });
+
+    it('rejects malformed asOf dates', async () => {
+      await agent.get('/api/assets?asOf=yesterday').expect(400);
+      await agent.get('/api/liabilities?asOf=2026-13-99').expect(400);
+    });
+  });
+
   it('mirrors the structure for liabilities (no market mode)', async () => {
     const created = await csrf(agent.post('/api/liabilities'))
       .send({ category: 'mortgage', name: 'Home loan', valueMinor: 250_000_00 });

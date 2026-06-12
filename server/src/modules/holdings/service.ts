@@ -48,15 +48,18 @@ export interface UpdateHoldingInput {
   quantity?: number | null;
 }
 
-function selectColumns(k: HoldingKind): string {
+/** With `withCutoff`, the value subqueries each take a cutoff timestamp
+ *  parameter so a holding reads as of a past moment (historical view). */
+function selectColumns(k: HoldingKind, withCutoff = false): string {
   const marketCols = k.supportsMarket
     ? 'h.metal, h.valuation_mode, h.market_symbol, h.quantity, h.history_price_missing,'
     : '';
+  const cutoff = withCutoff ? ' AND v.recorded_at <= ?' : '';
   return `
     SELECT h.id, h.category, h.name, h.notes, ${marketCols} h.created_at,
-      (SELECT v.value_minor FROM ${k.valuationTable} v WHERE v.${k.fk} = h.id
+      (SELECT v.value_minor FROM ${k.valuationTable} v WHERE v.${k.fk} = h.id${cutoff}
        ORDER BY v.recorded_at DESC, v.id DESC LIMIT 1) AS current_value_minor,
-      (SELECT v.recorded_at FROM ${k.valuationTable} v WHERE v.${k.fk} = h.id
+      (SELECT v.recorded_at FROM ${k.valuationTable} v WHERE v.${k.fk} = h.id${cutoff}
        ORDER BY v.recorded_at DESC, v.id DESC LIMIT 1) AS last_valued_at
     FROM ${k.table} h`;
 }
@@ -78,10 +81,34 @@ function toDto(row: HoldingRow): HoldingDto {
   };
 }
 
-export function listHoldings(ctx: AppContext, k: HoldingKind, userId: number): HoldingDto[] {
+/**
+ * List holdings, optionally as of the end of a past day (historical view):
+ * values come from the latest valuation on or before that day, and entries
+ * whose history starts later are omitted entirely — the portfolio reads
+ * exactly as it stood on that date.
+ */
+export function listHoldings(
+  ctx: AppContext,
+  k: HoldingKind,
+  userId: number,
+  asOfISO?: string,
+): HoldingDto[] {
+  if (!asOfISO) {
+    const rows = ctx.db
+      .prepare(`${selectColumns(k)} WHERE h.user_id = ? ORDER BY h.category, h.name, h.id`)
+      .all(userId) as unknown as HoldingRow[];
+    return rows.map(toDto);
+  }
+  const cutoff = `${asOfISO}T23:59:59.999Z`;
   const rows = ctx.db
-    .prepare(`${selectColumns(k)} WHERE h.user_id = ? ORDER BY h.category, h.name, h.id`)
-    .all(userId) as unknown as HoldingRow[];
+    .prepare(
+      `${selectColumns(k, true)}
+       WHERE h.user_id = ?
+         AND EXISTS (SELECT 1 FROM ${k.valuationTable} v
+                     WHERE v.${k.fk} = h.id AND v.recorded_at <= ?)
+       ORDER BY h.category, h.name, h.id`,
+    )
+    .all(cutoff, cutoff, userId, cutoff) as unknown as HoldingRow[];
   return rows.map(toDto);
 }
 

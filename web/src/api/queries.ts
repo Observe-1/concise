@@ -65,10 +65,12 @@ export function useLogout() {
 
 // ---------- dashboard ----------
 
-export function useSummary() {
+export function useSummary(asOf?: string | null) {
   return useQuery({
-    queryKey: ['dashboard', 'summary'],
-    queryFn: () => api<DashboardSummaryDto>('/api/dashboard/summary'),
+    queryKey: ['dashboard', 'summary', asOf ?? null],
+    queryFn: () =>
+      api<DashboardSummaryDto>(`/api/dashboard/summary${asOf ? `?asOf=${asOf}` : ''}`),
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -85,10 +87,11 @@ export function useHistory(range: HistoryRange, trendWindow?: number) {
 
 // ---------- holdings (assets / liabilities) ----------
 
-export function useHoldings(kind: HoldingKind) {
+export function useHoldings(kind: HoldingKind, asOf?: string | null) {
   return useQuery({
-    queryKey: ['holdings', kind],
-    queryFn: () => api<HoldingDto[]>(`/api/${kind}`),
+    queryKey: ['holdings', kind, asOf ?? null],
+    queryFn: () => api<HoldingDto[]>(`/api/${kind}${asOf ? `?asOf=${asOf}` : ''}`),
+    placeholderData: keepPreviousData,
   });
 }
 

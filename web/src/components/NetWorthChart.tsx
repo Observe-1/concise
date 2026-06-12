@@ -46,9 +46,11 @@ interface ChartProps {
   range: HistoryRange;
   birthYear?: number | null;
   height?: number;
+  /** Historical view mode: a red marker on the pinned date. */
+  asOf?: string | null;
 }
 
-export function NetWorthChart({ points, currency, range, birthYear, height = 240 }: ChartProps) {
+export function NetWorthChart({ points, currency, range, birthYear, height = 240, asOf }: ChartProps) {
   // A single point in the window is duplicated into a flat full-width series
   // so it draws as the normal gold line rather than a lone dot.
   const data = useMemo(
@@ -56,6 +58,17 @@ export function NetWorthChart({ points, currency, range, birthYear, height = 240
     [points],
   );
   const ages = useMemo(() => ageMarkers(data, birthYear, range), [data, birthYear, range]);
+  // Historical view marker must sit on an existing x-axis category: use the
+  // last chart point on or before the pinned date.
+  const asOfMarker = useMemo(() => {
+    if (!asOf) return null;
+    let best: string | null = null;
+    for (const p of data) {
+      if (p.date <= asOf) best = p.date;
+      else break;
+    }
+    return best;
+  }, [data, asOf]);
   // A constant series needs an explicit padded domain — 'auto' would collapse
   // the Y range to a single value and pin the flat line to the plot edge.
   const yDomain = useMemo((): [number | 'auto', number | 'auto'] => {
@@ -120,6 +133,19 @@ export function NetWorthChart({ points, currency, range, birthYear, height = 240
               }}
             />
           ))}
+          {asOfMarker && (
+            <ReferenceLine
+              x={asOfMarker}
+              stroke="#ef4444"
+              strokeWidth={1.5}
+              label={{
+                value: 'Viewing',
+                position: 'insideTopLeft',
+                fill: '#f87171',
+                fontSize: 10,
+              }}
+            />
+          )}
           <Area
             type="monotone"
             dataKey="netWorthMinor"

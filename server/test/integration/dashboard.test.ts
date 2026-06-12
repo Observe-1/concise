@@ -40,6 +40,19 @@ describe('dashboard API', () => {
     expect(res.body.liabilitiesMinor).toBe(snap.liabilities_minor);
   });
 
+  it('summary supports historical view via asOf and matches that days snapshot', async () => {
+    const res = await agent.get('/api/dashboard/summary?asOf=2025-06-11');
+    expect(res.status).toBe(200);
+    const snap = world.ctx.db
+      .prepare("SELECT * FROM snapshots WHERE snapshot_date = '2025-06-11'")
+      .get() as { assets_minor: number; liabilities_minor: number };
+    expect(res.body.assetsMinor).toBe(snap.assets_minor);
+    expect(res.body.liabilitiesMinor).toBe(snap.liabilities_minor);
+    expect(res.body.netWorthMinor).toBe(snap.assets_minor - snap.liabilities_minor);
+
+    await agent.get('/api/dashboard/summary?asOf=06-11-2025').expect(400);
+  });
+
   it('serves history for each range preset', async () => {
     for (const [range, expectedDays] of [
       ['1M', 31], ['3M', 93], ['6M', 183], ['1Y', 366],

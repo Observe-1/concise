@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import type { HistoryRange } from '@api';
 import { useHistory, useMe, useSummary } from '../api/queries.js';
+import { HistoricalScrubber } from '../components/HistoricalScrubber.js';
 import { NetWorthChart, RangePicker } from '../components/NetWorthChart.js';
 import { Card, Spinner } from '../components/ui.js';
+import { useHistoricalView } from '../contexts/HistoricalView.js';
 import { useDebouncedValue } from '../hooks/useDebouncedValue.js';
 import { categoryDisplay, type HoldingSide } from '../lib/categories.js';
 import { formatMinor } from '../lib/money.js';
@@ -15,7 +17,8 @@ const TREND_WINDOW_DEFAULT = 91;
 
 export function DashboardPage() {
   const { data: me } = useMe();
-  const summary = useSummary();
+  const { asOf } = useHistoricalView();
+  const summary = useSummary(asOf);
   const [range, setRange] = useState<HistoryRange>('6M');
   const [fullscreen, setFullscreen] = useState(false);
   const [trendWindow, setTrendWindow] = useState(TREND_WINDOW_DEFAULT);
@@ -66,8 +69,10 @@ export function DashboardPage() {
         currency={currency}
         range={range}
         birthYear={me?.birthYear}
-        height={fullscreen ? Math.max(300, window.innerHeight - 160) : 240}
+        height={fullscreen ? Math.max(300, window.innerHeight - 200) : 240}
+        asOf={asOf}
       />
+      <HistoricalScrubber points={history.data?.points ?? []} />
     </>
   );
 

@@ -4,7 +4,7 @@ import type { AppContext } from '../../context.js';
 import { METALS } from '../../types/api.js';
 import type { HoldingKind } from './kind.js';
 import { audit } from '../../lib/audit.js';
-import { badRequest, idParam, parseBody } from '../../lib/http.js';
+import { asOfParam, badRequest, idParam, parseBody } from '../../lib/http.js';
 import { dateStringSchema, valueMinorSchema as valueSchema } from '../../lib/schemas.js';
 import {
   addValuation, createHolding, deleteHolding, getHolding, listHoldings, updateHolding,
@@ -55,7 +55,7 @@ export function holdingsRoutes(ctx: AppContext, k: HoldingKind): Router {
   const schemas = buildSchemas(k);
 
   router.get('/', (req, res) => {
-    res.json(listHoldings(ctx, k, req.user!.id));
+    res.json(listHoldings(ctx, k, req.user!.id, asOfParam(req)));
   });
 
   router.post('/', (req, res) => {

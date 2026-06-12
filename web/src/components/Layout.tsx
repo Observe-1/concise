@@ -1,4 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom';
+import { useHistoricalView } from '../contexts/HistoricalView.js';
 
 const navItems = [
   { to: '/', label: 'Home', icon: HomeIcon },
@@ -13,8 +14,26 @@ const navItems = [
 const mobileNavItems = [navItems[1]!, navItems[2]!, navItems[0]!, navItems[3]!, navItems[4]!];
 
 export function Layout() {
+  const { asOf, setAsOf } = useHistoricalView();
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col md:flex-row">
+      {/* Historical view mode: a subtle red accent frames every page, and a
+          floating reset button restores the live view from anywhere. */}
+      {asOf && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none fixed inset-0 z-30 border-2 border-loss-500/50"
+        />
+      )}
+      {asOf && (
+        <button
+          type="button"
+          onClick={() => setAsOf(null)}
+          className="tabular fixed bottom-20 right-4 z-50 rounded-full bg-loss-500 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-loss-500/30 transition-colors hover:bg-loss-400 md:bottom-6"
+        >
+          ⟲ Exit historical view · {asOf}
+        </button>
+      )}
       {/* Desktop rail */}
       <nav aria-label="Primary" className="hidden md:flex md:w-52 md:flex-col md:gap-1 md:border-r md:border-ink-800 md:p-4">
         <p className="mb-6 px-3 pt-2 text-lg font-semibold tracking-wide text-gold-500">Concise</p>

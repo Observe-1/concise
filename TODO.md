@@ -90,7 +90,7 @@ Implemented strictly in order; one commit per feature.
       (per-date prices over the whole backfill); entries whose historical
       prices could not be found get a hoverable error label on the
       assets/liabilities page
-- [ ] 6. Historical view mode: draggable red circle under each graph; subtle
+- [x] 6. Historical view mode: draggable red circle under each graph; subtle
       red page accent while active; all data shown as of the chosen date;
       survives page changes; floating reset button on every page
 - [ ] 7. Property assets: valuation method applying a country's yearly average
