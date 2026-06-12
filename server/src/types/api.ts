@@ -28,7 +28,7 @@ export const ASSET_VALUATION_MODES: Record<AssetCategory, readonly ValuationMode
   other: ['manual', 'market'],
 };
 
-export type Cadence = 'daily' | 'weekly' | 'monthly' | 'yearly';
+export type Cadence = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly';
 export type HistoryRange = '1M' | '3M' | '6M' | 'YTD' | '1Y' | '5Y' | '10Y' | '20Y' | 'ALL';
 export type ValuationSource = 'manual' | 'recurring' | 'market' | 'seed';
 

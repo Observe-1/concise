@@ -84,7 +84,7 @@ users 1──* audit_log
 | `asset_valuations` | Value history | Append-only; `source` ∈ manual, recurring, market, seed. Current value = latest row |
 | `liabilities` | Liability entries | `category` ∈ mortgage, loan, credit_card, student_loan, other. Balances stored positive |
 | `liability_valuations` | Balance history | Mirrors asset valuations |
-| `recurring_transactions` | Recurring movements | `amount_type` ∈ fixed (signed `amount_minor` delta) \| percent (signed `percent` of current value, compounds), `cadence` ∈ daily, weekly, monthly, yearly, `next_run_on` date cursor; CHECKs enforce exactly one target and exactly one of amount/percent |
+| `recurring_transactions` | Recurring movements | `amount_type` ∈ fixed (signed `amount_minor` delta) \| percent (signed `percent` of current value, compounds), `cadence` ∈ daily, weekly, monthly, quarterly, yearly, `next_run_on` date cursor; CHECKs enforce exactly one target and exactly one of amount/percent |
 | `snapshots` | Daily net-worth | `UNIQUE(user_id, snapshot_date)`; assets/liabilities/net-worth totals; `source` ∈ computed, legacy — legacy rows are user-entered past net-worth points that recomputation never overwrites. Graphs read this table |
 | `audit_log` | Security audit | Auth events + mutations, with IP |
 

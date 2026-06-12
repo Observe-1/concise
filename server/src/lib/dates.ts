@@ -1,6 +1,6 @@
 // All date logic uses UTC calendar days. A "date" is a YYYY-MM-DD string.
 
-export type Cadence = 'daily' | 'weekly' | 'monthly' | 'yearly';
+export type Cadence = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly';
 
 export function toDateISO(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -43,6 +43,7 @@ export function advanceCadence(iso: string, cadence: Cadence): string {
     case 'daily': return addDays(iso, 1);
     case 'weekly': return addDays(iso, 7);
     case 'monthly': return addMonthsClamped(iso, 1);
+    case 'quarterly': return addMonthsClamped(iso, 3);
     case 'yearly': return addMonthsClamped(iso, 12);
   }
 }

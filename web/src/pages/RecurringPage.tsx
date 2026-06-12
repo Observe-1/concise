@@ -7,7 +7,7 @@ import { Button, Card, EmptyState, ErrorNote, Field, Input, Modal, Select, Spinn
 import { formatMinor, minorToInput, parseToMinor } from '../lib/money.js';
 
 const CADENCE_LABELS: Record<string, string> = {
-  daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly', yearly: 'Yearly',
+  daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly', quarterly: 'Quarterly', yearly: 'Yearly',
 };
 
 export function RecurringPage() {

@@ -16,7 +16,7 @@ const amountSchema = z.number().int().min(-MAX_MINOR).max(MAX_MINOR).refine((n) 
 // Percent of the target's current value per occurrence. -100 empties the
 // target; growth is capped at a (generous) +1000% per occurrence.
 const percentSchema = z.number().finite().min(-100).max(1000).refine((n) => n !== 0, 'Percent cannot be zero');
-const cadenceSchema = z.enum(['daily', 'weekly', 'monthly', 'yearly']);
+const cadenceSchema = z.enum(['daily', 'weekly', 'monthly', 'quarterly', 'yearly']);
 
 const createSchema = z.object({
   name: z.string().trim().min(1).max(120),

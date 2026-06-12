@@ -14,6 +14,12 @@ describe('advanceCadence', () => {
     expect(advanceCadence('2026-12-31', 'monthly')).toBe('2027-01-31');
   });
 
+  it('advances quarterly, clamping to month end', () => {
+    expect(advanceCadence('2026-01-15', 'quarterly')).toBe('2026-04-15');
+    expect(advanceCadence('2026-01-31', 'quarterly')).toBe('2026-04-30');
+    expect(advanceCadence('2025-11-30', 'quarterly')).toBe('2026-02-28'); // year wrap + clamp
+  });
+
   it('advances yearly, clamping Feb 29', () => {
     expect(advanceCadence('2024-02-29', 'yearly')).toBe('2025-02-28');
     expect(advanceCadence('2026-06-11', 'yearly')).toBe('2027-06-11');

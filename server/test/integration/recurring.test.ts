@@ -79,6 +79,21 @@ describe('recurring transactions', () => {
     expect(runDueRecurring(world.ctx)).toBe(0);
   });
 
+  it('supports a quarterly cadence', async () => {
+    await csrf(agent.post('/api/recurring')).send({
+      name: 'Quarterly bonus', targetType: 'asset', targetId: savingsId,
+      amountMinor: 250_00, cadence: 'quarterly', nextRunOn: '2026-06-11',
+    });
+    expect(runDueRecurring(world.ctx)).toBe(1);
+
+    const asset = await agent.get(`/api/assets/${savingsId}`);
+    expect(asset.body.currentValueMinor).toBe(1_250_00);
+
+    const schedule = (await agent.get('/api/recurring')).body[0];
+    expect(schedule.cadence).toBe('quarterly');
+    expect(schedule.nextRunOn).toBe('2026-09-11'); // three months on
+  });
+
   it('applies percentage schedules to the targets current value', async () => {
     await csrf(agent.post('/api/recurring')).send({
       name: 'Interest', targetType: 'asset', targetId: savingsId,

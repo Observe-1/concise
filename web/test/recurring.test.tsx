@@ -43,6 +43,8 @@ describe('recurring page', () => {
     const dialog = await screen.findByRole('dialog', { name: /add schedule/i });
     await user.type(within(dialog).getByLabelText(/^name$/i), 'Interest');
     await user.selectOptions(await within(dialog).findByLabelText(/^asset$/i), '4');
+    // all cadences offered, including quarterly
+    expect(within(dialog).getByRole('option', { name: 'Quarterly' })).toBeInTheDocument();
     await user.selectOptions(within(dialog).getByLabelText(/amount type/i), 'percent');
     await user.type(within(dialog).getByLabelText(/percent/i), '0.5');
     await user.click(within(dialog).getByRole('button', { name: /add schedule/i }));
