@@ -1,6 +1,6 @@
 # TODO — single source of truth for progress
 
-**Status: complete (phases 1–6 + three feature batches). Deployment is out of scope.**
+**Status: in progress — feature batch 2026-06-12 #3 (see below). Deployment is out of scope.**
 
 ## Phase 1: System architecture
 - [x] Tech stack decisions (Node 24 + node:sqlite + Express 5 / React 19 + Vite + Tailwind 4)
@@ -103,6 +103,37 @@ Implemented strictly in order; one commit per feature.
       selectable by buttons at the top
 - [x] 12. Graph: deltas between sparse manual entries are smoothed over the
       gap instead of a one-day vertical step
+
+## Feature batch (2026-06-12 #3)
+Implemented strictly in order; one commit per feature.
+- [x] 1. Remove the market-price valuation method from property and vehicle
+      assets (they keep manual + their model method)
+- [ ] 2. Historic entries (Settings → History): highlight automatically
+      generated entries and add a toggle to hide them
+- [ ] 3. Re-anchor on update: updating a holding's value never overwrites the
+      historical value/date, but subsequent automatic calculations
+      (model/market valuations) work from the new value as their base
+- [ ] 4. Assets/Liabilities pages: 1M/3M/6M/YTD/1Y/5Y/10Y/20Y/MAX quick-select
+      at the top showing each holding's % change over the period (growth
+      green, decline red, N/A grey)
+- [ ] 5. Dashboard: % change next to values on the summary cards, driven by
+      the graph's existing range toggles
+- [ ] 6. "Paid off": a liability whose balance would go negative (percentage
+      change or recurring payments) is set to 0 and its recurring payments
+      are suspended
+- [ ] 7. Liabilities: interest-rate field when adding a new one; when filled
+      in it auto-creates a recurring entry increasing the value by that %
+- [ ] 8. Historical mode renamed to "View as"; its slider is incorporated into
+      the graph's X axis (single bar, circle handle aligned with the X labels)
+- [ ] 9. Prediction mode: golden button at the bottom of the dashboard; graph
+      projects future values on the fly (valuation methods, recurring
+      payments, stocks via average returns over the last 10 years or max
+      available); shows a small slice of history (~1/10 of the selected
+      range); MAX hidden in this mode; dotted line marks today; View-as still
+      works over future values (handle defaults to the latest date); golden
+      exit button that shifts when both modes are active
+- [ ] 10. Settings: delete all data for the account, gated by a confirmation
+      tickbox and typing "delete all" exactly (error message otherwise)
 
 ## Notes
 - Deployment (Docker/CI/runbooks) is intentionally out of scope. The app still

@@ -125,6 +125,8 @@ describe('assets page', () => {
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: /add asset/i }));
     await user.selectOptions(screen.getByLabelText(/category/i), 'property');
+    // property is never market-priced — only manual and the index method
+    expect(screen.queryByRole('option', { name: /market price/i })).not.toBeInTheDocument();
     await user.selectOptions(await screen.findByLabelText(/valuation/i), 'property_index');
 
     const countrySelect = await screen.findByLabelText(/country/i);
@@ -153,6 +155,8 @@ describe('assets page', () => {
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: /add asset/i }));
     await user.selectOptions(screen.getByLabelText(/category/i), 'vehicles');
+    // vehicles are never market-priced — only manual and depreciation
+    expect(screen.queryByRole('option', { name: /market price/i })).not.toBeInTheDocument();
     await user.selectOptions(await screen.findByLabelText(/valuation/i), 'depreciation');
 
     // the manufacture date field appears only when the method is ticked

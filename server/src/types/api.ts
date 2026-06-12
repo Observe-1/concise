@@ -14,15 +14,16 @@ export type ValuationMode = 'manual' | 'market' | 'property_index' | 'depreciati
 
 /**
  * Valuation methods available per asset category. Cash is a number you type
- * in — it never has a valuation method. Property may auto-apply a country's
- * yearly average price change; vehicles may auto-apply average age-based
- * depreciation. Liabilities are always manual.
+ * in — it never has a valuation method. Property and vehicles are never
+ * market-priced (they are not exchange-traded): property may auto-apply a
+ * country's yearly average price change, vehicles may auto-apply average
+ * age-based depreciation. Liabilities are always manual.
  */
 export const ASSET_VALUATION_MODES: Record<AssetCategory, readonly ValuationMode[]> = {
   cash: ['manual'],
   investments: ['manual', 'market'],
-  property: ['manual', 'market', 'property_index'],
-  vehicles: ['manual', 'market', 'depreciation'],
+  property: ['manual', 'property_index'],
+  vehicles: ['manual', 'depreciation'],
   crypto: ['manual', 'market'],
   precious_metals: ['manual', 'market'],
   other: ['manual', 'market'],

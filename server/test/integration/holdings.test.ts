@@ -90,6 +90,26 @@ describe('assets & liabilities API', () => {
       .send({ valuationMode: 'market', marketSymbol: 'BTC', quantity: 1 }).expect(400);
   });
 
+  it('property and vehicle entries cannot use the market method', async () => {
+    await csrf(agent.post('/api/assets')).send({
+      category: 'property', name: 'Flat', valuationMode: 'market', marketSymbol: 'VWRL', quantity: 1,
+    }).expect(400);
+    await csrf(agent.post('/api/assets')).send({
+      category: 'vehicles', name: 'Car', valuationMode: 'market', marketSymbol: 'VWRL', quantity: 1,
+    }).expect(400);
+
+    // switching an existing property entry to market valuation is rejected
+    const home = await csrf(agent.post('/api/assets')).send({ category: 'property', name: 'Home', valueMinor: 100 });
+    await csrf(agent.patch(`/api/assets/${home.body.id}`))
+      .send({ valuationMode: 'market', marketSymbol: 'VWRL', quantity: 1 }).expect(400);
+
+    // moving a market-valued asset into property/vehicles is rejected
+    const market = await csrf(agent.post('/api/assets')).send({
+      category: 'investments', name: 'Fund', valuationMode: 'market', marketSymbol: 'VWRL', quantity: 1,
+    });
+    await csrf(agent.patch(`/api/assets/${market.body.id}`)).send({ category: 'vehicles' }).expect(400);
+  });
+
   it('creates precious metal assets with a metal sub-selection', async () => {
     const res = await csrf(agent.post('/api/assets')).send({
       category: 'precious_metals', name: 'Krugerrands', metal: 'gold', valueMinor: 950_000,
