@@ -201,6 +201,7 @@ test('shows the age overlay on long ranges once a birth year is set', async ({ p
   await login(page);
 
   await page.goto('/settings');
+  await page.getByRole('button', { name: /calculation/i }).click();
   await page.getByLabel(/birth year/i).fill('1990');
   await page.getByRole('button', { name: /^save$/i }).click();
   await expect(page.getByRole('status')).toContainText(/saved/i);
@@ -242,8 +243,9 @@ test('edits a historic entry from settings and the holding updates', async ({ pa
   await dialog.getByRole('button', { name: /^add$/i }).click();
   await expect(page.getByRole('button', { name: new RegExp(name) })).toBeVisible();
 
-  // Settings → Historic entries, filtered to that holding
+  // Settings → History sub page → Historic entries, filtered to that holding
   await page.goto('/settings');
+  await page.getByRole('button', { name: /^history$/i }).click();
   await page.getByLabel(/^show$/i).selectOption({ label: `💵 Cash — ${name}` });
   await page.getByRole('button', { name: new RegExp(`edit ${name} entry`, 'i') }).click();
 
@@ -260,7 +262,7 @@ test('edits a historic entry from settings and the holding updates', async ({ pa
 
 test('records legacy wealth and sees it on the All graph', async ({ page }) => {
   await login(page);
-  await page.goto('/settings');
+  await page.goto('/settings/history');
   await page.getByLabel(/^date$/i).fill('2015-03-01');
   await page.getByLabel(/net worth/i).fill('12345');
   await page.getByRole('button', { name: /add point/i }).click();
@@ -275,7 +277,7 @@ test('records legacy wealth and sees it on the All graph', async ({ page }) => {
   expect(history.netWorthMinor).toBe(1_234_500);
 
   // clean up so reruns of the seeded demo stay tidy
-  await page.goto('/settings');
+  await page.goto('/settings/history');
   await page.getByRole('button', { name: /delete legacy entry 2015-03-01/i }).click();
   await expect(page.getByText('2015-03-01')).not.toBeVisible();
 });
@@ -292,7 +294,7 @@ test('net worth equals assets minus liabilities', async ({ page }) => {
 
 test('changes currency in settings and signs out', async ({ page }) => {
   await login(page);
-  await page.goto('/settings');
+  await page.goto('/settings/calculation');
   await page.getByLabel(/currency/i).selectOption('EUR');
   await page.getByRole('button', { name: /^save$/i }).click();
   await expect(page.getByRole('status')).toContainText(/saved/i);
@@ -300,12 +302,13 @@ test('changes currency in settings and signs out', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByText('€', { exact: false }).first()).toBeVisible();
 
-  // restore and sign out
-  await page.goto('/settings');
+  // restore and sign out (sign out lives on the User account sub page)
+  await page.goto('/settings/calculation');
   await page.getByLabel(/currency/i).selectOption('USD');
   await page.getByRole('button', { name: /^save$/i }).click();
   await expect(page.getByRole('status')).toContainText(/saved/i);
 
+  await page.getByRole('button', { name: /user account/i }).click();
   await page.getByRole('button', { name: /sign out/i }).click();
   await expect(page).toHaveURL(/\/login/);
   // session is gone server-side

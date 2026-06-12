@@ -30,10 +30,31 @@ function mountSettings() {
   ]);
 }
 
+describe('settings sub pages', () => {
+  it('switches sub pages with the buttons at the top', async () => {
+    mountSettings();
+    renderWithProviders(<App />, { route: '/settings' });
+
+    // User account is the default: profile + sign out, no history widgets
+    expect(await screen.findByRole('button', { name: /sign out/i })).toBeInTheDocument();
+    expect(screen.queryByText(/legacy wealth/i)).not.toBeInTheDocument();
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /^history$/i }));
+    expect(await screen.findByText(/legacy wealth/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /sign out/i })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /calculation/i }));
+    expect(await screen.findByLabelText(/currency/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/birth year/i)).toBeInTheDocument();
+    expect(screen.queryByText(/legacy wealth/i)).not.toBeInTheDocument();
+  });
+});
+
 describe('settings history features', () => {
   it('shows legacy wealth entries and posts new points', async () => {
     const calls = mountSettings();
-    renderWithProviders(<App />, { route: '/settings' });
+    renderWithProviders(<App />, { route: '/settings/history' });
 
     expect(await screen.findByText('2015-03-01')).toBeInTheDocument();
 
@@ -50,7 +71,7 @@ describe('settings history features', () => {
 
   it('lists historic entries and edits one', async () => {
     const calls = mountSettings();
-    renderWithProviders(<App />, { route: '/settings' });
+    renderWithProviders(<App />, { route: '/settings/history' });
 
     expect(await screen.findByText('Savings')).toBeInTheDocument();
     expect(screen.getByText(/2026-06-01/)).toBeInTheDocument();
@@ -73,7 +94,7 @@ describe('settings history features', () => {
 
   it('deletes an entry after confirmation', async () => {
     const calls = mountSettings();
-    renderWithProviders(<App />, { route: '/settings' });
+    renderWithProviders(<App />, { route: '/settings/history' });
     await screen.findByText('Savings');
 
     const user = userEvent.setup();

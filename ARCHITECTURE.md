@@ -125,6 +125,12 @@ changes today's totals. Deleting an asset hard-deletes its valuations
 - "Update value" appends a valuation row (history preserved), then upserts
   today's snapshot.
 
+### Settings (web)
+- `/settings/:section?` renders three sub pages selected by buttons at the
+  top: **User account** (profile, sign out — the default), **History**
+  (legacy wealth, historic-entry editor), **Calculation** (currency, birth
+  year). All share `GET/PATCH /api/settings`.
+
 ### History editing (`/api/history`)
 - `GET /entries` lists every valuation across the user's holdings (filter by
   side/holding); `PATCH`/`DELETE /entries/:side/:id` edit values, move dates,

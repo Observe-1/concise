@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   useDeleteLegacyWealth, useLegacyWealth, useLogout, useMe, useSetLegacyWealth,
   useSettings, useUpdateSettings,
@@ -10,23 +10,61 @@ import { formatMinor, parseSignedToMinor } from '../lib/money.js';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'NZD', 'SEK', 'NOK', 'DKK', 'SGD', 'HKD', 'INR'];
 
+const SECTIONS = [
+  { key: 'account', label: 'User account' },
+  { key: 'history', label: 'History' },
+  { key: 'calculation', label: 'Calculation' },
+] as const;
+type SectionKey = (typeof SECTIONS)[number]['key'];
+
 export function SettingsPage() {
+  const { section } = useParams();
+  const navigate = useNavigate();
+  const active: SectionKey = SECTIONS.some((s) => s.key === section)
+    ? (section as SectionKey)
+    : 'account';
+
+  return (
+    <div className="space-y-5">
+      <h1 className="text-xl font-semibold">Settings</h1>
+
+      <div role="group" aria-label="Settings sections" className="flex gap-1 overflow-x-auto">
+        {SECTIONS.map((s) => (
+          <button
+            key={s.key}
+            type="button"
+            onClick={() => navigate(`/settings/${s.key}`, { replace: true })}
+            aria-pressed={active === s.key}
+            className={`shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+              active === s.key ? 'bg-gold-500 text-ink-950' : 'text-ink-400 hover:text-ink-100'
+            }`}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      {active === 'account' && <AccountSection />}
+      {active === 'history' && <HistorySection />}
+      {active === 'calculation' && <CalculationSection />}
+
+      <p className="px-1 text-center text-xs text-ink-600">Concise — private, self-hosted personal finance.</p>
+    </div>
+  );
+}
+
+// ---------- user account ----------
+
+function AccountSection() {
   const settings = useSettings();
   const update = useUpdateSettings();
   const logout = useLogout();
   const navigate = useNavigate();
-
   const [displayName, setDisplayName] = useState('');
-  const [currency, setCurrency] = useState('USD');
-  const [birthYear, setBirthYear] = useState('');
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    if (settings.data) {
-      setDisplayName(settings.data.displayName);
-      setCurrency(settings.data.currency);
-      setBirthYear(settings.data.birthYear?.toString() ?? '');
-    }
+    if (settings.data) setDisplayName(settings.data.displayName);
   }, [settings.data]);
 
   if (settings.isLoading) return <Spinner label="Loading settings" />;
@@ -35,16 +73,11 @@ export function SettingsPage() {
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
     setSaved(false);
-    update.mutate(
-      { displayName, currency, birthYear: birthYear ? Number(birthYear) : null },
-      { onSuccess: () => setSaved(true) },
-    );
+    update.mutate({ displayName }, { onSuccess: () => setSaved(true) });
   };
 
   return (
-    <div className="space-y-5">
-      <h1 className="text-xl font-semibold">Settings</h1>
-
+    <>
       <Card className="p-5">
         <h2 className="mb-4 text-xs font-medium uppercase tracking-widest text-ink-400">Profile</h2>
         <form onSubmit={onSubmit} className="space-y-4">
@@ -54,31 +87,6 @@ export function SettingsPage() {
           <Field label="Display name">
             {(id) => (
               <Input id={id} value={displayName} onChange={(e) => setDisplayName(e.target.value)} required maxLength={80} />
-            )}
-          </Field>
-          <Field label="Currency" hint="Used for formatting all amounts.">
-            {(id) => (
-              <Select id={id} value={currency} onChange={(e) => setCurrency(e.target.value)}>
-                {CURRENCIES.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </Select>
-            )}
-          </Field>
-          <Field
-            label="Birth year"
-            hint="Optional. Charts spanning 5+ years show a subtle marker with your age. Leave blank to disable."
-          >
-            {(id) => (
-              <Input
-                id={id}
-                type="number"
-                min={1900}
-                max={2100}
-                value={birthYear}
-                onChange={(e) => setBirthYear(e.target.value)}
-                placeholder="e.g. 1990"
-              />
             )}
           </Field>
           {update.isError ? <ErrorNote message="Could not save settings." /> : null}
@@ -91,10 +99,6 @@ export function SettingsPage() {
         </form>
       </Card>
 
-      <LegacyWealthCard />
-
-      <HistoryEntries />
-
       <Card className="p-5">
         <h2 className="mb-2 text-xs font-medium uppercase tracking-widest text-ink-400">Session</h2>
         <p className="mb-4 text-sm text-ink-400">Signed in as {settings.data.username}.</p>
@@ -106,9 +110,87 @@ export function SettingsPage() {
           Sign out
         </Button>
       </Card>
+    </>
+  );
+}
 
-      <p className="px-1 text-center text-xs text-ink-600">Concise — private, self-hosted personal finance.</p>
-    </div>
+// ---------- history ----------
+
+function HistorySection() {
+  return (
+    <>
+      <LegacyWealthCard />
+      <HistoryEntries />
+    </>
+  );
+}
+
+// ---------- calculation ----------
+
+function CalculationSection() {
+  const settings = useSettings();
+  const update = useUpdateSettings();
+  const [currency, setCurrency] = useState('USD');
+  const [birthYear, setBirthYear] = useState('');
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (settings.data) {
+      setCurrency(settings.data.currency);
+      setBirthYear(settings.data.birthYear?.toString() ?? '');
+    }
+  }, [settings.data]);
+
+  if (settings.isLoading) return <Spinner label="Loading settings" />;
+  if (!settings.data) return <p role="alert" className="py-10 text-center text-sm text-loss-400">Could not load settings.</p>;
+
+  const onSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    setSaved(false);
+    update.mutate(
+      { currency, birthYear: birthYear ? Number(birthYear) : null },
+      { onSuccess: () => setSaved(true) },
+    );
+  };
+
+  return (
+    <Card className="p-5">
+      <h2 className="mb-4 text-xs font-medium uppercase tracking-widest text-ink-400">Calculation</h2>
+      <form onSubmit={onSubmit} className="space-y-4">
+        <Field label="Currency" hint="Used for formatting all amounts.">
+          {(id) => (
+            <Select id={id} value={currency} onChange={(e) => setCurrency(e.target.value)}>
+              {CURRENCIES.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </Select>
+          )}
+        </Field>
+        <Field
+          label="Birth year"
+          hint="Optional. Charts spanning 5+ years show a subtle marker with your age. Leave blank to disable."
+        >
+          {(id) => (
+            <Input
+              id={id}
+              type="number"
+              min={1900}
+              max={2100}
+              value={birthYear}
+              onChange={(e) => setBirthYear(e.target.value)}
+              placeholder="e.g. 1990"
+            />
+          )}
+        </Field>
+        {update.isError ? <ErrorNote message="Could not save settings." /> : null}
+        {saved && !update.isPending ? (
+          <p role="status" className="text-sm text-gain-400">Saved.</p>
+        ) : null}
+        <Button type="submit" disabled={update.isPending}>
+          {update.isPending ? 'Saving…' : 'Save'}
+        </Button>
+      </form>
+    </Card>
   );
 }
 

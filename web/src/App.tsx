@@ -57,7 +57,7 @@ export function App() {
           <Route path="/assets" element={<HoldingsPage kind="assets" />} />
           <Route path="/liabilities" element={<HoldingsPage kind="liabilities" />} />
           <Route path="/recurring" element={<RecurringPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/settings/:section?" element={<SettingsPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

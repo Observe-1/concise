@@ -99,7 +99,7 @@ Implemented strictly in order; one commit per feature.
       depreciation, with a manufacture-date field for correct depreciation
 - [x] 9. Recurring: percentage amounts (e.g. +0.4% monthly) besides fixed
 - [x] 10. Recurring: quarterly cadence
-- [ ] 11. Settings overhaul: sub pages (User account / History / Calculation)
+- [x] 11. Settings overhaul: sub pages (User account / History / Calculation)
       selectable by buttons at the top
 - [ ] 12. Graph: deltas between sparse manual entries are smoothed over the
       gap instead of a one-day vertical step
