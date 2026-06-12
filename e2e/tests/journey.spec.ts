@@ -67,7 +67,7 @@ test('creates an asset and shows it grouped by class', async ({ page }, testInfo
   const row = page.getByRole('button', { name: new RegExp(name) });
   await expect(row).toBeVisible();
   await expect(row).toContainText(/1,234\.56/);
-  await expect(page.getByRole('region', { name: 'Investments' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Stock investments' })).toBeVisible();
 });
 
 test('creates a liability mirroring the asset flow', async ({ page }, testInfo) => {

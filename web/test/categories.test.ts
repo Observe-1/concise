@@ -24,4 +24,8 @@ describe('category metadata', () => {
     expect(categoryLabel('asset', 'cash')).toBe('Cash');
     expect(categoryDisplay('liability', 'credit_card')).toBe('💳 Credit cards');
   });
+
+  it('labels the investments class "Stock investments"', () => {
+    expect(categoryLabel('asset', 'investments')).toBe('Stock investments');
+  });
 });

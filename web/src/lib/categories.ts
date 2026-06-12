@@ -12,7 +12,8 @@ interface CategoryMeta {
 
 export const ASSET_CATEGORY_META: Record<string, CategoryMeta> = {
   cash: { label: 'Cash', emoji: '💵' },
-  investments: { label: 'Investments', emoji: '📈' },
+  // DB value remains 'investments'; only the display name changed
+  investments: { label: 'Stock investments', emoji: '📈' },
   property: { label: 'Property', emoji: '🏠' },
   vehicles: { label: 'Vehicles', emoji: '🚗' },
   crypto: { label: 'Crypto', emoji: '🪙' },
