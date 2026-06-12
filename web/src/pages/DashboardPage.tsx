@@ -41,6 +41,7 @@ export function DashboardPage() {
       <NetWorthChart
         points={history.data?.points ?? []}
         currency={currency}
+        range={range}
         birthYear={me?.birthYear}
         height={fullscreen ? Math.max(300, window.innerHeight - 160) : 240}
       />

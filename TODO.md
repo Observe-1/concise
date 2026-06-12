@@ -68,6 +68,15 @@
 - [x] Extended 10Y / 20Y graph ranges through the existing pipeline
 - [x] Birth year setting + muted "Age N" overlay on charts spanning ≥ 5 years (seed extended to 6 years of history)
 
+## Feature batch (2026-06-12)
+- [x] Age lines: one per new age at 5Y, every 2nd age at 10Y, every 4th at 20Y, every 5th at All
+- [ ] Unique emoji prefix for every asset and liability type (no emoji reused)
+- [ ] Rename "Investments" to "Stock investments"
+- [ ] Create account page + register endpoint, button on login page
+- [ ] Settings: legacy wealth input ("on X date my net worth was Y")
+- [ ] Optional backdate field when adding an asset/liability
+- [ ] Settings: view all historic entries and alter them
+
 ## Notes
 - Deployment (Docker/CI/runbooks) is intentionally out of scope. The app still
   runs in production directly: `npm run build` then `npm start` serves the API

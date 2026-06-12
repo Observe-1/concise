@@ -4,13 +4,10 @@ import {
   Tooltip, XAxis, YAxis,
 } from 'recharts';
 import type { HistoryPointDto, HistoryRange } from '@api';
+import { ageMarkers } from '../lib/ageMarkers.js';
 import { formatMinor, formatMinorCompact } from '../lib/money.js';
 
 export const RANGES: HistoryRange[] = ['1M', '3M', '6M', 'YTD', '1Y', '5Y', '10Y', '20Y', 'ALL'];
-
-/** Minimum visible span (days) before the age overlay is shown (≈5 years,
- *  with a few days' tolerance for downsampling trim at the window edge). */
-const AGE_OVERLAY_MIN_DAYS = 5 * 365 - 7;
 
 const dateLabel = (iso: string, long = false) =>
   new Date(`${iso}T00:00:00Z`).toLocaleDateString(undefined, {
@@ -42,39 +39,16 @@ export function RangePicker({
   );
 }
 
-/**
- * Age overlay: a muted vertical line at 1 Jan of the current year (we only
- * know the birth year) labelled with the user's current age. Shown only when
- * the visible series spans ≥ 5 years.
- */
-function ageMarker(
-  points: HistoryPointDto[],
-  birthYear: number | null | undefined,
-): { x: string; age: number } | null {
-  if (!birthYear || points.length < 2) return null;
-  const first = points[0]!.date;
-  const last = points[points.length - 1]!.date;
-  const spanDays = (Date.parse(last) - Date.parse(first)) / 86_400_000;
-  if (spanDays < AGE_OVERLAY_MIN_DAYS) return null;
-
-  const currentYear = Number(last.slice(0, 4));
-  const age = currentYear - birthYear;
-  if (age < 0 || age > 130) return null;
-  const jan1 = `${currentYear}-01-01`;
-  const at = points.find((p) => p.date >= jan1);
-  if (!at) return null;
-  return { x: at.date, age };
-}
-
 interface ChartProps {
   points: HistoryPointDto[];
   currency: string;
+  range: HistoryRange;
   birthYear?: number | null;
   height?: number;
 }
 
-export function NetWorthChart({ points, currency, birthYear, height = 240 }: ChartProps) {
-  const age = useMemo(() => ageMarker(points, birthYear), [points, birthYear]);
+export function NetWorthChart({ points, currency, range, birthYear, height = 240 }: ChartProps) {
+  const ages = useMemo(() => ageMarkers(points, birthYear, range), [points, birthYear, range]);
 
   if (points.length === 0) {
     return (
@@ -114,19 +88,20 @@ export function NetWorthChart({ points, currency, birthYear, height = 240 }: Cha
             domain={['auto', 'auto']}
           />
           <Tooltip content={<ChartTooltip currency={currency} />} />
-          {age && (
+          {ages.map((marker) => (
             <ReferenceLine
-              x={age.x}
+              key={marker.age}
+              x={marker.x}
               stroke="#3f3f46"
               strokeDasharray="2 4"
               label={{
-                value: `Age ${age.age}`,
+                value: `Age ${marker.age}`,
                 position: 'insideTopRight',
                 fill: '#8e8e98',
                 fontSize: 10,
               }}
             />
-          )}
+          ))}
           <Area
             type="monotone"
             dataKey="netWorthMinor"

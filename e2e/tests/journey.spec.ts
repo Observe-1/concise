@@ -181,13 +181,25 @@ test('shows the age overlay on long ranges once a birth year is set', async ({ p
   await page.goto('/');
   const rangeGroup = page.getByRole('group', { name: /history range/i });
 
-  // 5Y+ → age marker visible (seeded history spans 6 years)
+  // 5Y → every age (seeded history spans 6 years: ages 32..36 visible)
   await rangeGroup.getByRole('button', { name: '5Y', exact: true }).click();
-  await expect(page.getByText(/^Age \d+$/)).toBeVisible();
+  await expect(page.getByText('Age 33')).toBeVisible();
+  await expect(page.getByText('Age 36')).toBeVisible();
+  await expect(page.getByText(/^Age \d+$/)).toHaveCount(5);
 
-  // short ranges → no age marker
+  // 10Y → every 2nd age (even ages only)
+  await rangeGroup.getByRole('button', { name: '10Y', exact: true }).click();
+  await expect(page.getByText('Age 36')).toBeVisible();
+  await expect(page.getByText('Age 33')).not.toBeVisible();
+
+  // All → every 5th age (35 qualifies, 36 does not)
+  await rangeGroup.getByRole('button', { name: 'All', exact: true }).click();
+  await expect(page.getByText('Age 35')).toBeVisible();
+  await expect(page.getByText('Age 36')).not.toBeVisible();
+
+  // short ranges → no age markers
   await rangeGroup.getByRole('button', { name: '1M', exact: true }).click();
-  await expect(page.getByText(/^Age \d+$/)).not.toBeVisible();
+  await expect(page.getByText(/^Age \d+$/)).toHaveCount(0);
 });
 
 test('net worth equals assets minus liabilities', async ({ page }) => {

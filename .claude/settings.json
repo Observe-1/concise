@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(export PATH=\"$HOME/tools/node-v24.16.0-win-x64:$PATH\")",
+      "Bash(npx vitest run)",
+      "Bash(npx vitest run *)",
+      "Bash(npx tsc --noEmit)",
+      "Bash(npx playwright test)",
+      "Bash(npx playwright test *)",
+      "Bash(curl -s http://localhost*)",
+      "Bash(npm --version)",
+      "PowerShell(Get-Process *)",
+      "PowerShell(Get-NetTCPConnection *)"
+    ]
+  }
+}
