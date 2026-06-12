@@ -5,13 +5,10 @@ import { METALS } from '../../types/api.js';
 import type { HoldingKind } from './kind.js';
 import { audit } from '../../lib/audit.js';
 import { badRequest, idParam, parseBody } from '../../lib/http.js';
+import { dateStringSchema, valueMinorSchema as valueSchema } from '../../lib/schemas.js';
 import {
   addValuation, createHolding, deleteHolding, getHolding, listHoldings, updateHolding,
 } from './service.js';
-
-const MAX_MINOR = 1_000_000_000_000_000; // 10^15 — far below Number.MAX_SAFE_INTEGER
-
-const valueSchema = z.number().int().min(0).max(MAX_MINOR);
 
 function buildSchemas(k: HoldingKind) {
   const base = {
@@ -28,7 +25,11 @@ function buildSchemas(k: HoldingKind) {
       }
     : {};
   // metal only makes sense on the precious_metals class (DB CHECK mirrors this)
-  const create = z.object({ ...base, ...market, valueMinor: valueSchema.optional() })
+  const create = z.object({
+    ...base, ...market,
+    valueMinor: valueSchema.optional(),
+    asOf: dateStringSchema.optional(),
+  })
     .refine((data) => {
       const d = data as { category?: string; metal?: string | null };
       return !d.metal || d.category === 'precious_metals';

@@ -55,15 +55,76 @@ export function upsertSnapshot(db: DatabaseSync, userId: number, dateISO: string
   ).run(userId, dateISO, assetsMinor, liabilitiesMinor, assetsMinor - liabilitiesMinor);
 }
 
-/** Recompute snapshots for every day in [fromISO, toISO]. */
+interface ValuationRow {
+  hid: number;
+  value_minor: number;
+  recorded_at: string;
+}
+
+function groupByHolding(rows: ValuationRow[]): ValuationRow[][] {
+  const map = new Map<number, ValuationRow[]>();
+  for (const row of rows) {
+    const list = map.get(row.hid);
+    if (list) list.push(row);
+    else map.set(row.hid, [row]);
+  }
+  return [...map.values()];
+}
+
+/**
+ * Recompute snapshots for every day in [fromISO, toISO]. Bulk implementation:
+ * loads each holding's valuations once and walks the days with per-holding
+ * cursors (O(days × holdings)), so multi-year backdates stay fast. Legacy
+ * rows are preserved by the upsert guard.
+ */
 export function recomputeSnapshotRange(
   db: DatabaseSync,
   userId: number,
   fromISO: string,
   toISO: string,
 ): void {
+  if (fromISO > toISO) return;
+  const cutoff = `${toISO}T23:59:59.999Z`;
+  const assetSeries = groupByHolding(db.prepare(
+    `SELECT v.asset_id AS hid, v.value_minor, v.recorded_at
+     FROM asset_valuations v JOIN assets a ON a.id = v.asset_id
+     WHERE a.user_id = ? AND v.recorded_at <= ?
+     ORDER BY v.recorded_at, v.id`,
+  ).all(userId, cutoff) as unknown as ValuationRow[]);
+  const liabilitySeries = groupByHolding(db.prepare(
+    `SELECT v.liability_id AS hid, v.value_minor, v.recorded_at
+     FROM liability_valuations v JOIN liabilities l ON l.id = v.liability_id
+     WHERE l.user_id = ? AND v.recorded_at <= ?
+     ORDER BY v.recorded_at, v.id`,
+  ).all(userId, cutoff) as unknown as ValuationRow[]);
+
+  const upsert = db.prepare(
+    `INSERT INTO snapshots (user_id, snapshot_date, assets_minor, liabilities_minor, net_worth_minor)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT (user_id, snapshot_date) DO UPDATE SET
+       assets_minor = excluded.assets_minor,
+       liabilities_minor = excluded.liabilities_minor,
+       net_worth_minor = excluded.net_worth_minor
+     WHERE snapshots.source != 'legacy'`,
+  );
+
+  const allSeries = [...assetSeries, ...liabilitySeries];
+  const cursors = allSeries.map(() => 0);
+  const currents = allSeries.map(() => 0);
+  const assetCount = assetSeries.length;
   for (let d = fromISO; d <= toISO; d = addDays(d, 1)) {
-    upsertSnapshot(db, userId, d);
+    const dayEnd = `${d}T23:59:59.999Z`;
+    let assets = 0;
+    let liabilities = 0;
+    allSeries.forEach((series, i) => {
+      while (cursors[i]! < series.length && series[cursors[i]!]!.recorded_at <= dayEnd) {
+        currents[i] = series[cursors[i]!]!.value_minor;
+        cursors[i]!++;
+      }
+      if (i < assetCount) assets += currents[i]!;
+      else liabilities += currents[i]!;
+    });
+    upsert.run(userId, d, assets, liabilities, assets - liabilities);
   }
 }
 

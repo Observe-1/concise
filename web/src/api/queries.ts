@@ -115,6 +115,7 @@ export interface HoldingInput {
   valuationMode?: 'manual' | 'market';
   marketSymbol?: string | null;
   quantity?: number | null;
+  asOf?: string;
 }
 
 export function useCreateHolding(kind: HoldingKind) {

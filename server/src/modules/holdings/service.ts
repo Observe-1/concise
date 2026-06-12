@@ -2,10 +2,10 @@ import type { AppContext } from '../../context.js';
 import type { HoldingDto, HoldingDetailDto, Metal, ValuationDto, ValuationSource } from '../../types/api.js';
 import type { HoldingKind } from './kind.js';
 import { withTransaction } from '../../db/connection.js';
-import { notFound } from '../../lib/http.js';
+import { badRequest, notFound } from '../../lib/http.js';
 import { todayISO } from '../../lib/dates.js';
 import { holdingValueMinor } from '../market/provider.js';
-import { refreshTodaySnapshot } from '../snapshots/service.js';
+import { recomputeSnapshotRange, refreshTodaySnapshot } from '../snapshots/service.js';
 
 interface HoldingRow {
   id: number;
@@ -30,6 +30,8 @@ export interface CreateHoldingInput {
   valuationMode?: 'manual' | 'market';
   marketSymbol?: string;
   quantity?: number;
+  /** Optional backdate (YYYY-MM-DD): records the first valuation on this past date. */
+  asOf?: string;
 }
 
 export interface UpdateHoldingInput {
@@ -111,17 +113,21 @@ function insertValuation(
   holdingId: number,
   valueMinor: number,
   source: ValuationSource,
+  recordedAt?: string,
 ): void {
   ctx.db
     .prepare(
       `INSERT INTO ${k.valuationTable} (${k.fk}, value_minor, source, recorded_at) VALUES (?, ?, ?, ?)`,
     )
-    .run(holdingId, valueMinor, source, ctx.now().toISOString());
+    .run(holdingId, valueMinor, source, recordedAt ?? ctx.now().toISOString());
 }
 
-/** Initial value for a market-mode holding comes from the price provider. */
-function marketValue(ctx: AppContext, symbol: string, quantity: number): number {
-  return holdingValueMinor(ctx.prices.getPriceMinor(symbol, todayISO(ctx.now)), quantity);
+/** Value of a market-mode holding from the price provider, as of a date. */
+function marketValue(ctx: AppContext, symbol: string, quantity: number, dateISO?: string): number {
+  return holdingValueMinor(
+    ctx.prices.getPriceMinor(symbol, dateISO ?? todayISO(ctx.now)),
+    quantity,
+  );
 }
 
 export function createHolding(
@@ -130,6 +136,8 @@ export function createHolding(
   userId: number,
   input: CreateHoldingInput,
 ): HoldingDto {
+  const today = todayISO(ctx.now);
+  if (input.asOf && input.asOf > today) throw badRequest('Backdate cannot be in the future');
   return withTransaction(ctx.db, () => {
     const isMarket = k.supportsMarket && input.valuationMode === 'market';
     let id: number;
@@ -151,11 +159,21 @@ export function createHolding(
         .prepare('INSERT INTO liabilities (user_id, category, name, notes) VALUES (?, ?, ?, ?)')
         .run(userId, input.category, input.name, input.notes ?? null).lastInsertRowid as number;
     }
+    // Backdated entries get their first valuation on the chosen past date
+    // (market entries are priced as of that date) and the snapshot history
+    // is recomputed from there.
     const value = isMarket
-      ? marketValue(ctx, input.marketSymbol!, input.quantity!)
+      ? marketValue(ctx, input.marketSymbol!, input.quantity!, input.asOf)
       : input.valueMinor ?? 0;
-    insertValuation(ctx, k, id, value, isMarket ? 'market' : 'manual');
-    refreshTodaySnapshot(ctx, userId);
+    insertValuation(
+      ctx, k, id, value, isMarket ? 'market' : 'manual',
+      input.asOf ? `${input.asOf}T12:00:00.000Z` : undefined,
+    );
+    if (input.asOf && input.asOf < today) {
+      recomputeSnapshotRange(ctx.db, userId, input.asOf, today);
+    } else {
+      refreshTodaySnapshot(ctx, userId);
+    }
     return toDto(getRow(ctx, k, userId, id));
   });
 }

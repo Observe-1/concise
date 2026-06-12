@@ -153,6 +153,7 @@ function HoldingForm({
   const [symbol, setSymbol] = useState(existing?.marketSymbol ?? '');
   const [quantity, setQuantity] = useState(existing?.quantity?.toString() ?? '');
   const [value, setValue] = useState(existing ? minorToInput(existing.currentValueMinor) : '');
+  const [asOf, setAsOf] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   // Symbol the user has confirmed via lookup. Editing an existing market
   // asset without touching the symbol needs no re-verification.
@@ -202,6 +203,7 @@ function HoldingForm({
         {
           category, name, notes: notes || null,
           ...(kind === 'assets' ? metalField : {}),
+          ...(asOf ? { asOf } : {}),
           ...(isMarket
             ? { valuationMode: 'market' as const, marketSymbol: symbolUpper, quantity: Number(quantity) }
             : { valueMinor: valueMinor! }),
@@ -344,6 +346,23 @@ function HoldingForm({
             <Input id={id} value={notes} onChange={(e) => setNotes(e.target.value)} maxLength={2000} />
           )}
         </Field>
+
+        {!existing && (
+          <Field
+            label="Backdate (optional)"
+            hint={`Record this ${kind === 'assets' ? 'asset' : 'liability'} as starting on a past date; your history is recalculated from there.`}
+          >
+            {(id) => (
+              <Input
+                id={id}
+                type="date"
+                value={asOf}
+                max={new Date().toISOString().slice(0, 10)}
+                onChange={(e) => setAsOf(e.target.value)}
+              />
+            )}
+          </Field>
+        )}
 
         {formError ? <ErrorNote message={formError} /> : null}
 

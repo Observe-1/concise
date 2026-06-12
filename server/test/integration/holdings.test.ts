@@ -91,6 +91,65 @@ describe('assets & liabilities API', () => {
     expect(moved.body.metal).toBeNull();
   });
 
+  describe('backdating', () => {
+    it('records the first valuation on the chosen past date and rebuilds history', async () => {
+      const res = await csrf(agent.post('/api/assets'))
+        .send({ category: 'cash', name: 'Old savings', valueMinor: 5_000_00, asOf: '2026-01-15' });
+      expect(res.status).toBe(201);
+
+      const detail = await agent.get(`/api/assets/${res.body.id}`);
+      expect(detail.body.valuations[0].recordedAt).toBe('2026-01-15T12:00:00.000Z');
+
+      const snaps = world.ctx.db
+        .prepare('SELECT snapshot_date, assets_minor FROM snapshots ORDER BY snapshot_date')
+        .all() as { snapshot_date: string; assets_minor: number }[];
+      expect(snaps[0]).toEqual({ snapshot_date: '2026-01-15', assets_minor: 5_000_00 });
+      expect(snaps[snaps.length - 1]!.snapshot_date).toBe('2026-06-11');
+      expect(snaps).toHaveLength(148); // daily rows from 15 Jan to 11 Jun
+      expect(snaps.every((s) => s.assets_minor === 5_000_00)).toBe(true);
+    });
+
+    it('prices backdated market assets as of the past date', async () => {
+      const res = await csrf(agent.post('/api/assets')).send({
+        category: 'crypto', name: 'Old BTC', valuationMode: 'market',
+        marketSymbol: 'BTC', quantity: 0.5, asOf: '2025-03-01',
+      });
+      expect(res.status).toBe(201);
+      const expected = Math.round(world.ctx.prices.getPriceMinor('BTC', '2025-03-01') * 0.5);
+      const detail = await agent.get(`/api/assets/${res.body.id}`);
+      expect(detail.body.valuations[0].valueMinor).toBe(expected);
+      expect(detail.body.valuations[0].recordedAt).toBe('2025-03-01T12:00:00.000Z');
+    });
+
+    it('works for liabilities and affects net worth from that date', async () => {
+      await csrf(agent.post('/api/liabilities'))
+        .send({ category: 'loan', name: 'Old loan', valueMinor: 2_000_00, asOf: '2026-03-01' });
+      const snap = world.ctx.db
+        .prepare("SELECT * FROM snapshots WHERE snapshot_date = '2026-03-01'")
+        .get() as { liabilities_minor: number; net_worth_minor: number };
+      expect(snap.liabilities_minor).toBe(2_000_00);
+      expect(snap.net_worth_minor).toBe(-2_000_00);
+    });
+
+    it('rejects future or invalid backdates', async () => {
+      await csrf(agent.post('/api/assets'))
+        .send({ category: 'cash', name: 'X', valueMinor: 1, asOf: '2026-06-12' }).expect(400);
+      await csrf(agent.post('/api/assets'))
+        .send({ category: 'cash', name: 'X', valueMinor: 1, asOf: 'last-week' }).expect(400);
+    });
+
+    it('does not clobber legacy wealth points inside the recomputed window', async () => {
+      await csrf(agent.post('/api/history/legacy'))
+        .send({ date: '2026-02-01', netWorthMinor: 42 }).expect(201);
+      await csrf(agent.post('/api/assets'))
+        .send({ category: 'cash', name: 'Backdated', valueMinor: 100_00, asOf: '2026-01-01' });
+      const legacy = world.ctx.db
+        .prepare("SELECT net_worth_minor, source FROM snapshots WHERE snapshot_date = '2026-02-01'")
+        .get() as { net_worth_minor: number; source: string };
+      expect(legacy).toEqual({ net_worth_minor: 42, source: 'legacy' });
+    });
+  });
+
   it('mirrors the structure for liabilities (no market mode)', async () => {
     const created = await csrf(agent.post('/api/liabilities'))
       .send({ category: 'mortgage', name: 'Home loan', valueMinor: 250_000_00 });

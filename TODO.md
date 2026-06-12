@@ -74,7 +74,7 @@
 - [x] Rename "Investments" to "Stock investments" (display label; DB value unchanged)
 - [x] Create account page + register endpoint, button on login page
 - [x] Settings: legacy wealth input ("on X date my net worth was Y")
-- [ ] Optional backdate field when adding an asset/liability
+- [x] Optional backdate field when adding an asset/liability
 - [ ] Settings: view all historic entries and alter them
 
 ## Notes

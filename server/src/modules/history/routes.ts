@@ -3,17 +3,11 @@ import { z } from 'zod';
 import type { AppContext } from '../../context.js';
 import { audit } from '../../lib/audit.js';
 import { badRequest, notFound, parseBody } from '../../lib/http.js';
+import { MAX_MINOR, dateStringSchema } from '../../lib/schemas.js';
 import { deleteLegacyWealth, listLegacyWealth, setLegacyWealth } from './service.js';
 
-const MAX_MINOR = 1_000_000_000_000_000;
-
-export const dateSchema = z.string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD')
-  .refine((s) => !Number.isNaN(Date.parse(`${s}T00:00:00Z`)), 'Invalid date')
-  .refine((s) => s >= '1900-01-01', 'Date too far in the past');
-
 const legacySchema = z.object({
-  date: dateSchema,
+  date: dateStringSchema,
   netWorthMinor: z.number().int().min(-MAX_MINOR).max(MAX_MINOR),
 });
 
@@ -34,7 +28,7 @@ export function historyRoutes(ctx: AppContext): Router {
   });
 
   router.delete('/legacy/:date', (req, res) => {
-    const date = dateSchema.safeParse(req.params.date);
+    const date = dateStringSchema.safeParse(req.params.date);
     if (!date.success) throw badRequest('Invalid date');
     if (!deleteLegacyWealth(ctx, req.user!.id, date.data)) {
       throw notFound('No legacy wealth entry on that date');
