@@ -40,8 +40,9 @@ export function refreshMarketValuations(ctx: AppContext, userId?: number): numbe
     );
     for (const row of rows) {
       if (alreadyToday.get(row.id, `${today}T00:00:00.000Z`, `${today}T23:59:59.999Z`)) continue;
-      const value = holdingValueMinor(ctx.prices.getPriceMinor(row.market_symbol, today), row.quantity);
-      insert.run(row.id, value, ctx.now().toISOString());
+      const price = ctx.prices.getPriceMinor(row.market_symbol, today);
+      if (price === null) continue; // provider has no price today — try again tomorrow
+      insert.run(row.id, holdingValueMinor(price, row.quantity), ctx.now().toISOString());
       touchedUsers.add(row.user_id);
       updated++;
     }

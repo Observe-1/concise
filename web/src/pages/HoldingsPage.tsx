@@ -121,6 +121,14 @@ export function HoldingsPage({ kind }: { kind: HoldingKind }) {
                           ) : !h.metal && h.notes ? (
                             <span className="block truncate text-xs text-ink-400">{h.notes}</span>
                           ) : null}
+                          {h.historicalPriceMissing && (
+                            <span
+                              className="mt-0.5 inline-block rounded bg-loss-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-loss-400"
+                              title={`Accurate historical price information could not be found about this ${side}.`}
+                            >
+                              ⚠ Incomplete history
+                            </span>
+                          )}
                         </span>
                       </span>
                       <span className={`tabular shrink-0 text-sm font-semibold ${copy.tone === 'gain' ? 'text-gain-400' : 'text-loss-400'}`}>

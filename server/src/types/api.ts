@@ -48,6 +48,11 @@ export interface HoldingDto {
   valuationMode: 'manual' | 'market';
   marketSymbol: string | null;
   quantity: number | null;
+  /**
+   * True when the provider had no price for part of this entry's backdated
+   * history — the UI flags the entry as historically incomplete.
+   */
+  historicalPriceMissing: boolean;
   currentValueMinor: number;
   lastValuedAt: string;
   createdAt: string;

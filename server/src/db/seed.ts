@@ -39,7 +39,9 @@ function marketSeries(symbol: string, quantity: number, todayIso: string): Serie
   const steps = Math.floor(HISTORY_DAYS / POINT_EVERY_DAYS);
   for (let i = 0; i <= steps; i++) {
     const date = addDays(todayIso, -(steps - i) * POINT_EVERY_DAYS);
-    points.push({ date, valueMinor: holdingValueMinor(prices.getPriceMinor(symbol, date), quantity) });
+    const price = prices.getPriceMinor(symbol, date);
+    if (price === null) continue; // before the provider's data begins
+    points.push({ date, valueMinor: holdingValueMinor(price, quantity) });
   }
   return points;
 }

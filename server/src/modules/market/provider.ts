@@ -8,8 +8,12 @@ import { hashString, mulberry32 } from '../../lib/rng.js';
  * the app factory.
  */
 export interface PriceProvider {
-  /** Price of one unit of `symbol` in minor units on the given date. */
-  getPriceMinor(symbol: string, dateISO: string): number;
+  /**
+   * Price of one unit of `symbol` in minor units on the given date, or null
+   * when no price is known for that symbol/date (e.g. before the provider's
+   * data begins) — callers must handle gaps in historical coverage.
+   */
+  getPriceMinor(symbol: string, dateISO: string): number | null;
   /** Resolve a symbol to its instrument name, or null when unknown. */
   lookupSymbol(symbol: string): SymbolLookupDto | null;
 }
@@ -55,13 +59,16 @@ const BASE_PRICES_MINOR: Record<string, number> = {
   XPD: 100_000,
 };
 
+// The simulation's data begins here; earlier dates have no price — mirroring
+// a real provider whose historical coverage does not stretch back forever.
 const ORIGIN = Date.UTC(2020, 0, 1);
 
 export class SimulatedPriceProvider implements PriceProvider {
-  getPriceMinor(symbol: string, dateISO: string): number {
+  getPriceMinor(symbol: string, dateISO: string): number | null {
     const sym = symbol.toUpperCase();
     const base = BASE_PRICES_MINOR[sym] ?? 1_000 + (hashString(sym) % 100_000);
-    const t = Math.max(0, Math.floor((Date.parse(dateISO) - ORIGIN) / 86_400_000));
+    const t = Math.floor((Date.parse(dateISO) - ORIGIN) / 86_400_000);
+    if (Number.isNaN(t) || t < 0) return null;
     const h = hashString(sym);
     // Long-term drift + layered waves + small per-day deterministic noise.
     const trend = 1 + 0.00045 * t;

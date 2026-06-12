@@ -116,8 +116,12 @@ changes today's totals. Deleting an asset hard-deletes its valuations
 - CRUD under `/api/assets` and `/api/liabilities` (identical shape).
 - Creating an entry writes the entry **and** its first valuation in one
   transaction, then upserts today's snapshot. An optional `asOf` backdate
-  records the first valuation on a past date (market entries priced as of
-  that date) and rebuilds daily snapshots from there.
+  starts the entry's history on a past date and rebuilds daily snapshots from
+  there. Backdated **market** entries are backfilled with one valuation per
+  day priced as of each date (historically accurate, not flat at one old
+  price); days the provider cannot price are skipped and flag the asset
+  (`history_price_missing` → `historicalPriceMissing`), which the holdings
+  page shows as a hoverable "incomplete history" label.
 - "Update value" appends a valuation row (history preserved), then upserts
   today's snapshot.
 
@@ -152,10 +156,11 @@ changes today's totals. Deleting an asset hard-deletes its valuations
 
 ### Market valuations
 - Assets with `valuation_mode='market'` hold a `market_symbol` and `quantity`.
-- A `PriceProvider` interface supplies prices and symbol lookup; the default
-  `SimulatedPriceProvider` is a deterministic seeded random walk with a fixed
-  instrument list (no API keys, stable for tests). A real provider can be
-  swapped in via one factory.
+- A `PriceProvider` interface supplies prices and symbol lookup;
+  `getPriceMinor` returns `null` for dates outside the provider's coverage.
+  The default `SimulatedPriceProvider` is a deterministic seeded random walk
+  with a fixed instrument list (no API keys, stable for tests) whose data
+  begins 2020-01-01. A real provider can be swapped in via one factory.
 - `GET /api/market/lookup?symbol=` resolves a ticker to its instrument name;
   the asset form requires this verification before a market entry is saved.
 - Daily job + `POST /api/market/refresh` append market-sourced valuations.

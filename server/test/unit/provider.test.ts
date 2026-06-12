@@ -18,6 +18,12 @@ describe('SimulatedPriceProvider', () => {
     expect(provider.getPriceMinor('UNKNOWN-SYM', '2026-06-11')).toBeGreaterThan(0);
   });
 
+  it('has no prices before its data begins (2020-01-01)', () => {
+    expect(provider.getPriceMinor('BTC', '2019-12-31')).toBeNull();
+    expect(provider.getPriceMinor('VWRL', '2010-06-15')).toBeNull();
+    expect(provider.getPriceMinor('BTC', '2020-01-01')).toBeGreaterThan(0);
+  });
+
   it('computes holding values from quantity', () => {
     expect(holdingValueMinor(10_000, 2.5)).toBe(25_000);
     expect(holdingValueMinor(333, 0.1)).toBe(33);

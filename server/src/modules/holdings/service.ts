@@ -6,7 +6,7 @@ import { ASSET_VALUATION_MODES } from '../../types/api.js';
 import type { HoldingKind } from './kind.js';
 import { withTransaction } from '../../db/connection.js';
 import { badRequest, notFound } from '../../lib/http.js';
-import { todayISO } from '../../lib/dates.js';
+import { addDays, todayISO } from '../../lib/dates.js';
 import { holdingValueMinor } from '../market/provider.js';
 import { recomputeSnapshotRange, refreshTodaySnapshot } from '../snapshots/service.js';
 
@@ -19,6 +19,7 @@ interface HoldingRow {
   valuation_mode?: 'manual' | 'market';
   market_symbol?: string | null;
   quantity?: number | null;
+  history_price_missing?: number;
   created_at: string;
   current_value_minor: number | null;
   last_valued_at: string | null;
@@ -49,7 +50,7 @@ export interface UpdateHoldingInput {
 
 function selectColumns(k: HoldingKind): string {
   const marketCols = k.supportsMarket
-    ? 'h.metal, h.valuation_mode, h.market_symbol, h.quantity,'
+    ? 'h.metal, h.valuation_mode, h.market_symbol, h.quantity, h.history_price_missing,'
     : '';
   return `
     SELECT h.id, h.category, h.name, h.notes, ${marketCols} h.created_at,
@@ -70,6 +71,7 @@ function toDto(row: HoldingRow): HoldingDto {
     valuationMode: row.valuation_mode ?? 'manual',
     marketSymbol: row.market_symbol ?? null,
     quantity: row.quantity ?? null,
+    historicalPriceMissing: row.history_price_missing === 1,
     currentValueMinor: row.current_value_minor ?? 0,
     lastValuedAt: row.last_valued_at ?? row.created_at,
     createdAt: row.created_at,
@@ -133,12 +135,45 @@ function assertModeAllowed(category: string, mode: string): void {
   }
 }
 
-/** Value of a market-mode holding from the price provider, as of a date. */
+/**
+ * Value of a market-mode holding from the price provider, as of a date.
+ * Throws when the provider has no price for that date — callers that can
+ * tolerate gaps (historical backfill) query the provider directly instead.
+ */
 function marketValue(ctx: AppContext, symbol: string, quantity: number, dateISO?: string): number {
-  return holdingValueMinor(
-    ctx.prices.getPriceMinor(symbol, dateISO ?? todayISO(ctx.now)),
-    quantity,
-  );
+  const date = dateISO ?? todayISO(ctx.now);
+  const price = ctx.prices.getPriceMinor(symbol, date);
+  if (price === null) throw badRequest(`No price available for ${symbol.toUpperCase()} on ${date}`);
+  return holdingValueMinor(price, quantity);
+}
+
+/**
+ * Backfill one market valuation per day over [fromISO, toISO] so a backdated
+ * holding is accurate for every date, not flat at its starting price. Days
+ * the provider cannot price are skipped; returns true when any were, so the
+ * holding can be flagged as historically incomplete.
+ */
+function backfillMarketValuations(
+  ctx: AppContext,
+  k: HoldingKind,
+  holdingId: number,
+  symbol: string,
+  quantity: number,
+  fromISO: string,
+  toISO: string,
+): { missing: boolean; inserted: number } {
+  let missing = false;
+  let inserted = 0;
+  for (let d = fromISO; d <= toISO; d = addDays(d, 1)) {
+    const price = ctx.prices.getPriceMinor(symbol, d);
+    if (price === null) {
+      missing = true;
+      continue;
+    }
+    insertValuation(ctx, k, holdingId, holdingValueMinor(price, quantity), 'market', `${d}T12:00:00.000Z`);
+    inserted++;
+  }
+  return { missing, inserted };
 }
 
 export function createHolding(
@@ -171,16 +206,29 @@ export function createHolding(
         .prepare('INSERT INTO liabilities (user_id, category, name, notes) VALUES (?, ?, ?, ?)')
         .run(userId, input.category, input.name, input.notes ?? null).lastInsertRowid as number;
     }
-    // Backdated entries get their first valuation on the chosen past date
-    // (market entries are priced as of that date) and the snapshot history
-    // is recomputed from there.
-    const value = isMarket
-      ? marketValue(ctx, input.marketSymbol!, input.quantity!, input.asOf)
-      : input.valueMinor ?? 0;
-    insertValuation(
-      ctx, k, id, value, isMarket ? 'market' : 'manual',
-      input.asOf ? `${input.asOf}T12:00:00.000Z` : undefined,
-    );
+    // Backdated entries start their history on the chosen past date and the
+    // snapshot history is recomputed from there. Backdated market entries
+    // are priced per day over the whole period (not flat at one old price);
+    // days the provider has no data for flag the holding instead.
+    if (isMarket && input.asOf && input.asOf < today) {
+      const { missing, inserted } = backfillMarketValuations(
+        ctx, k, id, input.marketSymbol!.toUpperCase(), input.quantity!, input.asOf, today,
+      );
+      if (inserted === 0) {
+        throw badRequest(`No price history available for ${input.marketSymbol!.toUpperCase()}`);
+      }
+      if (missing) {
+        ctx.db.prepare('UPDATE assets SET history_price_missing = 1 WHERE id = ?').run(id);
+      }
+    } else {
+      const value = isMarket
+        ? marketValue(ctx, input.marketSymbol!, input.quantity!)
+        : input.valueMinor ?? 0;
+      insertValuation(
+        ctx, k, id, value, isMarket ? 'market' : 'manual',
+        input.asOf ? `${input.asOf}T12:00:00.000Z` : undefined,
+      );
+    }
     if (input.asOf && input.asOf < today) {
       recomputeSnapshotRange(ctx.db, userId, input.asOf, today);
     } else {

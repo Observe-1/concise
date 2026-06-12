@@ -86,7 +86,7 @@ Implemented strictly in order; one commit per feature.
 - [x] 3. Cash assets: no valuation method choice — always manual input
 - [x] 4. Graph: a single data point in the selected period renders as a normal
       (full-strength gold) flat line through that point, not a lone dot
-- [ ] 5. Valuation-method holdings are historically accurate when backdated
+- [x] 5. Valuation-method holdings are historically accurate when backdated
       (per-date prices over the whole backfill); entries whose historical
       prices could not be found get a hoverable error label on the
       assets/liabilities page

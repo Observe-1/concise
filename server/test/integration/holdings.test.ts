@@ -64,8 +64,9 @@ describe('assets & liabilities API', () => {
     });
     expect(res.status).toBe(201);
     expect(res.body.marketSymbol).toBe('BTC');
-    const expected = Math.round(world.ctx.prices.getPriceMinor('BTC', '2026-06-11') * 0.5);
+    const expected = Math.round(world.ctx.prices.getPriceMinor('BTC', '2026-06-11')! * 0.5);
     expect(res.body.currentValueMinor).toBe(expected);
+    expect(res.body.historicalPriceMissing).toBe(false);
 
     await csrf(agent.post('/api/assets'))
       .send({ category: 'crypto', name: 'X', valuationMode: 'market' }).expect(400);
@@ -126,16 +127,54 @@ describe('assets & liabilities API', () => {
       expect(snaps.every((s) => s.assets_minor === 5_000_00)).toBe(true);
     });
 
-    it('prices backdated market assets as of the past date', async () => {
+    it('backfills daily prices for backdated market assets (accurate per date)', async () => {
       const res = await csrf(agent.post('/api/assets')).send({
         category: 'crypto', name: 'Old BTC', valuationMode: 'market',
         marketSymbol: 'BTC', quantity: 0.5, asOf: '2025-03-01',
       });
       expect(res.status).toBe(201);
-      const expected = Math.round(world.ctx.prices.getPriceMinor('BTC', '2025-03-01') * 0.5);
+      expect(res.body.historicalPriceMissing).toBe(false);
+
       const detail = await agent.get(`/api/assets/${res.body.id}`);
-      expect(detail.body.valuations[0].valueMinor).toBe(expected);
-      expect(detail.body.valuations[0].recordedAt).toBe('2025-03-01T12:00:00.000Z');
+      const valuations = detail.body.valuations as { valueMinor: number; recordedAt: string }[];
+      // one valuation per day from the backdate through today
+      expect(valuations).toHaveLength(468); // 2025-03-01 → 2026-06-11 inclusive
+      const oldest = valuations[valuations.length - 1]!;
+      expect(oldest.recordedAt).toBe('2025-03-01T12:00:00.000Z');
+      expect(oldest.valueMinor).toBe(Math.round(world.ctx.prices.getPriceMinor('BTC', '2025-03-01')! * 0.5));
+      expect(valuations[0]!.valueMinor).toBe(Math.round(world.ctx.prices.getPriceMinor('BTC', '2026-06-11')! * 0.5));
+
+      // history is priced per date — snapshots differ month to month
+      const snap = (date: string) => world.ctx.db
+        .prepare('SELECT assets_minor FROM snapshots WHERE snapshot_date = ?')
+        .get(date) as { assets_minor: number };
+      expect(snap('2025-04-01').assets_minor).toBe(Math.round(world.ctx.prices.getPriceMinor('BTC', '2025-04-01')! * 0.5));
+      expect(snap('2025-09-01').assets_minor).toBe(Math.round(world.ctx.prices.getPriceMinor('BTC', '2025-09-01')! * 0.5));
+      expect(snap('2025-04-01').assets_minor).not.toBe(snap('2025-09-01').assets_minor);
+    });
+
+    it('flags entries whose historical prices cannot be found', async () => {
+      // The simulated provider has no data before 2020-01-01.
+      const res = await csrf(agent.post('/api/assets')).send({
+        category: 'investments', name: 'Ancient holding', valuationMode: 'market',
+        marketSymbol: 'VWRL', quantity: 10, asOf: '2019-11-15',
+      });
+      expect(res.status).toBe(201);
+      expect(res.body.historicalPriceMissing).toBe(true);
+
+      // valuations only exist from the provider's data start onwards
+      const oldest = world.ctx.db
+        .prepare(
+          `SELECT MIN(recorded_at) AS first FROM asset_valuations WHERE asset_id = ?`,
+        )
+        .get(res.body.id) as { first: string };
+      expect(oldest.first).toBe('2020-01-01T12:00:00.000Z');
+
+      // assets priced from their data start are not flagged
+      const list = await agent.get('/api/assets');
+      const flagged = (list.body as { name: string; historicalPriceMissing: boolean }[])
+        .find((a) => a.name === 'Ancient holding');
+      expect(flagged?.historicalPriceMissing).toBe(true);
     });
 
     it('works for liabilities and affects net worth from that date', async () => {

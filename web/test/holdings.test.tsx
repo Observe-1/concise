@@ -67,6 +67,23 @@ describe('assets page', () => {
     });
   });
 
+  it('labels entries whose historical prices could not be found, with hover text', async () => {
+    mockFetch([
+      [/\/api\/auth\/me/, { user: demoUser }],
+      [/\/api\/assets$/, [{
+        ...assets[1]!, historicalPriceMissing: true,
+      }]],
+    ]);
+    renderWithProviders(<App />, { route: '/assets' });
+
+    expect(await screen.findByText('Bitcoin')).toBeInTheDocument();
+    const label = screen.getByText(/incomplete history/i);
+    expect(label).toHaveAttribute(
+      'title',
+      'Accurate historical price information could not be found about this asset.',
+    );
+  });
+
   it('offers no valuation method for cash — manual input only', async () => {
     mockFetch([
       [/\/api\/auth\/me/, { user: demoUser }],
