@@ -79,6 +79,56 @@ describe('recurring transactions', () => {
     expect(runDueRecurring(world.ctx)).toBe(0);
   });
 
+  it('applies percentage schedules to the targets current value', async () => {
+    await csrf(agent.post('/api/recurring')).send({
+      name: 'Interest', targetType: 'asset', targetId: savingsId,
+      percent: 10, cadence: 'monthly', nextRunOn: '2026-06-11',
+    });
+    expect(runDueRecurring(world.ctx)).toBe(1);
+
+    const asset = await agent.get(`/api/assets/${savingsId}`);
+    expect(asset.body.currentValueMinor).toBe(1_100_00); // 1000 × 1.10
+
+    const schedule = (await agent.get('/api/recurring')).body[0];
+    expect(schedule.amountType).toBe('percent');
+    expect(schedule.percent).toBe(10);
+    expect(schedule.amountMinor).toBeNull();
+  });
+
+  it('percentage schedules compound across catch-up occurrences', async () => {
+    await csrf(agent.post('/api/recurring')).send({
+      name: 'Halve the loan', targetType: 'liability', targetId: loanId,
+      percent: -50, cadence: 'monthly', nextRunOn: '2026-06-11',
+    });
+    world.advanceDays(35); // Jun 11 + Jul 11 due
+    expect(runDueRecurring(world.ctx)).toBe(2);
+
+    agent = await loginAgent(world.app); // previous session expired with the clock jump
+    const loan = await agent.get(`/api/liabilities/${loanId}`);
+    expect(loan.body.currentValueMinor).toBe(125_00); // 500 → 250 → 125
+  });
+
+  it('requires exactly one of amount and percent', async () => {
+    const base = {
+      name: 'X', targetType: 'asset', targetId: savingsId,
+      cadence: 'monthly', nextRunOn: '2026-07-01',
+    };
+    await csrf(agent.post('/api/recurring')).send(base).expect(400); // neither
+    await csrf(agent.post('/api/recurring'))
+      .send({ ...base, amountMinor: 100, percent: 5 }).expect(400); // both
+    await csrf(agent.post('/api/recurring')).send({ ...base, percent: 0 }).expect(400);
+    await csrf(agent.post('/api/recurring')).send({ ...base, percent: -150 }).expect(400);
+
+    // switching an existing fixed schedule to percent via PATCH
+    const created = await csrf(agent.post('/api/recurring'))
+      .send({ ...base, amountMinor: 100_00 });
+    const patched = await csrf(agent.patch(`/api/recurring/${created.body.id}`))
+      .send({ percent: 2.5 });
+    expect(patched.body.amountType).toBe('percent');
+    expect(patched.body.percent).toBe(2.5);
+    expect(patched.body.amountMinor).toBeNull();
+  });
+
   it('catches up missed occurrences after downtime', async () => {
     await csrf(agent.post('/api/recurring')).send({
       name: 'Pay loan', targetType: 'liability', targetId: loanId,

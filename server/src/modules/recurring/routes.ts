@@ -13,24 +13,35 @@ const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD'
   'Invalid date',
 );
 const amountSchema = z.number().int().min(-MAX_MINOR).max(MAX_MINOR).refine((n) => n !== 0, 'Amount cannot be zero');
+// Percent of the target's current value per occurrence. -100 empties the
+// target; growth is capped at a (generous) +1000% per occurrence.
+const percentSchema = z.number().finite().min(-100).max(1000).refine((n) => n !== 0, 'Percent cannot be zero');
 const cadenceSchema = z.enum(['daily', 'weekly', 'monthly', 'yearly']);
 
 const createSchema = z.object({
   name: z.string().trim().min(1).max(120),
   targetType: z.enum(['asset', 'liability']),
   targetId: z.number().int().positive(),
-  amountMinor: amountSchema,
+  amountMinor: amountSchema.optional(),
+  percent: percentSchema.optional(),
   cadence: cadenceSchema,
   nextRunOn: dateSchema,
-});
+}).refine(
+  (d) => (d.amountMinor !== undefined) !== (d.percent !== undefined),
+  { message: 'Provide exactly one of amountMinor or percent' },
+);
 
 const updateSchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
   amountMinor: amountSchema.optional(),
+  percent: percentSchema.optional(),
   cadence: cadenceSchema.optional(),
   nextRunOn: dateSchema.optional(),
   active: z.boolean().optional(),
-});
+}).refine(
+  (d) => d.amountMinor === undefined || d.percent === undefined,
+  { message: 'Provide at most one of amountMinor or percent' },
+);
 
 export function recurringRoutes(ctx: AppContext): Router {
   const router = Router();

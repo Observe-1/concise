@@ -84,7 +84,7 @@ users 1──* audit_log
 | `asset_valuations` | Value history | Append-only; `source` ∈ manual, recurring, market, seed. Current value = latest row |
 | `liabilities` | Liability entries | `category` ∈ mortgage, loan, credit_card, student_loan, other. Balances stored positive |
 | `liability_valuations` | Balance history | Mirrors asset valuations |
-| `recurring_transactions` | Recurring movements | Signed `amount_minor` delta, `cadence` ∈ daily, weekly, monthly, yearly, `next_run_on` date cursor; CHECK enforces exactly one target |
+| `recurring_transactions` | Recurring movements | `amount_type` ∈ fixed (signed `amount_minor` delta) \| percent (signed `percent` of current value, compounds), `cadence` ∈ daily, weekly, monthly, yearly, `next_run_on` date cursor; CHECKs enforce exactly one target and exactly one of amount/percent |
 | `snapshots` | Daily net-worth | `UNIQUE(user_id, snapshot_date)`; assets/liabilities/net-worth totals; `source` ∈ computed, legacy — legacy rows are user-entered past net-worth points that recomputation never overwrites. Graphs read this table |
 | `audit_log` | Security audit | Auth events + mutations, with IP |
 
@@ -137,9 +137,10 @@ changes today's totals. Deleting an asset hard-deletes its valuations
 ### Recurring transactions
 - Each row holds a `next_run_on` cursor. The engine (job tick + on-login
   catch-up) processes all rows with `next_run_on <= today` in a transaction:
-  append a valuation (latest value + signed amount, floored at 0 for
-  liabilities), advance the cursor by cadence (month-end clamped), repeat
-  until caught up. Idempotent and safe across downtime.
+  append a valuation (fixed: latest value + signed amount; percent: latest
+  value × (1 + pct/100), compounding per occurrence — both floored at 0),
+  advance the cursor by cadence (month-end clamped), repeat until caught up.
+  Idempotent and safe across downtime.
 
 ### Dashboard
 - `GET /api/dashboard/summary` — current totals + per-category breakdown

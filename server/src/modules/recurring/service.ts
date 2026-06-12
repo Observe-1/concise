@@ -11,7 +11,9 @@ interface RecurringRow {
   name: string;
   asset_id: number | null;
   liability_id: number | null;
-  amount_minor: number;
+  amount_type: 'fixed' | 'percent';
+  amount_minor: number | null;
+  percent: number | null;
   cadence: Cadence;
   next_run_on: string;
   last_run_on: string | null;
@@ -32,7 +34,9 @@ function toDto(row: RecurringRow): RecurringDto {
     targetType: row.asset_id !== null ? 'asset' : 'liability',
     targetId: (row.asset_id ?? row.liability_id)!,
     targetName: row.target_name ?? '(deleted)',
+    amountType: row.amount_type,
     amountMinor: row.amount_minor,
+    percent: row.percent,
     cadence: row.cadence,
     nextRunOn: row.next_run_on,
     lastRunOn: row.last_run_on,
@@ -51,7 +55,9 @@ export interface CreateRecurringInput {
   name: string;
   targetType: 'asset' | 'liability';
   targetId: number;
-  amountMinor: number;
+  /** Exactly one of amountMinor (fixed) / percent must be provided. */
+  amountMinor?: number;
+  percent?: number;
   cadence: Cadence;
   nextRunOn: string;
 }
@@ -64,17 +70,21 @@ function assertTargetOwned(ctx: AppContext, userId: number, type: 'asset' | 'lia
 
 export function createRecurring(ctx: AppContext, userId: number, input: CreateRecurringInput): RecurringDto {
   assertTargetOwned(ctx, userId, input.targetType, input.targetId);
+  const isPercent = input.percent !== undefined;
   const id = ctx.db
     .prepare(
       `INSERT INTO recurring_transactions
-         (user_id, name, asset_id, liability_id, amount_minor, cadence, next_run_on)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+         (user_id, name, asset_id, liability_id, amount_type, amount_minor, percent, cadence, next_run_on)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       userId, input.name,
       input.targetType === 'asset' ? input.targetId : null,
       input.targetType === 'liability' ? input.targetId : null,
-      input.amountMinor, input.cadence, input.nextRunOn,
+      isPercent ? 'percent' : 'fixed',
+      isPercent ? null : input.amountMinor!,
+      isPercent ? input.percent! : null,
+      input.cadence, input.nextRunOn,
     ).lastInsertRowid as number;
   return getRecurring(ctx, userId, id);
 }
@@ -90,6 +100,7 @@ export function getRecurring(ctx: AppContext, userId: number, id: number): Recur
 export interface UpdateRecurringInput {
   name?: string;
   amountMinor?: number;
+  percent?: number;
   cadence?: Cadence;
   nextRunOn?: string;
   active?: boolean;
@@ -102,15 +113,31 @@ export function updateRecurring(
   patch: UpdateRecurringInput,
 ): RecurringDto {
   const existing = getRecurring(ctx, userId, id);
+  // Supplying percent switches the schedule to percent mode and vice versa;
+  // otherwise the existing amount settings stand.
+  let amountType = existing.amountType;
+  let amountMinor = existing.amountMinor;
+  let percent = existing.percent;
+  if (patch.percent !== undefined) {
+    amountType = 'percent';
+    percent = patch.percent;
+    amountMinor = null;
+  } else if (patch.amountMinor !== undefined) {
+    amountType = 'fixed';
+    amountMinor = patch.amountMinor;
+    percent = null;
+  }
   ctx.db
     .prepare(
       `UPDATE recurring_transactions
-       SET name = ?, amount_minor = ?, cadence = ?, next_run_on = ?, active = ?
+       SET name = ?, amount_type = ?, amount_minor = ?, percent = ?, cadence = ?, next_run_on = ?, active = ?
        WHERE id = ?`,
     )
     .run(
       patch.name ?? existing.name,
-      patch.amountMinor ?? existing.amountMinor,
+      amountType,
+      amountMinor,
+      percent,
       patch.cadence ?? existing.cadence,
       patch.nextRunOn ?? existing.nextRunOn,
       (patch.active ?? existing.active) ? 1 : 0,
@@ -127,7 +154,8 @@ export function deleteRecurring(ctx: AppContext, userId: number, id: number): vo
 /**
  * The recurring engine. Processes every active schedule whose cursor is due
  * (next_run_on <= today), appending a 'recurring' valuation per occurrence:
- *   new value = latest value + amount   (floored at 0)
+ *   fixed:   new value = latest value + amount          (floored at 0)
+ *   percent: new value = latest value × (1 + pct/100)   (floored at 0)
  * The cursor advances per cadence until it points past today, so missed runs
  * catch up after downtime. Affected users get their snapshots recomputed from
  * the earliest applied date. Idempotent: a processed occurrence moves the
@@ -170,7 +198,10 @@ export function runDueRecurring(ctx: AppContext, userId?: number): number {
         const latest = latestStmt.get(targetId) as
           | { value_minor: number; recorded_at: string }
           | undefined;
-        const newValue = Math.max(0, (latest?.value_minor ?? 0) + row.amount_minor);
+        const current = latest?.value_minor ?? 0;
+        const newValue = Math.max(0, row.amount_type === 'percent'
+          ? Math.round(current * (1 + row.percent! / 100))
+          : current + row.amount_minor!);
         // Record on the scheduled day, but never before the latest existing
         // valuation — the occurrence supersedes it as the current value.
         let recordedAt = `${cursor}T00:00:00.000Z`;

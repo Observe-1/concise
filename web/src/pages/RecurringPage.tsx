@@ -53,8 +53,10 @@ export function RecurringPage() {
                     {CADENCE_LABELS[r.cadence]} · {r.targetName} · next {r.nextRunOn}
                   </span>
                 </button>
-                <span className={`tabular shrink-0 text-sm font-semibold ${r.amountMinor >= 0 ? 'text-gain-400' : 'text-loss-400'}`}>
-                  {r.amountMinor >= 0 ? '+' : ''}{formatMinor(r.amountMinor, currency)}
+                <span className={`tabular shrink-0 text-sm font-semibold ${signedAmount(r) >= 0 ? 'text-gain-400' : 'text-loss-400'}`}>
+                  {r.amountType === 'percent'
+                    ? `${r.percent! >= 0 ? '+' : ''}${r.percent}%`
+                    : `${r.amountMinor! >= 0 ? '+' : ''}${formatMinor(r.amountMinor!, currency)}`}
                 </span>
                 <label className="flex shrink-0 cursor-pointer items-center" aria-label={`${r.name} active`}>
                   <input
@@ -77,6 +79,11 @@ export function RecurringPage() {
   );
 }
 
+/** The schedule's signed movement, whatever its type — for colouring. */
+function signedAmount(r: RecurringDto): number {
+  return r.amountType === 'percent' ? r.percent! : r.amountMinor!;
+}
+
 function RecurringForm({ existing, onClose }: { existing?: RecurringDto; onClose: () => void }) {
   const assets = useHoldings('assets');
   const liabilities = useHoldings('liabilities');
@@ -87,10 +94,17 @@ function RecurringForm({ existing, onClose }: { existing?: RecurringDto; onClose
   const [name, setName] = useState(existing?.name ?? '');
   const [targetType, setTargetType] = useState<'asset' | 'liability'>(existing?.targetType ?? 'asset');
   const [targetId, setTargetId] = useState<string>(existing?.targetId.toString() ?? '');
+  const [amountType, setAmountType] = useState<'fixed' | 'percent'>(existing?.amountType ?? 'fixed');
   const [direction, setDirection] = useState<'add' | 'subtract'>(
-    existing && existing.amountMinor < 0 ? 'subtract' : 'add',
+    existing && signedAmount(existing) < 0 ? 'subtract' : 'add',
   );
-  const [amount, setAmount] = useState(existing ? minorToInput(Math.abs(existing.amountMinor)) : '');
+  const [amount, setAmount] = useState(
+    existing
+      ? existing.amountType === 'percent'
+        ? Math.abs(existing.percent!).toString()
+        : minorToInput(Math.abs(existing.amountMinor!))
+      : '',
+  );
   const [cadence, setCadence] = useState(existing?.cadence ?? 'monthly');
   const [nextRunOn, setNextRunOn] = useState(existing?.nextRunOn ?? defaultNextRun());
   const [formError, setFormError] = useState<string | null>(null);
@@ -101,18 +115,28 @@ function RecurringForm({ existing, onClose }: { existing?: RecurringDto; onClose
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
     setFormError(null);
-    const magnitude = parseToMinor(amount);
-    if (magnitude === null || magnitude === 0) {
-      setFormError('Enter a valid non-zero amount.');
-      return;
+    let movement: { amountMinor: number } | { percent: number };
+    if (amountType === 'percent') {
+      const pct = Number(amount);
+      if (!Number.isFinite(pct) || pct <= 0 || pct > 1000) {
+        setFormError('Enter a valid percentage, e.g. 0.5');
+        return;
+      }
+      movement = { percent: direction === 'subtract' ? -pct : pct };
+    } else {
+      const magnitude = parseToMinor(amount);
+      if (magnitude === null || magnitude === 0) {
+        setFormError('Enter a valid non-zero amount.');
+        return;
+      }
+      movement = { amountMinor: direction === 'subtract' ? -magnitude : magnitude };
     }
-    const amountMinor = direction === 'subtract' ? -magnitude : magnitude;
     const onError = (err: unknown) =>
       setFormError(err instanceof Error ? err.message : 'Something went wrong');
 
     if (existing) {
       update.mutate(
-        { id: existing.id, name, amountMinor, cadence, nextRunOn },
+        { id: existing.id, name, ...movement, cadence, nextRunOn },
         { onSuccess: onClose, onError },
       );
     } else {
@@ -121,7 +145,7 @@ function RecurringForm({ existing, onClose }: { existing?: RecurringDto; onClose
         return;
       }
       create.mutate(
-        { name, targetType, targetId: Number(targetId), amountMinor, cadence, nextRunOn },
+        { name, targetType, targetId: Number(targetId), ...movement, cadence, nextRunOn },
         { onSuccess: onClose, onError },
       );
     }
@@ -164,6 +188,18 @@ function RecurringForm({ existing, onClose }: { existing?: RecurringDto; onClose
           </>
         )}
 
+        <Field
+          label="Amount type"
+          hint={amountType === 'percent' ? "Applied to the target's value at each occurrence — compounds over time." : undefined}
+        >
+          {(id) => (
+            <Select id={id} value={amountType} onChange={(e) => setAmountType(e.target.value as 'fixed' | 'percent')}>
+              <option value="fixed">Fixed amount</option>
+              <option value="percent">Percentage of current value</option>
+            </Select>
+          )}
+        </Field>
+
         <div className="grid grid-cols-2 gap-3">
           <Field label="Direction">
             {(id) => (
@@ -173,10 +209,10 @@ function RecurringForm({ existing, onClose }: { existing?: RecurringDto; onClose
               </Select>
             )}
           </Field>
-          <Field label="Amount">
+          <Field label={amountType === 'percent' ? 'Percent (%)' : 'Amount'}>
             {(id) => (
               <Input id={id} value={amount} onChange={(e) => setAmount(e.target.value)}
-                inputMode="decimal" placeholder="0.00" required />
+                inputMode="decimal" placeholder={amountType === 'percent' ? '0.5' : '0.00'} required />
             )}
           </Field>
         </div>

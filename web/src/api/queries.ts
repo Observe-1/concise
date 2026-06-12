@@ -174,7 +174,9 @@ export interface RecurringInput {
   name: string;
   targetType: 'asset' | 'liability';
   targetId: number;
-  amountMinor: number;
+  /** Exactly one of amountMinor (fixed) / percent. */
+  amountMinor?: number;
+  percent?: number;
   cadence: string;
   nextRunOn: string;
 }

@@ -97,7 +97,7 @@ Implemented strictly in order; one commit per feature.
       property price change
 - [x] 8. Vehicle assets: valuation method applying average vehicle
       depreciation, with a manufacture-date field for correct depreciation
-- [ ] 9. Recurring: percentage amounts (e.g. +0.4% monthly) besides fixed
+- [x] 9. Recurring: percentage amounts (e.g. +0.4% monthly) besides fixed
 - [ ] 10. Recurring: quarterly cadence
 - [ ] 11. Settings overhaul: sub pages (User account / History / Calculation)
       selectable by buttons at the top

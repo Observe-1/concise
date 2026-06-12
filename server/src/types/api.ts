@@ -94,7 +94,11 @@ export interface RecurringDto {
   targetType: 'asset' | 'liability';
   targetId: number;
   targetName: string;
-  amountMinor: number;
+  /** Fixed schedules move by amountMinor; percent schedules by percent of
+   *  the target's current value. Exactly one of the two is set. */
+  amountType: 'fixed' | 'percent';
+  amountMinor: number | null;
+  percent: number | null;
   cadence: Cadence;
   nextRunOn: string;
   lastRunOn: string | null;
