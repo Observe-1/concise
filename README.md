@@ -10,23 +10,33 @@ all in a fast, private, self-hostable app.
 
 - **Dashboard** — total assets, liabilities, and net worth with an
   interactive history graph (1M / 3M / 6M / YTD / 1Y / 5Y / 10Y / 20Y / All,
-  full-screen mode), a smoothed trend line computed over the full history
-  (stable across range changes), and age markers on 5-year-plus ranges
-  (every age at 5Y, every 2nd at 10Y, every 4th at 20Y, every 5th on All —
-  set your birth year in Settings).
+  full-screen mode), a trend line with an adjustable rolling-average window
+  (slider next to the graph; stable across range changes), graph smoothing
+  that ramps sparse manual revaluations over the gap instead of one-day
+  cliffs, and age markers on 5-year-plus ranges (set your birth year in
+  Settings → Calculation).
+- **Historical view mode** — drag the red circle under the graph to pin the
+  whole app to a past date: every page shows the portfolio exactly as it
+  stood then (later entries vanish, values are as-of), survives navigation,
+  and a floating reset button returns to today.
 - **Assets & liabilities** — multiple entries per class, each with a unique
   emoji (💵 cash, 📈 stock investments, 🏠 property, 🚗 vehicles, 🪙 crypto,
   🥇 precious metals with gold/silver/platinum/palladium sub-selection, 📦
   other / 🏦 mortgage, 💸 loans, 💳 credit cards, 🎓 student loans, ⚖️
   other), full value history per entry, and optional backdating on creation.
-- **History editing** — Settings lists every historic entry across all
-  holdings for editing or deletion, and accepts legacy wealth points
+- **Valuation methods per category** — cash is always a manual figure;
+  anything tradable can be market-priced (symbol × quantity with a
+  verification step); property can auto-apply a country's yearly average
+  price change; vehicles can auto-depreciate by age from their manufacture
+  date. Backdated auto-valued entries are backfilled with one historically
+  accurate value per day — entries whose history the provider cannot price
+  are flagged on the page.
+- **History editing** — Settings → History lists every historic entry across
+  all holdings for editing or deletion, and accepts legacy wealth points
   ("on X date my net worth was Y") that appear on the graph.
-- **Recurring movements** — scheduled increases/decreases (salary into
-  savings, mortgage payments, …) applied automatically.
-- **Market valuations** — symbol-linked holdings refreshed by a pluggable
-  price provider, with a verification step that resolves each ticker to its
-  instrument name before saving.
+- **Recurring movements** — scheduled fixed or percentage changes (salary
+  into savings, mortgage payments, compounding interest, …) on daily,
+  weekly, monthly, quarterly or yearly cadences, applied automatically.
 - **Multi-user** — self-service account creation, session auth, rate
   limiting, and audit logging.
 

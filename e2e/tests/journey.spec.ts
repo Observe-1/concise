@@ -134,7 +134,7 @@ test('executes a recurring transaction automatically', async ({ page }, testInfo
   await dialog.getByLabel(/^name$/i).fill(`E2E Deposit ${testInfo.project.name}`);
   await dialog.getByLabel(/applies to/i).selectOption('asset');
   await dialog.getByLabel(/^asset$/i).selectOption({ label: assetName });
-  await dialog.getByLabel(/amount/i).fill('50.00');
+  await dialog.getByLabel(/^amount$/i).fill('50.00');
   await dialog.getByLabel(/cadence/i).selectOption('daily');
   await dialog.getByLabel(/next run/i).fill(todayISO());
   await dialog.getByRole('button', { name: /add schedule/i }).click();

@@ -1,6 +1,6 @@
 # TODO — single source of truth for progress
 
-**Status: feature batch (2026-06-12 #2) in progress. Deployment is out of scope.**
+**Status: complete (phases 1–6 + three feature batches). Deployment is out of scope.**
 
 ## Phase 1: System architecture
 - [x] Tech stack decisions (Node 24 + node:sqlite + Express 5 / React 19 + Vite + Tailwind 4)
