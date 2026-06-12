@@ -94,6 +94,15 @@ upserted (idempotent) by: a daily job, and inline after any mutation that
 changes today's totals. Deleting an asset hard-deletes its valuations
 (CASCADE) but never rewrites past snapshots — net-worth history is preserved.
 
+**Graph smoothing:** when a holding's next valuation is a *manual*
+revaluation recorded after a multi-day gap, snapshot recomputation
+interpolates the value linearly across the gap (the change happened over the
+period, not on the day it was typed in), so the graph ramps instead of
+showing a one-day cliff. Recurring, market and seed valuations are discrete
+events and keep step semantics. Because smoothing looks one entry ahead,
+mutations recompute from the holding's previous anchor, not just the changed
+day.
+
 ## 4. Core flows
 
 ### Auth

@@ -363,6 +363,55 @@ describe('assets & liabilities API', () => {
     });
   });
 
+  describe('graph smoothing between sparse entries', () => {
+    const snap = (world: TestWorld, d: string) => (world.ctx.db
+      .prepare('SELECT assets_minor FROM snapshots WHERE snapshot_date = ?')
+      .get(d) as { assets_minor: number }).assets_minor;
+
+    it('interpolates a manual revaluation linearly across the gap', async () => {
+      const created = await csrf(agent.post('/api/assets'))
+        .send({ category: 'cash', name: 'Sav', valueMinor: 100_00, asOf: '2026-06-01' });
+      await csrf(agent.post(`/api/assets/${created.body.id}/valuations`)).send({ valueMinor: 200_00 });
+
+      // 1 Jun (100) → 11 Jun (200): a ramp, not a one-day cliff on the 11th
+      expect(snap(world, '2026-06-01')).toBe(100_00);
+      expect(snap(world, '2026-06-04')).toBe(130_00);
+      expect(snap(world, '2026-06-06')).toBe(150_00);
+      expect(snap(world, '2026-06-10')).toBe(190_00);
+      expect(snap(world, '2026-06-11')).toBe(200_00);
+    });
+
+    it('re-smooths the lead-in days when an entry is edited', async () => {
+      const created = await csrf(agent.post('/api/assets'))
+        .send({ category: 'cash', name: 'Sav', valueMinor: 100_00, asOf: '2026-06-01' });
+      await csrf(agent.post(`/api/assets/${created.body.id}/valuations`)).send({ valueMinor: 200_00 });
+
+      // move today's 200 entry to 9 Jun: the ramp must re-fit to 1→9 Jun
+      const entries = (await agent.get(`/api/history/entries?side=asset&holdingId=${created.body.id}`)).body;
+      await csrf(agent.patch(`/api/history/entries/asset/${entries[0].id}`))
+        .send({ recordedOn: '2026-06-09' }).expect(200);
+
+      expect(snap(world, '2026-06-05')).toBe(150_00); // halfway through 1→9 Jun
+      expect(snap(world, '2026-06-09')).toBe(200_00);
+      expect(snap(world, '2026-06-10')).toBe(200_00); // flat after the last entry
+    });
+
+    it('does not smooth recurring occurrences (discrete events step)', async () => {
+      const created = await csrf(agent.post('/api/assets'))
+        .send({ category: 'cash', name: 'Wages in', valueMinor: 100_00, asOf: '2026-05-20' });
+      await csrf(agent.post('/api/recurring')).send({
+        name: 'Salary', targetType: 'asset', targetId: created.body.id,
+        amountMinor: 50_00, cadence: 'monthly', nextRunOn: '2026-06-10',
+      });
+      const { runDueRecurring } = await import('../../src/modules/recurring/service.js');
+      runDueRecurring(world.ctx);
+
+      expect(snap(world, '2026-06-05')).toBe(100_00); // unchanged until payday
+      expect(snap(world, '2026-06-09')).toBe(100_00);
+      expect(snap(world, '2026-06-10')).toBe(150_00); // the step lands on the day
+    });
+  });
+
   it('mirrors the structure for liabilities (no market mode)', async () => {
     const created = await csrf(agent.post('/api/liabilities'))
       .send({ category: 'mortgage', name: 'Home loan', valueMinor: 250_000_00 });

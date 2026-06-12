@@ -438,8 +438,23 @@ export function addValuation(
 ): HoldingDto {
   return withTransaction(ctx.db, () => {
     getRow(ctx, k, userId, id);
+    // A manual revaluation after a gap is smoothed across the gap on the
+    // graph, so the snapshots since the previous entry must be recomputed —
+    // not just today's.
+    const prev = ctx.db
+      .prepare(
+        `SELECT recorded_at FROM ${k.valuationTable}
+         WHERE ${k.fk} = ? ORDER BY recorded_at DESC, id DESC LIMIT 1`,
+      )
+      .get(id) as { recorded_at: string } | undefined;
     insertValuation(ctx, k, id, valueMinor, 'manual');
-    refreshTodaySnapshot(ctx, userId);
+    const today = todayISO(ctx.now);
+    const prevDate = prev?.recorded_at.slice(0, 10);
+    if (prevDate && prevDate < today) {
+      recomputeSnapshotRange(ctx.db, userId, prevDate, today);
+    } else {
+      refreshTodaySnapshot(ctx, userId);
+    }
     return toDto(getRow(ctx, k, userId, id));
   });
 }

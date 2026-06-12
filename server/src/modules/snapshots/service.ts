@@ -59,6 +59,7 @@ interface ValuationRow {
   hid: number;
   value_minor: number;
   recorded_at: string;
+  source: string;
 }
 
 function groupByHolding(rows: ValuationRow[]): ValuationRow[][] {
@@ -71,11 +72,56 @@ function groupByHolding(rows: ValuationRow[]): ValuationRow[][] {
   return [...map.values()];
 }
 
+const DAY_MS = 86_400_000;
+const dayNum = (iso: string) => Math.floor(Date.parse(`${iso.slice(0, 10)}T00:00:00Z`) / DAY_MS);
+
+/** One value per calendar day (the day's last valuation wins). */
+interface Anchor {
+  day: number;
+  value: number;
+  manual: boolean;
+}
+
+function toAnchors(series: ValuationRow[]): Anchor[] {
+  const anchors: Anchor[] = [];
+  for (const row of series) {
+    const day = dayNum(row.recorded_at);
+    const last = anchors[anchors.length - 1];
+    if (last && last.day === day) {
+      last.value = row.value_minor;
+      last.manual = row.source === 'manual';
+    } else {
+      anchors.push({ day, value: row.value_minor, manual: row.source === 'manual' });
+    }
+  }
+  return anchors;
+}
+
+/**
+ * A holding's value at the end of day `d`, where `i` indexes the last anchor
+ * on or before `d` (-1 when none). A manual revaluation after a gap is
+ * interpolated linearly across the gap — the change happened over the whole
+ * period, not on the day it was typed in — so graphs ramp instead of showing
+ * a one-day cliff. Recurring/market/seed valuations are events that genuinely
+ * occur on their day and keep step semantics.
+ */
+function valueAt(anchors: Anchor[], i: number, d: number): number {
+  if (i < 0) return 0;
+  const a = anchors[i]!;
+  const b = anchors[i + 1];
+  if (b && b.manual && d > a.day && b.day - a.day > 1) {
+    return Math.round(a.value + ((b.value - a.value) * (d - a.day)) / (b.day - a.day));
+  }
+  return a.value;
+}
+
 /**
  * Recompute snapshots for every day in [fromISO, toISO]. Bulk implementation:
  * loads each holding's valuations once and walks the days with per-holding
  * cursors (O(days × holdings)), so multi-year backdates stay fast. Legacy
- * rows are preserved by the upsert guard.
+ * rows are preserved by the upsert guard. Note: interpolation looks one
+ * anchor ahead, so callers that change a valuation must recompute from the
+ * holding's previous anchor (see history service), not just the changed day.
  */
 export function recomputeSnapshotRange(
   db: DatabaseSync,
@@ -86,13 +132,13 @@ export function recomputeSnapshotRange(
   if (fromISO > toISO) return;
   const cutoff = `${toISO}T23:59:59.999Z`;
   const assetSeries = groupByHolding(db.prepare(
-    `SELECT v.asset_id AS hid, v.value_minor, v.recorded_at
+    `SELECT v.asset_id AS hid, v.value_minor, v.recorded_at, v.source
      FROM asset_valuations v JOIN assets a ON a.id = v.asset_id
      WHERE a.user_id = ? AND v.recorded_at <= ?
      ORDER BY v.recorded_at, v.id`,
   ).all(userId, cutoff) as unknown as ValuationRow[]);
   const liabilitySeries = groupByHolding(db.prepare(
-    `SELECT v.liability_id AS hid, v.value_minor, v.recorded_at
+    `SELECT v.liability_id AS hid, v.value_minor, v.recorded_at, v.source
      FROM liability_valuations v JOIN liabilities l ON l.id = v.liability_id
      WHERE l.user_id = ? AND v.recorded_at <= ?
      ORDER BY v.recorded_at, v.id`,
@@ -108,21 +154,20 @@ export function recomputeSnapshotRange(
      WHERE snapshots.source != 'legacy'`,
   );
 
-  const allSeries = [...assetSeries, ...liabilitySeries];
-  const cursors = allSeries.map(() => 0);
-  const currents = allSeries.map(() => 0);
+  const allAnchors = [...assetSeries.map(toAnchors), ...liabilitySeries.map(toAnchors)];
+  const cursors = allAnchors.map(() => -1);
   const assetCount = assetSeries.length;
-  for (let d = fromISO; d <= toISO; d = addDays(d, 1)) {
-    const dayEnd = `${d}T23:59:59.999Z`;
+  let dNum = dayNum(fromISO);
+  for (let d = fromISO; d <= toISO; d = addDays(d, 1), dNum++) {
     let assets = 0;
     let liabilities = 0;
-    allSeries.forEach((series, i) => {
-      while (cursors[i]! < series.length && series[cursors[i]!]!.recorded_at <= dayEnd) {
-        currents[i] = series[cursors[i]!]!.value_minor;
+    allAnchors.forEach((anchors, i) => {
+      while (cursors[i]! + 1 < anchors.length && anchors[cursors[i]! + 1]!.day <= dNum) {
         cursors[i]!++;
       }
-      if (i < assetCount) assets += currents[i]!;
-      else liabilities += currents[i]!;
+      const value = valueAt(anchors, cursors[i]!, dNum);
+      if (i < assetCount) assets += value;
+      else liabilities += value;
     });
     upsert.run(userId, d, assets, liabilities, assets - liabilities);
   }

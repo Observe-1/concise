@@ -2,7 +2,7 @@ import type { AppContext } from '../../context.js';
 import type { HistoryEntryDto, LegacySnapshotDto } from '../../types/api.js';
 import { badRequest, notFound } from '../../lib/http.js';
 import { todayISO } from '../../lib/dates.js';
-import { recomputeSnapshotRange, upsertSnapshot } from '../snapshots/service.js';
+import { recomputeSnapshotRange } from '../snapshots/service.js';
 
 /**
  * Legacy wealth: a user-entered "on X date my net worth was Y" point, stored
@@ -129,6 +129,27 @@ export interface EntryPatch {
   recordedOn?: string;
 }
 
+/**
+ * Snapshot recompute must start at the holding's anchor BEFORE the earliest
+ * affected date: graph smoothing interpolates between neighbouring entries,
+ * so the days leading up to a changed entry are affected too.
+ */
+function recomputeStart(
+  ctx: AppContext,
+  side: EntrySide,
+  holdingId: number,
+  earliestISO: string,
+): string {
+  const s = SIDES[side];
+  const prev = ctx.db
+    .prepare(
+      `SELECT MAX(recorded_at) AS r FROM ${s.table}
+       WHERE ${s.fk} = ? AND recorded_at < ?`,
+    )
+    .get(holdingId, `${earliestISO}T00:00:00.000Z`) as { r: string | null };
+  return prev.r ? prev.r.slice(0, 10) : earliestISO;
+}
+
 export function updateHistoryEntry(
   ctx: AppContext,
   userId: number,
@@ -148,9 +169,10 @@ export function updateHistoryEntry(
     .prepare(`UPDATE ${SIDES[side].table} SET value_minor = ?, recorded_at = ? WHERE id = ?`)
     .run(patch.valueMinor ?? existing.value_minor, newRecordedAt, id);
 
-  // History changed from the earliest affected date onward.
-  const from = [existing.recorded_at, newRecordedAt].sort()[0]!.slice(0, 10);
-  recomputeSnapshotRange(ctx.db, userId, from, today);
+  // History changed from the earliest affected date onward (extended to the
+  // previous anchor so interpolated days leading into the entry refresh too).
+  const earliest = [existing.recorded_at, newRecordedAt].sort()[0]!.slice(0, 10);
+  recomputeSnapshotRange(ctx.db, userId, recomputeStart(ctx, side, existing.holding_id, earliest), today);
   return toEntryDto(side, getOwnedEntry(ctx, userId, side, id));
 }
 
@@ -169,7 +191,12 @@ export function deleteHistoryEntry(
     throw badRequest(`This is the only entry for ${existing.holding_name} — delete the holding instead`);
   }
   ctx.db.prepare(`DELETE FROM ${s.table} WHERE id = ?`).run(id);
-  recomputeSnapshotRange(ctx.db, userId, existing.recorded_at.slice(0, 10), todayISO(ctx.now));
+  const earliest = existing.recorded_at.slice(0, 10);
+  recomputeSnapshotRange(
+    ctx.db, userId,
+    recomputeStart(ctx, side, existing.holding_id, earliest),
+    todayISO(ctx.now),
+  );
 }
 
 export function deleteLegacyWealth(ctx: AppContext, userId: number, date: string): boolean {
@@ -177,7 +204,8 @@ export function deleteLegacyWealth(ctx: AppContext, userId: number, date: string
     .prepare("DELETE FROM snapshots WHERE user_id = ? AND snapshot_date = ? AND source = 'legacy'")
     .run(userId, date);
   if (result.changes === 0) return false;
-  // If real valuations cover this date, restore the computed snapshot.
+  // If real valuations cover this date, restore the computed snapshot —
+  // recomputed through today so graph smoothing across the day is correct.
   const hasData = ctx.db
     .prepare(
       `SELECT 1 FROM asset_valuations v JOIN assets a ON a.id = v.asset_id
@@ -188,6 +216,6 @@ export function deleteLegacyWealth(ctx: AppContext, userId: number, date: string
        LIMIT 1`,
     )
     .get(userId, `${date}T23:59:59.999Z`, userId, `${date}T23:59:59.999Z`);
-  if (hasData) upsertSnapshot(ctx.db, userId, date);
+  if (hasData) recomputeSnapshotRange(ctx.db, userId, date, todayISO(ctx.now));
   return true;
 }

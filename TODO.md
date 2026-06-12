@@ -101,7 +101,7 @@ Implemented strictly in order; one commit per feature.
 - [x] 10. Recurring: quarterly cadence
 - [x] 11. Settings overhaul: sub pages (User account / History / Calculation)
       selectable by buttons at the top
-- [ ] 12. Graph: deltas between sparse manual entries are smoothed over the
+- [x] 12. Graph: deltas between sparse manual entries are smoothed over the
       gap instead of a one-day vertical step
 
 ## Notes
