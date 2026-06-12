@@ -75,7 +75,7 @@
 - [x] Create account page + register endpoint, button on login page
 - [x] Settings: legacy wealth input ("on X date my net worth was Y")
 - [x] Optional backdate field when adding an asset/liability
-- [ ] Settings: view all historic entries and alter them
+- [x] Settings: view all historic entries and alter them
 
 ## Notes
 - Deployment (Docker/CI/runbooks) is intentionally out of scope. The app still

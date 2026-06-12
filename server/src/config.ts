@@ -24,6 +24,8 @@ export interface Config {
   jobTickMs: number;
   /** Max login attempts per IP per 15 minutes. */
   loginRateLimit: number;
+  /** Max API requests per IP per minute. */
+  apiRateLimit: number;
   /** Run the seed script at startup (resets the demo account). */
   seedOnStart: boolean;
 }
@@ -43,6 +45,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     webDistDir: env.WEB_DIST_DIR ?? path.resolve(process.cwd(), '../web/dist'),
     jobTickMs: Number(env.JOB_TICK_MS ?? 60_000),
     loginRateLimit: Number(env.LOGIN_RATE_LIMIT ?? 10),
+    apiRateLimit: Number(env.API_RATE_LIMIT ?? 300),
     seedOnStart: env.SEED_ON_START === '1',
   };
 }

@@ -229,6 +229,57 @@ test('shows the age overlay on long ranges once a birth year is set', async ({ p
   await expect(page.getByText(/^Age \d+$/)).toHaveCount(0);
 });
 
+test('edits a historic entry from settings and the holding updates', async ({ page }, testInfo) => {
+  const name = `E2E Editable ${testInfo.project.name}`;
+  await login(page);
+
+  // Create an asset whose entry we will edit
+  await page.goto('/assets');
+  await page.getByRole('button', { name: /add asset/i }).click();
+  const dialog = page.getByRole('dialog', { name: /add asset/i });
+  await dialog.getByLabel(/^name$/i).fill(name);
+  await dialog.getByLabel(/^value$/i).fill('1000.00');
+  await dialog.getByRole('button', { name: /^add$/i }).click();
+  await expect(page.getByRole('button', { name: new RegExp(name) })).toBeVisible();
+
+  // Settings → Historic entries, filtered to that holding
+  await page.goto('/settings');
+  await page.getByLabel(/^show$/i).selectOption({ label: `💵 Cash — ${name}` });
+  await page.getByRole('button', { name: new RegExp(`edit ${name} entry`, 'i') }).click();
+
+  const editDialog = page.getByRole('dialog', { name: new RegExp(`edit entry — ${name}`, 'i') });
+  await editDialog.getByLabel(/^value$/i).fill('2222.22');
+  await editDialog.getByRole('button', { name: /save changes/i }).click();
+  await expect(editDialog).not.toBeVisible();
+  await expect(page.getByText(/2,222\.22/)).toBeVisible();
+
+  // The holding reflects the edited value
+  await page.goto('/assets');
+  await expect(page.getByRole('button', { name: new RegExp(name) })).toContainText(/2,222\.22/);
+});
+
+test('records legacy wealth and sees it on the All graph', async ({ page }) => {
+  await login(page);
+  await page.goto('/settings');
+  await page.getByLabel(/^date$/i).fill('2015-03-01');
+  await page.getByLabel(/net worth/i).fill('12345');
+  await page.getByRole('button', { name: /add point/i }).click();
+  await expect(page.getByText('2015-03-01')).toBeVisible();
+
+  // The All range now reaches back to the legacy point
+  const history = await page.evaluate(async () => {
+    const res = await (await fetch('/api/dashboard/history?range=ALL')).json();
+    return res.points[0] as { date: string; netWorthMinor: number };
+  });
+  expect(history.date).toBe('2015-03-01');
+  expect(history.netWorthMinor).toBe(1_234_500);
+
+  // clean up so reruns of the seeded demo stay tidy
+  await page.goto('/settings');
+  await page.getByRole('button', { name: /delete legacy entry 2015-03-01/i }).click();
+  await expect(page.getByText('2015-03-01')).not.toBeVisible();
+});
+
 test('net worth equals assets minus liabilities', async ({ page }) => {
   await login(page);
   const summary = await page.evaluate(async () => {

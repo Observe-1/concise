@@ -43,13 +43,19 @@ function byCategory(holdings: HoldingDto[]): CategoryTotalDto[] {
   return [...map.values()].sort((a, b) => b.totalMinor - a.totalMinor);
 }
 
-/** Thin the series to at most `max` points, always keeping the latest one. */
+/** Thin the series to at most `max` points, always keeping both endpoints
+ *  (isolated early points, e.g. legacy wealth, must survive). */
 export function downsample<T>(points: T[], max: number): T[] {
   if (points.length <= max) return points;
   const stride = Math.ceil(points.length / max);
   const out: T[] = [];
   for (let i = points.length - 1; i >= 0; i -= stride) out.push(points[i]!);
-  return out.reverse();
+  out.reverse();
+  if (out[0] !== points[0]) {
+    out.unshift(points[0]!);
+    if (out.length > max) out.splice(1, 1);
+  }
+  return out;
 }
 
 export function dashboardRoutes(ctx: AppContext): Router {

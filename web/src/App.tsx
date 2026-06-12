@@ -11,11 +11,27 @@ import { RegisterPage } from './pages/RegisterPage.js';
 import { SettingsPage } from './pages/SettingsPage.js';
 
 function RequireAuth({ children }: { children: ReactNode }) {
-  const { data: me, isLoading } = useMe();
+  const { data: me, isLoading, isError, refetch } = useMe();
   if (isLoading) {
     return (
       <div className="flex min-h-dvh items-center justify-center">
         <Spinner label="Loading" />
+      </div>
+    );
+  }
+  // Only a definitive 401 (me === null) means logged out. Transient failures
+  // (rate limit, network, 5xx) must not bounce the user to the login page.
+  if (isError) {
+    return (
+      <div className="flex min-h-dvh flex-col items-center justify-center gap-4 px-6 text-center">
+        <p className="text-sm text-ink-300">Could not reach the server.</p>
+        <button
+          type="button"
+          onClick={() => void refetch()}
+          className="rounded-xl border border-ink-700 px-4 py-2 text-sm text-ink-100 hover:border-gold-500 hover:text-gold-400"
+        >
+          Try again
+        </button>
       </div>
     );
   }

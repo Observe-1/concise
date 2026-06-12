@@ -58,10 +58,11 @@ describe('downsample', () => {
     expect(downsample([1, 2, 3], 5)).toEqual([1, 2, 3]);
   });
 
-  it('caps length and always keeps the last point', () => {
+  it('caps length and always keeps both endpoints', () => {
     const series = Array.from({ length: 1000 }, (_, i) => i);
     const out = downsample(series, 400);
     expect(out.length).toBeLessThanOrEqual(400);
+    expect(out[0]).toBe(0); // isolated early points (legacy wealth) must survive
     expect(out[out.length - 1]).toBe(999);
     expect([...out]).toEqual([...out].sort((a, b) => a - b));
   });

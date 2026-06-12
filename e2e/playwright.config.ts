@@ -33,6 +33,7 @@ export default defineConfig({
       SEED_ON_START: '1',
       JOB_TICK_MS: '1000',
       LOGIN_RATE_LIMIT: '1000', // many UI logins across projects; limiter covered by integration tests
+      API_RATE_LIMIT: '10000', // two browser projects hammer one server; prod default is 300/min
       NODE_ENV: 'development',
     },
   },

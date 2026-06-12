@@ -85,7 +85,7 @@ users 1──* audit_log
 | `liabilities` | Liability entries | `category` ∈ mortgage, loan, credit_card, student_loan, other. Balances stored positive |
 | `liability_valuations` | Balance history | Mirrors asset valuations |
 | `recurring_transactions` | Recurring movements | Signed `amount_minor` delta, `cadence` ∈ daily, weekly, monthly, yearly, `next_run_on` date cursor; CHECK enforces exactly one target |
-| `snapshots` | Daily net-worth | `UNIQUE(user_id, snapshot_date)`; assets/liabilities/net-worth totals. Graphs read this table |
+| `snapshots` | Daily net-worth | `UNIQUE(user_id, snapshot_date)`; assets/liabilities/net-worth totals; `source` ∈ computed, legacy — legacy rows are user-entered past net-worth points that recomputation never overwrites. Graphs read this table |
 | `audit_log` | Security audit | Auth events + mutations, with IP |
 
 **History strategy:** valuations are append-only per entry; `snapshots` is the
@@ -97,6 +97,9 @@ changes today's totals. Deleting an asset hard-deletes its valuations
 ## 4. Core flows
 
 ### Auth
+0. `POST /api/auth/register` (rate-limited) — self-service signup: validated
+   username/password, case-insensitive uniqueness, default settings row,
+   automatic login.
 1. `POST /api/auth/login` (rate-limited) — verifies scrypt hash with
    `timingSafeEqual` (a dummy hash is verified for unknown usernames so
    timing reveals nothing), creates a session row (token hashed), sets an
@@ -112,9 +115,20 @@ changes today's totals. Deleting an asset hard-deletes its valuations
 ### Assets / liabilities
 - CRUD under `/api/assets` and `/api/liabilities` (identical shape).
 - Creating an entry writes the entry **and** its first valuation in one
-  transaction, then upserts today's snapshot.
+  transaction, then upserts today's snapshot. An optional `asOf` backdate
+  records the first valuation on a past date (market entries priced as of
+  that date) and rebuilds daily snapshots from there.
 - "Update value" appends a valuation row (history preserved), then upserts
   today's snapshot.
+
+### History editing (`/api/history`)
+- `GET /entries` lists every valuation across the user's holdings (filter by
+  side/holding); `PATCH`/`DELETE /entries/:side/:id` edit values, move dates,
+  or remove entries — snapshots are rebuilt from the earliest affected date.
+  The last remaining entry of a holding cannot be deleted.
+- `POST /legacy` upserts a legacy net-worth point (snapshot with
+  `source='legacy'`); `DELETE /legacy/:date` removes it, restoring computed
+  data where valuations cover the date.
 
 ### Recurring transactions
 - Each row holds a `next_run_on` cursor. The engine (job tick + on-login

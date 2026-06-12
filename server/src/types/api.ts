@@ -106,6 +106,18 @@ export interface LegacySnapshotDto {
   netWorthMinor: number;
 }
 
+/** A single historic valuation entry across any holding (history editor). */
+export interface HistoryEntryDto {
+  id: number;
+  side: 'asset' | 'liability';
+  holdingId: number;
+  holdingName: string;
+  category: string;
+  valueMinor: number;
+  source: ValuationSource;
+  recordedAt: string;
+}
+
 export interface SettingsDto {
   username: string;
   displayName: string;

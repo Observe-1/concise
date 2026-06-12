@@ -4,6 +4,7 @@ import {
   useDeleteLegacyWealth, useLegacyWealth, useLogout, useMe, useSetLegacyWealth,
   useSettings, useUpdateSettings,
 } from '../api/queries.js';
+import { HistoryEntries } from '../components/HistoryEntries.js';
 import { Button, Card, ErrorNote, Field, Input, Select, Spinner } from '../components/ui.js';
 import { formatMinor, parseSignedToMinor } from '../lib/money.js';
 
@@ -91,6 +92,8 @@ export function SettingsPage() {
       </Card>
 
       <LegacyWealthCard />
+
+      <HistoryEntries />
 
       <Card className="p-5">
         <h2 className="mb-2 text-xs font-medium uppercase tracking-widest text-ink-400">Session</h2>

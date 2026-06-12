@@ -2,8 +2,8 @@ import {
   keepPreviousData, useMutation, useQuery, useQueryClient,
 } from '@tanstack/react-query';
 import type {
-  DashboardSummaryDto, HistoryDto, HistoryRange, HoldingDetailDto, HoldingDto,
-  LegacySnapshotDto, RecurringDto, SessionUser, SettingsDto, SymbolLookupDto,
+  DashboardSummaryDto, HistoryDto, HistoryEntryDto, HistoryRange, HoldingDetailDto,
+  HoldingDto, LegacySnapshotDto, RecurringDto, SessionUser, SettingsDto, SymbolLookupDto,
 } from '@api';
 import { api, ApiError } from './client.js';
 
@@ -212,6 +212,52 @@ export function useUpdateSettings() {
     onSuccess: () => {
       void qc.invalidateQueries();
     },
+  });
+}
+
+// ---------- historic entries ----------
+
+export interface HistoryEntryFilter {
+  side?: 'asset' | 'liability';
+  holdingId?: number;
+}
+
+export function useHistoryEntries(filter: HistoryEntryFilter = {}) {
+  const params = new URLSearchParams();
+  if (filter.side) params.set('side', filter.side);
+  if (filter.holdingId) params.set('holdingId', String(filter.holdingId));
+  const qs = params.toString();
+  return useQuery({
+    queryKey: ['history', 'entries', filter.side ?? null, filter.holdingId ?? null],
+    queryFn: () => api<HistoryEntryDto[]>(`/api/history/entries${qs ? `?${qs}` : ''}`),
+  });
+}
+
+function useInvalidateHistory() {
+  const qc = useQueryClient();
+  return () => {
+    void qc.invalidateQueries({ queryKey: ['history'] });
+    void qc.invalidateQueries({ queryKey: ['dashboard'] });
+    void qc.invalidateQueries({ queryKey: ['holdings'] });
+  };
+}
+
+export function useUpdateHistoryEntry() {
+  const invalidate = useInvalidateHistory();
+  return useMutation({
+    mutationFn: ({ side, id, ...patch }: {
+      side: 'asset' | 'liability'; id: number; valueMinor?: number; recordedOn?: string;
+    }) => api<HistoryEntryDto>(`/api/history/entries/${side}/${id}`, { method: 'PATCH', body: patch }),
+    onSuccess: invalidate,
+  });
+}
+
+export function useDeleteHistoryEntry() {
+  const invalidate = useInvalidateHistory();
+  return useMutation({
+    mutationFn: ({ side, id }: { side: 'asset' | 'liability'; id: number }) =>
+      api<void>(`/api/history/entries/${side}/${id}`, { method: 'DELETE' }),
+    onSuccess: invalidate,
   });
 }
 

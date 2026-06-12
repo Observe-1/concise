@@ -40,7 +40,7 @@ export function buildApp(ctx: AppContext): express.Express {
   api.use(
     rateLimit({
       windowMs: 60_000,
-      limit: ctx.config.env === 'test' ? 10_000 : 300,
+      limit: ctx.config.env === 'test' ? 10_000 : ctx.config.apiRateLimit,
       standardHeaders: true,
       legacyHeaders: false,
       handler: (_req, res) => res.status(429).json({ error: 'Too many requests' }),
