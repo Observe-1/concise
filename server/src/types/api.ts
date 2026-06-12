@@ -100,6 +100,12 @@ export interface HistoryDto {
   points: HistoryPointDto[];
 }
 
+/** User-entered "on this date my net worth was X" point. */
+export interface LegacySnapshotDto {
+  date: string;
+  netWorthMinor: number;
+}
+
 export interface SettingsDto {
   username: string;
   displayName: string;

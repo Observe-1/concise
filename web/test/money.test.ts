@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { formatMinor, formatMinorCompact, minorToInput, parseToMinor } from '../src/lib/money.js';
+import {
+  formatMinor, formatMinorCompact, minorToInput, parseSignedToMinor, parseToMinor,
+} from '../src/lib/money.js';
 
 describe('parseToMinor', () => {
   it('parses plain and formatted amounts', () => {
@@ -16,6 +18,16 @@ describe('parseToMinor', () => {
     expect(parseToMinor('-50')).toBeNull();
     expect(parseToMinor('1.999')).toBeNull();
     expect(parseToMinor('1.2.3')).toBeNull();
+  });
+});
+
+describe('parseSignedToMinor', () => {
+  it('parses negative and positive amounts', () => {
+    expect(parseSignedToMinor('-4000')).toBe(-400000);
+    expect(parseSignedToMinor('- 4,000.50')).toBe(-400050);
+    expect(parseSignedToMinor('25000')).toBe(2500000);
+    expect(parseSignedToMinor('abc')).toBeNull();
+    expect(parseSignedToMinor('--5')).toBeNull();
   });
 });
 

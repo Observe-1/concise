@@ -34,3 +34,11 @@ export function parseToMinor(input: string): number | null {
 export function minorToInput(minor: number): string {
   return (minor / 100).toFixed(2);
 }
+
+/** Like parseToMinor but allows a leading minus (net worth can be negative). */
+export function parseSignedToMinor(input: string): number | null {
+  const negative = /^\s*-/.test(input);
+  const minor = parseToMinor(input.replace(/^\s*-\s*/, ''));
+  if (minor === null) return null;
+  return negative ? -minor : minor;
+}

@@ -9,6 +9,7 @@ import { csrfProtection } from './middleware/csrf.js';
 import { errorHandler, notFoundHandler } from './middleware/errors.js';
 import { authRoutes } from './modules/auth/routes.js';
 import { dashboardRoutes } from './modules/dashboard/routes.js';
+import { historyRoutes } from './modules/history/routes.js';
 import { ASSET_KIND, LIABILITY_KIND } from './modules/holdings/kind.js';
 import { holdingsRoutes } from './modules/holdings/routes.js';
 import { marketRoutes } from './modules/market/routes.js';
@@ -57,6 +58,7 @@ export function buildApp(ctx: AppContext): express.Express {
   api.use('/liabilities', requireAuth, holdingsRoutes(ctx, LIABILITY_KIND));
   api.use('/recurring', requireAuth, recurringRoutes(ctx));
   api.use('/dashboard', requireAuth, dashboardRoutes(ctx));
+  api.use('/history', requireAuth, historyRoutes(ctx));
   api.use('/market', requireAuth, marketRoutes(ctx));
   api.use('/settings', requireAuth, settingsRoutes(ctx));
 

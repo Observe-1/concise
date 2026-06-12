@@ -3,7 +3,7 @@ import {
 } from '@tanstack/react-query';
 import type {
   DashboardSummaryDto, HistoryDto, HistoryRange, HoldingDetailDto, HoldingDto,
-  RecurringDto, SessionUser, SettingsDto, SymbolLookupDto,
+  LegacySnapshotDto, RecurringDto, SessionUser, SettingsDto, SymbolLookupDto,
 } from '@api';
 import { api, ApiError } from './client.js';
 
@@ -210,6 +210,38 @@ export function useUpdateSettings() {
       api<SettingsDto>('/api/settings', { method: 'PATCH', body: patch }),
     onSuccess: () => {
       void qc.invalidateQueries();
+    },
+  });
+}
+
+// ---------- legacy wealth ----------
+
+export function useLegacyWealth() {
+  return useQuery({
+    queryKey: ['history', 'legacy'],
+    queryFn: () => api<LegacySnapshotDto[]>('/api/history/legacy'),
+  });
+}
+
+export function useSetLegacyWealth() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { date: string; netWorthMinor: number }) =>
+      api<LegacySnapshotDto>('/api/history/legacy', { method: 'POST', body: input }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['history'] });
+      void qc.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+  });
+}
+
+export function useDeleteLegacyWealth() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (date: string) => api<void>(`/api/history/legacy/${date}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['history'] });
+      void qc.invalidateQueries({ queryKey: ['dashboard'] });
     },
   });
 }

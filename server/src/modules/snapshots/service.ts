@@ -43,13 +43,15 @@ export function totalsAsOf(db: DatabaseSync, userId: number, dateISO: string): T
 
 export function upsertSnapshot(db: DatabaseSync, userId: number, dateISO: string): void {
   const { assetsMinor, liabilitiesMinor } = totalsAsOf(db, userId, dateISO);
+  // Never clobber user-entered legacy wealth points.
   db.prepare(
     `INSERT INTO snapshots (user_id, snapshot_date, assets_minor, liabilities_minor, net_worth_minor)
      VALUES (?, ?, ?, ?, ?)
      ON CONFLICT (user_id, snapshot_date) DO UPDATE SET
        assets_minor = excluded.assets_minor,
        liabilities_minor = excluded.liabilities_minor,
-       net_worth_minor = excluded.net_worth_minor`,
+       net_worth_minor = excluded.net_worth_minor
+     WHERE snapshots.source != 'legacy'`,
   ).run(userId, dateISO, assetsMinor, liabilitiesMinor, assetsMinor - liabilitiesMinor);
 }
 
