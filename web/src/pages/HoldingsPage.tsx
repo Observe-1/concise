@@ -147,6 +147,11 @@ export function HoldingsPage({ kind }: { kind: HoldingKind }) {
                       <span className="min-w-0">
                         <span className="block truncate text-sm text-ink-100">{h.name}</span>
                         <span className="flex items-center gap-1.5">
+                          {side === 'liability' && h.currentValueMinor === 0 && (
+                            <span className="mt-0.5 inline-block rounded bg-gain-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-gain-400">
+                              ✓ Paid off
+                            </span>
+                          )}
                           {h.metal && (
                             <span className="mt-0.5 inline-block rounded bg-ink-700/60 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-ink-300">
                               {METAL_LABELS[h.metal] ?? h.metal}

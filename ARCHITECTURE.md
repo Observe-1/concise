@@ -171,6 +171,11 @@ day.
   value × (1 + pct/100), compounding per occurrence — both floored at 0),
   advance the cursor by cadence (month-end clamped), repeat until caught up.
   Idempotent and safe across downtime.
+- **Paid off:** when an occurrence drives a **liability** balance to zero or
+  below, the balance is set to 0 and *every* recurring schedule against that
+  liability is suspended (`active = 0`) — no further payments or interest run
+  until the user reactivates it. Assets only floor at 0 and keep running. The
+  liabilities page badges a zero-balance liability "✓ Paid off".
 
 ### Dashboard
 - `GET /api/dashboard/summary` — current totals + per-category breakdown

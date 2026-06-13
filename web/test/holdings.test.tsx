@@ -368,4 +368,20 @@ describe('liabilities page', () => {
     expect(screen.getByRole('option', { name: '🏦 Mortgage' })).toBeInTheDocument();
     expect(screen.queryByRole('option', { name: /Crypto/ })).not.toBeInTheDocument();
   });
+
+  it('marks a zero-balance liability as paid off', async () => {
+    mockFetch([
+      [/\/api\/auth\/me/, { user: demoUser }],
+      [/\/api\/liabilities\/changes/, [{ id: 9, changePct: -100 }]],
+      [/\/api\/liabilities$/, [{
+        id: 9, category: 'loan', name: 'Car loan', notes: null, metal: null,
+        valuationMode: 'manual', marketSymbol: null, quantity: null, currentValueMinor: 0,
+        lastValuedAt: '2026-06-11T12:00:00.000Z', createdAt: '2024-06-11T12:00:00.000Z',
+      }]],
+    ]);
+    renderWithProviders(<App />, { route: '/liabilities' });
+
+    expect(await screen.findByText('Car loan')).toBeInTheDocument();
+    expect(screen.getByText(/paid off/i)).toBeInTheDocument();
+  });
 });

@@ -160,8 +160,8 @@ describe('recurring transactions', () => {
     expect(schedule.nextRunOn).toBe('2026-09-15');
   });
 
-  it('floors balances at zero (loan payoff)', async () => {
-    await csrf(agent.post('/api/recurring')).send({
+  it('floors balances at zero and pays off the loan (suspends the schedule)', async () => {
+    const created = await csrf(agent.post('/api/recurring')).send({
       name: 'Overpay', targetType: 'liability', targetId: loanId,
       amountMinor: -400_00, cadence: 'monthly', nextRunOn: '2026-06-11',
     });
@@ -169,7 +169,36 @@ describe('recurring transactions', () => {
     runDueRecurring(world.ctx);
     agent = await loginAgent(world.app); // previous session expired with the clock jump
     const loan = await agent.get(`/api/liabilities/${loanId}`);
-    expect(loan.body.currentValueMinor).toBe(0); // 500 - 400 - 400 → floored
+    expect(loan.body.currentValueMinor).toBe(0); // 500 - 400 → 100, 100 - 400 → paid off
+
+    // Paid off: the schedule is suspended, so a later run never overshoots.
+    const schedule = (await agent.get('/api/recurring')).body
+      .find((r: { id: number }) => r.id === created.body.id);
+    expect(schedule.active).toBe(false);
+    world.advanceDays(40);
+    expect(runDueRecurring(world.ctx)).toBe(0);
+  });
+
+  it('paying off a liability suspends all of its schedules', async () => {
+    // A payment schedule and an interest schedule on the same loan.
+    await csrf(agent.post('/api/recurring')).send({
+      name: 'Overpay', targetType: 'liability', targetId: loanId,
+      amountMinor: -300_00, cadence: 'monthly', nextRunOn: '2026-06-11',
+    });
+    await csrf(agent.post('/api/recurring')).send({
+      name: 'Interest', targetType: 'liability', targetId: loanId,
+      percent: 1, cadence: 'monthly', nextRunOn: '2026-07-11',
+    });
+    world.advanceDays(40); // 500 → 200 (Jun 11), 200 - 300 → paid off (Jul 11)
+    runDueRecurring(world.ctx);
+
+    agent = await loginAgent(world.app);
+    const loan = await agent.get(`/api/liabilities/${loanId}`);
+    expect(loan.body.currentValueMinor).toBe(0);
+
+    const schedules = (await agent.get('/api/recurring')).body as { active: boolean }[];
+    expect(schedules).toHaveLength(2);
+    expect(schedules.every((s) => s.active === false)).toBe(true);
   });
 
   it('ignores inactive schedules', async () => {

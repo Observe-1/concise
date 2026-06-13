@@ -118,7 +118,7 @@ Implemented strictly in order; one commit per feature.
       green, decline red, N/A grey)
 - [x] 5. Dashboard: % change next to values on the summary cards, driven by
       the graph's existing range toggles
-- [ ] 6. "Paid off": a liability whose balance would go negative (percentage
+- [x] 6. "Paid off": a liability whose balance would go negative (percentage
       change or recurring payments) is set to 0 and its recurring payments
       are suspended
 - [ ] 7. Liabilities: interest-rate field when adding a new one; when filled

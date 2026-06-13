@@ -161,6 +161,11 @@ export function deleteRecurring(ctx: AppContext, userId: number, id: number): vo
  * the earliest applied date. Idempotent: a processed occurrence moves the
  * cursor forward inside the same transaction.
  *
+ * Paid off: when an occurrence drives a liability's balance to zero or below,
+ * the balance is set to 0 and every recurring schedule against that liability
+ * is suspended (active = 0) — no further payments or interest are applied
+ * until the user reactivates it. (Assets just floor at 0; they keep running.)
+ *
  * Returns the number of occurrences applied.
  */
 export function runDueRecurring(ctx: AppContext, userId?: number): number {
@@ -175,13 +180,22 @@ export function runDueRecurring(ctx: AppContext, userId?: number): number {
 
   // earliest applied date per user, for snapshot recompute
   const earliestByUser = new Map<number, string>();
+  // liabilities paid off during this run — their other schedules are suspended
+  const paidOffLiabilities = new Set<number>();
+  const suspendForLiability = ctx.db.prepare(
+    'UPDATE recurring_transactions SET active = 0 WHERE liability_id = ?',
+  );
 
   withTransaction(ctx.db, () => {
     for (const row of dueRows) {
       const isAsset = row.asset_id !== null;
+      const targetId = (row.asset_id ?? row.liability_id)!;
+      // A payoff earlier in this run already suspended this liability's
+      // schedules — don't apply any more occurrences against it.
+      if (!isAsset && paidOffLiabilities.has(targetId)) continue;
+
       const valuationTable = isAsset ? 'asset_valuations' : 'liability_valuations';
       const fk = isAsset ? 'asset_id' : 'liability_id';
-      const targetId = (row.asset_id ?? row.liability_id)!;
 
       const latestStmt = ctx.db.prepare(
         `SELECT value_minor, recorded_at FROM ${valuationTable} WHERE ${fk} = ?
@@ -194,14 +208,16 @@ export function runDueRecurring(ctx: AppContext, userId?: number): number {
 
       let cursor = row.next_run_on;
       let lastRun = row.last_run_on;
+      let paidOff = false;
       while (cursor <= today) {
         const latest = latestStmt.get(targetId) as
           | { value_minor: number; recorded_at: string }
           | undefined;
         const current = latest?.value_minor ?? 0;
-        const newValue = Math.max(0, row.amount_type === 'percent'
+        const rawValue = row.amount_type === 'percent'
           ? Math.round(current * (1 + row.percent! / 100))
-          : current + row.amount_minor!);
+          : current + row.amount_minor!;
+        const newValue = Math.max(0, rawValue);
         // Record on the scheduled day, but never before the latest existing
         // valuation — the occurrence supersedes it as the current value.
         let recordedAt = `${cursor}T00:00:00.000Z`;
@@ -214,10 +230,20 @@ export function runDueRecurring(ctx: AppContext, userId?: number): number {
         if (!prevEarliest || cursor < prevEarliest) earliestByUser.set(row.user_id, cursor);
         lastRun = cursor;
         cursor = advanceCadence(cursor, row.cadence);
+        // A liability hitting zero is paid off: stop here and suspend it.
+        if (!isAsset && rawValue <= 0) {
+          paidOff = true;
+          paidOffLiabilities.add(targetId);
+          break;
+        }
       }
       ctx.db
         .prepare('UPDATE recurring_transactions SET next_run_on = ?, last_run_on = ? WHERE id = ?')
         .run(cursor, lastRun, row.id);
+      // Paid off: suspend every schedule against the liability (this row and
+      // any siblings). Done after the cursor update so this row's cursor still
+      // reflects the work applied.
+      if (paidOff) suspendForLiability.run(targetId);
     }
     for (const [uid, from] of earliestByUser) {
       recomputeSnapshotRange(ctx.db, uid, from, today);
