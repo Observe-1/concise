@@ -47,17 +47,30 @@ export function RangePicker({
   );
 }
 
+// Chart geometry — shared between the recharts layout and the scrubber overlay
+// so the slider track lines up with the plot area (and its handle with the X
+// labels). The Y axis reserves 56px on the left; margins are small.
+const Y_AXIS_WIDTH = 56;
+const CHART_MARGIN = { top: 8, right: 4, left: 4, bottom: 0 };
+
 interface ChartProps {
   points: HistoryPointDto[];
   currency: string;
   range: HistoryRange;
   birthYear?: number | null;
   height?: number;
-  /** Historical view mode: a red marker on the pinned date. */
+  /** "View as" mode: a red marker on the pinned date. */
   asOf?: string | null;
+  /**
+   * When provided, a red "view as" scrubber is drawn along the X axis (a
+   * single bar, its handle aligned with the date labels). Dragging it left
+   * pins the app to that date; dragging fully right (latest point) leaves the
+   * mode.
+   */
+  scrubber?: { asOf: string | null; setAsOf: (date: string | null) => void };
 }
 
-export function NetWorthChart({ points, currency, range, birthYear, height = 240, asOf }: ChartProps) {
+export function NetWorthChart({ points, currency, range, birthYear, height = 240, asOf, scrubber }: ChartProps) {
   // A single point in the window is duplicated into a flat full-width series
   // so it draws as the normal gold line rather than a lone dot.
   const data = useMemo(
@@ -88,6 +101,20 @@ export function NetWorthChart({ points, currency, range, birthYear, height = 240
     return [min - pad, max + pad];
   }, [data]);
 
+  // Scrubber thumb index: the last point on or before the pinned date
+  // (rightmost = live view). Only shown when there are ≥ 2 real points.
+  const showScrubber = Boolean(scrubber) && points.length >= 2;
+  const scrubberIdx = useMemo(() => {
+    if (!scrubber?.asOf) return data.length - 1;
+    let i = 0;
+    for (let k = 0; k < data.length; k++) {
+      if (data[k]!.date <= scrubber.asOf) i = k;
+      else break;
+    }
+    return i;
+  }, [data, scrubber?.asOf]);
+  const onScrub = (i: number) => scrubber!.setAsOf(i >= data.length - 1 ? null : data[i]!.date);
+
   if (data.length === 0) {
     return (
       <div className="flex items-center justify-center py-16 text-sm text-ink-400">
@@ -96,9 +123,10 @@ export function NetWorthChart({ points, currency, range, birthYear, height = 240
     );
   }
   return (
-    <div style={{ height }} aria-label="Net worth history chart" role="img">
+    <div className="relative" style={{ height }}>
+      <div className="h-full" aria-label="Net worth history chart" role="img">
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={data} margin={{ top: 8, right: 4, left: 4, bottom: 0 }}>
+        <ComposedChart data={data} margin={CHART_MARGIN}>
           <defs>
             <linearGradient id="goldFill" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="#d4af37" stopOpacity={0.35} />
@@ -122,7 +150,7 @@ export function NetWorthChart({ points, currency, range, birthYear, height = 240
             tick={{ fill: '#8e8e98', fontSize: 11 }}
             tickLine={false}
             axisLine={false}
-            width={56}
+            width={Y_AXIS_WIDTH}
             domain={yDomain}
           />
           <Tooltip content={<ChartTooltip currency={currency} />} />
@@ -176,6 +204,35 @@ export function NetWorthChart({ points, currency, range, birthYear, height = 240
           />
         </ComposedChart>
       </ResponsiveContainer>
+      </div>
+
+      {/* "View as" scrubber, drawn along the X axis so the chart shows a single
+          bar (not a separate slider row). Its track spans the plot area and the
+          circle handle lines up with the date labels. */}
+      {showScrubber && (
+        <>
+          <input
+            type="range"
+            min={0}
+            max={data.length - 1}
+            value={scrubberIdx}
+            onChange={(e) => onScrub(Number(e.target.value))}
+            aria-label="View as date"
+            title="Drag along the timeline to view your finances as they were on a past date"
+            className="absolute z-10 h-1 cursor-pointer accent-loss-500"
+            style={{
+              left: Y_AXIS_WIDTH + CHART_MARGIN.left,
+              right: CHART_MARGIN.right,
+              bottom: 18,
+            }}
+          />
+          {scrubber!.asOf && (
+            <span className="tabular pointer-events-none absolute right-1 top-0 text-[10px] font-medium uppercase tracking-wider text-loss-400">
+              Viewing {scrubber!.asOf}
+            </span>
+          )}
+        </>
+      )}
     </div>
   );
 }

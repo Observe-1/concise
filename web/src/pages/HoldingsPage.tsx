@@ -107,7 +107,7 @@ export function HoldingsPage({ kind }: { kind: HoldingKind }) {
 
       {historical && (
         <p className="tabular text-xs font-medium uppercase tracking-wider text-loss-400">
-          Historical view · as of {asOf} — read-only
+          Viewing as of {asOf} — read-only
         </p>
       )}
 
@@ -141,7 +141,7 @@ export function HoldingsPage({ kind }: { kind: HoldingKind }) {
                       type="button"
                       onClick={() => !historical && setEditing(h)}
                       disabled={historical}
-                      title={historical ? 'Read-only in historical view — exit the mode to edit.' : undefined}
+                      title={historical ? 'Read-only while viewing a past date — exit “view as” to edit.' : undefined}
                       className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left hover:bg-ink-800/50 disabled:hover:bg-transparent"
                     >
                       <span className="min-w-0">

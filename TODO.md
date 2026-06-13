@@ -123,7 +123,7 @@ Implemented strictly in order; one commit per feature.
       are suspended
 - [x] 7. Liabilities: interest-rate field when adding a new one; when filled
       in it auto-creates a recurring entry increasing the value by that %
-- [ ] 8. Historical mode renamed to "View as"; its slider is incorporated into
+- [x] 8. Historical mode renamed to "View as"; its slider is incorporated into
       the graph's X axis (single bar, circle handle aligned with the X labels)
 - [ ] 9. Prediction mode: golden button at the bottom of the dashboard; graph
       projects future values on the fly (valuation methods, recurring

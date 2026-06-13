@@ -17,8 +17,8 @@ export function Layout() {
   const { asOf, setAsOf } = useHistoricalView();
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col md:flex-row">
-      {/* Historical view mode: a subtle red accent frames every page, and a
-          floating reset button restores the live view from anywhere. */}
+      {/* "View as" mode: a subtle red accent frames every page, and a floating
+          reset button restores the live view from anywhere. */}
       {asOf && (
         <div
           aria-hidden="true"
@@ -31,7 +31,7 @@ export function Layout() {
           onClick={() => setAsOf(null)}
           className="tabular fixed bottom-20 right-4 z-50 rounded-full bg-loss-500 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-loss-500/30 transition-colors hover:bg-loss-400 md:bottom-6"
         >
-          ⟲ Exit historical view · {asOf}
+          ⟲ Exit view as · {asOf}
         </button>
       )}
       {/* Desktop rail */}

@@ -3,10 +3,12 @@ import {
 } from 'react';
 
 /**
- * Historical view mode: when `asOf` is set (YYYY-MM-DD), every page shows the
- * portfolio as it stood at the end of that day — entries added later vanish
- * and values are read as of the date. The mode survives page changes (kept in
- * sessionStorage) and is left via the floating reset button in the Layout.
+ * "View as" mode (formerly "historical view"): when `asOf` is set
+ * (YYYY-MM-DD), every page shows the portfolio as it stood at the end of that
+ * day — entries added later vanish and values are read as of the date. The
+ * mode survives page changes (kept in sessionStorage) and is left via the
+ * floating reset button in the Layout. Entered by dragging the scrubber that
+ * sits along the dashboard chart's X axis.
  */
 interface HistoricalViewState {
   asOf: string | null;

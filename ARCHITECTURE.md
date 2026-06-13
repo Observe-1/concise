@@ -203,18 +203,20 @@ day.
 - The chart shows a muted age marker (vertical line labelled "Age N") when
   the user has set a birth year and the visible series spans ≥ 5 years.
 
-### Historical view mode
-- A red scrubber under the dashboard graph pins the app to a past date
-  (`asOf`). `GET /api/assets|liabilities|dashboard/summary?asOf=YYYY-MM-DD`
+### "View as" mode (historical view)
+- A red scrubber pins the app to a past date (`asOf`). The scrubber is drawn
+  **along the dashboard chart's X axis** (one bar, not a separate slider row):
+  its track spans the plot area and the circle handle lines up with the date
+  labels. `GET /api/assets|liabilities|dashboard/summary?asOf=YYYY-MM-DD`
   return the portfolio exactly as it stood at the end of that day: values are
   the latest valuation on or before the date, and entries whose history
   starts later are omitted entirely.
 - Client state lives in `HistoricalViewContext` (persisted to sessionStorage
   so it survives page changes). While active: a subtle red frame surrounds
-  every page, a floating "Exit historical view" button restores the live
-  view, the chart shows a red marker on the pinned date, and the holdings
-  pages become read-only (mutating the past from a historical lens would be
-  misleading). Recurring schedules and settings are not date-scoped.
+  every page, a floating "Exit view as" button restores the live view, the
+  chart shows a red marker on the pinned date, and the holdings pages become
+  read-only (mutating the past from this lens would be misleading). Recurring
+  schedules and settings are not date-scoped.
 
 ### Market valuations
 - Assets with `valuation_mode='market'` hold a `market_symbol` and `quantity`.

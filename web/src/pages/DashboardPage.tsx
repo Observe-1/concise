@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import type { HistoryRange } from '@api';
 import { useDashboardChanges, useHistory, useMe, useSummary } from '../api/queries.js';
-import { HistoricalScrubber } from '../components/HistoricalScrubber.js';
 import { NetWorthChart, RangePicker } from '../components/NetWorthChart.js';
 import { Card, ChangeBadge, Spinner } from '../components/ui.js';
 import { useHistoricalView } from '../contexts/HistoricalView.js';
@@ -22,7 +21,7 @@ function rangeLabel(range: HistoryRange): string {
 
 export function DashboardPage() {
   const { data: me } = useMe();
-  const { asOf } = useHistoricalView();
+  const { asOf, setAsOf } = useHistoricalView();
   const summary = useSummary(asOf);
   const [range, setRange] = useState<HistoryRange>('6M');
   const [fullscreen, setFullscreen] = useState(false);
@@ -78,8 +77,8 @@ export function DashboardPage() {
         birthYear={me?.birthYear}
         height={fullscreen ? Math.max(300, window.innerHeight - 200) : 240}
         asOf={asOf}
+        scrubber={{ asOf, setAsOf }}
       />
-      <HistoricalScrubber points={history.data?.points ?? []} />
     </>
   );
 

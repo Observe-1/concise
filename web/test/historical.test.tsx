@@ -26,24 +26,25 @@ const history = {
 
 const STORAGE_KEY = 'concise.historicalAsOf';
 
-describe('historical view mode', () => {
+describe('view-as mode', () => {
   beforeEach(() => {
     sessionStorage.clear();
   });
 
-  it('enters the mode from the red graph scrubber and requests as-of data', async () => {
+  it('enters the mode from the graph X-axis scrubber and requests as-of data', async () => {
     const calls = mockFetch([
       [/\/api\/auth\/me/, { user: demoUser }],
+      [/\/api\/dashboard\/changes/, { range: '6M', assetsChangePct: null, liabilitiesChangePct: null, netWorthChangePct: null }],
       [/\/api\/dashboard\/summary/, summary],
       [/\/api\/dashboard\/history/, history],
     ]);
     renderWithProviders(<App />, { route: '/' });
 
-    const scrubber = await screen.findByRole('slider', { name: /historical view date/i });
+    const scrubber = await screen.findByRole('slider', { name: /view as date/i });
     fireEvent.change(scrubber, { target: { value: '0' } });
 
     // floating reset button + red accent appear, summary refetches as-of
-    expect(await screen.findByRole('button', { name: /exit historical view/i }))
+    expect(await screen.findByRole('button', { name: /exit view as/i }))
       .toHaveTextContent('2026-05-01');
     await waitFor(() => {
       expect(calls.some((c) => c.url.includes('/api/dashboard/summary?asOf=2026-05-01'))).toBe(true);
@@ -54,22 +55,23 @@ describe('historical view mode', () => {
   it('persists across page changes and the holdings page becomes read-only', async () => {
     const calls = mockFetch([
       [/\/api\/auth\/me/, { user: demoUser }],
+      [/\/api\/dashboard\/changes/, { range: '6M', assetsChangePct: null, liabilitiesChangePct: null, netWorthChangePct: null }],
       [/\/api\/dashboard\/summary/, summary],
       [/\/api\/dashboard\/history/, history],
       [/\/api\/assets/, []],
     ]);
     renderWithProviders(<App />, { route: '/' });
 
-    const scrubber = await screen.findByRole('slider', { name: /historical view date/i });
+    const scrubber = await screen.findByRole('slider', { name: /view as date/i });
     fireEvent.change(scrubber, { target: { value: '0' } });
-    await screen.findByRole('button', { name: /exit historical view/i });
+    await screen.findByRole('button', { name: /exit view as/i });
 
     // navigate to the assets page through the app nav — the mode survives
     const user = userEvent.setup();
     await user.click(screen.getAllByRole('link', { name: /assets/i })[0]!);
 
-    expect(await screen.findByText(/historical view · as of 2026-05-01/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /exit historical view/i })).toBeInTheDocument();
+    expect(await screen.findByText(/viewing as of 2026-05-01/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /exit view as/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /add asset/i })).not.toBeInTheDocument();
     await waitFor(() => {
       expect(calls.some((c) => c.url.includes('/api/assets?asOf=2026-05-01'))).toBe(true);
@@ -84,11 +86,11 @@ describe('historical view mode', () => {
     ]);
     renderWithProviders(<App />, { route: '/assets' });
 
-    const reset = await screen.findByRole('button', { name: /exit historical view/i });
+    const reset = await screen.findByRole('button', { name: /exit view as/i });
     const user = userEvent.setup();
     await user.click(reset);
 
-    expect(screen.queryByRole('button', { name: /exit historical view/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /exit view as/i })).not.toBeInTheDocument();
     expect(await screen.findByRole('button', { name: /add asset/i })).toBeInTheDocument();
     expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
     await waitFor(() => {
