@@ -13,6 +13,9 @@ const SOURCE_LABELS: Record<string, string> = {
   manual: 'Manual', recurring: 'Recurring', market: 'Market', seed: 'Demo data',
 };
 
+/** Entries the system wrote on its own (recurring runs, market refreshes, demo seed). */
+const isAuto = (entry: HistoryEntryDto): boolean => entry.source !== 'manual';
+
 /**
  * Settings card: every historic valuation entry across all holdings, with a
  * holding filter, inline editing (value and date) and deletion.
@@ -28,6 +31,7 @@ export function HistoryEntries() {
     : [undefined, undefined];
   const entries = useHistoryEntries({ side, holdingId });
   const [editing, setEditing] = useState<HistoryEntryDto | null>(null);
+  const [hideAuto, setHideAuto] = useState(false);
   const deleteEntry = useDeleteHistoryEntry();
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const currency = me?.currency ?? 'USD';
@@ -41,7 +45,8 @@ export function HistoryEntries() {
     );
   };
 
-  const shown = (entries.data ?? []).slice(0, SHOW_LIMIT);
+  const visible = (entries.data ?? []).filter((e) => !hideAuto || !isAuto(e));
+  const shown = visible.slice(0, SHOW_LIMIT);
 
   return (
     <Card className="p-5">
@@ -69,6 +74,17 @@ export function HistoryEntries() {
         )}
       </Field>
 
+      <label className="mt-3 flex cursor-pointer items-center justify-between gap-3 text-sm text-ink-300">
+        <span>Hide automatic entries (recurring, market, demo data)</span>
+        <input
+          type="checkbox"
+          checked={hideAuto}
+          onChange={(e) => setHideAuto(e.target.checked)}
+          className="peer sr-only"
+        />
+        <span className="relative h-6 w-10 shrink-0 rounded-full bg-ink-700 transition-colors peer-checked:bg-gold-600 after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-ink-300 after:transition-transform peer-checked:after:translate-x-4 peer-checked:after:bg-ink-950" />
+      </label>
+
       {deleteError ? <div className="mt-3"><ErrorNote message={deleteError} /></div> : null}
 
       {entries.isLoading ? (
@@ -79,7 +95,10 @@ export function HistoryEntries() {
         <>
           <ul className="mt-4 divide-y divide-ink-800 border-t border-ink-800">
             {shown.map((entry) => (
-              <li key={`${entry.side}-${entry.id}`} className="flex items-center gap-3 py-2.5 text-sm">
+              <li
+                key={`${entry.side}-${entry.id}`}
+                className={`flex items-center gap-3 py-2.5 text-sm ${isAuto(entry) ? 'bg-gold-500/[0.05]' : ''}`}
+              >
                 <button
                   type="button"
                   onClick={() => setEditing(entry)}
@@ -89,6 +108,11 @@ export function HistoryEntries() {
                   <span className="block truncate text-ink-100">{entry.holdingName}</span>
                   <span className="block text-xs text-ink-400">
                     {entry.recordedAt.slice(0, 10)} · {SOURCE_LABELS[entry.source] ?? entry.source}
+                    {isAuto(entry) && (
+                      <span className="ml-1.5 rounded bg-gold-500/15 px-1.5 py-px text-[10px] font-medium uppercase tracking-wider text-gold-400">
+                        Auto
+                      </span>
+                    )}
                   </span>
                 </button>
                 <span className={`tabular shrink-0 font-medium ${entry.side === 'asset' ? 'text-gain-400' : 'text-loss-400'}`}>
@@ -105,7 +129,7 @@ export function HistoryEntries() {
               </li>
             ))}
           </ul>
-          {(entries.data?.length ?? 0) > SHOW_LIMIT && (
+          {visible.length > SHOW_LIMIT && (
             <p className="mt-3 text-center text-xs text-ink-600">
               Showing the most recent {SHOW_LIMIT} — filter by holding to narrow down.
             </p>

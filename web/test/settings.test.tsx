@@ -92,6 +92,24 @@ describe('settings history features', () => {
     });
   });
 
+  it('marks automatic entries and hides them on toggle', async () => {
+    mountSettings();
+    renderWithProviders(<App />, { route: '/settings/history' });
+
+    // Both the manual (Savings) and the recurring (Loan) entry are listed,
+    // and the automatic one carries an "Auto" badge.
+    expect(await screen.findByText('Savings')).toBeInTheDocument();
+    expect(screen.getByText('Loan')).toBeInTheDocument();
+    expect(screen.getByText('Auto')).toBeInTheDocument();
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('checkbox', { name: /hide automatic entries/i }));
+
+    // The recurring entry disappears; the manual one stays.
+    await waitFor(() => expect(screen.queryByText('Loan')).not.toBeInTheDocument());
+    expect(screen.getByText('Savings')).toBeInTheDocument();
+  });
+
   it('deletes an entry after confirmation', async () => {
     const calls = mountSettings();
     renderWithProviders(<App />, { route: '/settings/history' });

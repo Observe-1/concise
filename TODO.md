@@ -108,7 +108,7 @@ Implemented strictly in order; one commit per feature.
 Implemented strictly in order; one commit per feature.
 - [x] 1. Remove the market-price valuation method from property and vehicle
       assets (they keep manual + their model method)
-- [ ] 2. Historic entries (Settings → History): highlight automatically
+- [x] 2. Historic entries (Settings → History): highlight automatically
       generated entries and add a toggle to hide them
 - [ ] 3. Re-anchor on update: updating a holding's value never overwrites the
       historical value/date, but subsequent automatic calculations

@@ -144,7 +144,10 @@ day.
 - `GET /entries` lists every valuation across the user's holdings (filter by
   side/holding); `PATCH`/`DELETE /entries/:side/:id` edit values, move dates,
   or remove entries — snapshots are rebuilt from the earliest affected date.
-  The last remaining entry of a holding cannot be deleted.
+  The last remaining entry of a holding cannot be deleted. In the web history
+  editor, automatically generated entries (any `source` other than `manual` —
+  recurring, market, seed) are tinted and badged "Auto", with a toggle to hide
+  them so only hand-entered values remain.
 - `POST /legacy` upserts a legacy net-worth point (snapshot with
   `source='legacy'`); `DELETE /legacy/:date` removes it, restoring computed
   data where valuations cover the date.
