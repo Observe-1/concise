@@ -44,6 +44,35 @@ describe('assets page', () => {
     expect(screen.getByText('Gold')).toBeInTheDocument();
   });
 
+  it('shows a per-holding percent change for the selected range', async () => {
+    const calls = mockFetch([
+      [/\/api\/auth\/me/, { user: demoUser }],
+      [/\/api\/assets\/changes\?range=1Y/, [
+        { id: 1, changePct: 12.5 },
+        { id: 2, changePct: -4.2 },
+        { id: 3, changePct: null },
+      ]],
+      [/\/api\/assets\/changes\?range=1M/, [
+        { id: 1, changePct: 0.3 },
+        { id: 2, changePct: -1 },
+        { id: 3, changePct: null },
+      ]],
+      [/\/api\/assets$/, assets],
+    ]);
+    renderWithProviders(<App />, { route: '/assets' });
+
+    // Default range 1Y: growth, decline and N/A all render.
+    expect(await screen.findByText('+12.5%')).toBeInTheDocument();
+    expect(screen.getByText('-4.2%')).toBeInTheDocument();
+    expect(screen.getByText('N/A')).toBeInTheDocument();
+
+    // Switching the range refetches and shows the new figures.
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: '1M' }));
+    expect(await screen.findByText('+0.3%')).toBeInTheDocument();
+    expect(calls.some((c) => /\/api\/assets\/changes\?range=1M/.test(c.url))).toBe(true);
+  });
+
   it('offers a metal sub-selection for precious metals and sends it on create', async () => {
     const calls = mockFetch([
       [/\/api\/auth\/me/, { user: demoUser }],

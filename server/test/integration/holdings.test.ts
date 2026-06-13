@@ -110,6 +110,29 @@ describe('assets & liabilities API', () => {
     await csrf(agent.patch(`/api/assets/${market.body.id}`)).send({ category: 'vehicles' }).expect(400);
   });
 
+  it('reports per-holding percent change over a range', async () => {
+    // Backdated a year ago at 100.00, then updated today to 150.00.
+    await csrf(agent.post('/api/assets'))
+      .send({ category: 'cash', name: 'Savings', valueMinor: 100_00, asOf: '2025-06-11' });
+    const list = await agent.get('/api/assets');
+    const id = list.body[0].id as number;
+    await csrf(agent.post(`/api/assets/${id}/valuations`)).send({ valueMinor: 150_00 });
+
+    // 1M ago the base was still 100.00 → +50%.
+    const oneM = await agent.get('/api/assets/changes?range=1M');
+    expect(oneM.body).toEqual([{ id, changePct: 50 }]);
+
+    // 5 years ago the asset did not exist yet → N/A.
+    const fiveY = await agent.get('/api/assets/changes?range=5Y');
+    expect(fiveY.body).toEqual([{ id, changePct: null }]);
+
+    // MAX measures from the first valuation → +50%.
+    const max = await agent.get('/api/assets/changes?range=ALL');
+    expect(max.body).toEqual([{ id, changePct: 50 }]);
+
+    await agent.get('/api/assets/changes?range=NOPE').expect(400);
+  });
+
   it('creates precious metal assets with a metal sub-selection', async () => {
     const res = await csrf(agent.post('/api/assets')).send({
       category: 'precious_metals', name: 'Krugerrands', metal: 'gold', valueMinor: 950_000,

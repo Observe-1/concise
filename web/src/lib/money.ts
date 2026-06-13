@@ -35,6 +35,11 @@ export function minorToInput(minor: number): string {
   return (minor / 100).toFixed(2);
 }
 
+/** Format a percent change with an explicit sign, one decimal: "+12.5%". */
+export function formatChangePct(pct: number): string {
+  return `${pct > 0 ? '+' : ''}${pct.toFixed(1)}%`;
+}
+
 /** Like parseToMinor but allows a leading minus (net worth can be negative). */
 export function parseSignedToMinor(input: string): number | null {
   const negative = /^\s*-/.test(input);

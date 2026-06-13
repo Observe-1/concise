@@ -113,7 +113,7 @@ Implemented strictly in order; one commit per feature.
 - [x] 3. Re-anchor on update: updating a holding's value never overwrites the
       historical value/date, but subsequent automatic calculations
       (model/market valuations) work from the new value as their base
-- [ ] 4. Assets/Liabilities pages: 1M/3M/6M/YTD/1Y/5Y/10Y/20Y/MAX quick-select
+- [x] 4. Assets/Liabilities pages: 1M/3M/6M/YTD/1Y/5Y/10Y/20Y/MAX quick-select
       at the top showing each holding's % change over the period (growth
       green, decline red, N/A grey)
 - [ ] 5. Dashboard: % change next to values on the summary cards, driven by

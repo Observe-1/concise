@@ -2,6 +2,7 @@ import {
   useEffect, useId, useRef, type ButtonHTMLAttributes, type InputHTMLAttributes,
   type ReactNode, type SelectHTMLAttributes,
 } from 'react';
+import { formatChangePct } from '../lib/money.js';
 
 // ---------- buttons ----------
 
@@ -23,6 +24,22 @@ export function Button({
       className={`rounded-xl px-4 py-2.5 text-sm transition-colors min-h-11 ${buttonStyles[variant]} ${className}`}
       {...props}
     />
+  );
+}
+
+// ---------- change indicator ----------
+
+/**
+ * A percent-change pill: growth green, decline red, flat/unknown grey. `pct`
+ * is null when the change can't be computed (shown as "N/A").
+ */
+export function ChangeBadge({ pct, className = '' }: { pct: number | null; className?: string }) {
+  const tone =
+    pct === null || pct === 0 ? 'text-ink-400' : pct > 0 ? 'text-gain-400' : 'text-loss-400';
+  return (
+    <span className={`tabular text-xs font-medium ${tone} ${className}`}>
+      {pct === null ? 'N/A' : formatChangePct(pct)}
+    </span>
   );
 }
 

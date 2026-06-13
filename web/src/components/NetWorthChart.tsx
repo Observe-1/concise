@@ -19,11 +19,18 @@ const dateLabel = (iso: string, long = false) =>
   });
 
 export function RangePicker({
-  value, onChange,
-}: { value: HistoryRange; onChange: (r: HistoryRange) => void }) {
+  value, onChange, ranges = RANGES, allLabel = 'All',
+}: {
+  value: HistoryRange;
+  onChange: (r: HistoryRange) => void;
+  /** Override the offered ranges (e.g. hide ALL in prediction mode). */
+  ranges?: HistoryRange[];
+  /** Label for the ALL range — "All" on the dashboard, "Max" on holdings. */
+  allLabel?: string;
+}) {
   return (
     <div role="group" aria-label="History range" className="flex gap-1 overflow-x-auto">
-      {RANGES.map((r) => (
+      {ranges.map((r) => (
         <button
           key={r}
           type="button"
@@ -33,7 +40,7 @@ export function RangePicker({
             value === r ? 'bg-gold-500 text-ink-950' : 'text-ink-400 hover:text-ink-100'
           }`}
         >
-          {r === 'ALL' ? 'All' : r}
+          {r === 'ALL' ? allLabel : r}
         </button>
       ))}
     </div>

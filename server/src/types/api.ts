@@ -89,6 +89,17 @@ export interface HoldingDetailDto extends HoldingDto {
   valuations: ValuationDto[];
 }
 
+/** Percent change of a holding's value over a requested range. */
+export interface HoldingChangeDto {
+  id: number;
+  /**
+   * Percent change over the range (e.g. 12.5 = +12.5%), or null when it
+   * can't be computed: the holding had no valuation on or before the period
+   * start (it didn't exist yet), or the base value was zero.
+   */
+  changePct: number | null;
+}
+
 export interface RecurringDto {
   id: number;
   name: string;

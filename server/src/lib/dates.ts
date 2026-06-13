@@ -54,6 +54,13 @@ export function daysBetween(fromISO: string, toISO: string): number {
 
 export type HistoryRange = '1M' | '3M' | '6M' | 'YTD' | '1Y' | '5Y' | '10Y' | '20Y' | 'ALL';
 
+/** Every selectable history range (the UI's quick-select set). */
+export const HISTORY_RANGES = ['1M', '3M', '6M', 'YTD', '1Y', '5Y', '10Y', '20Y', 'ALL'] as const;
+
+export function isHistoryRange(value: string): value is HistoryRange {
+  return (HISTORY_RANGES as readonly string[]).includes(value);
+}
+
 /** Inclusive start date for a dashboard history range, or null for ALL. */
 export function rangeStart(range: HistoryRange, todayIso: string): string | null {
   const d = parseDateISO(todayIso);

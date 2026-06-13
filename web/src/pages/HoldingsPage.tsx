@@ -1,11 +1,12 @@
 import { useMemo, useState, type FormEvent } from 'react';
-import type { AssetCategory, HoldingDto } from '@api';
+import type { AssetCategory, HistoryRange, HoldingDto } from '@api';
 import { ASSET_CATEGORIES, ASSET_VALUATION_MODES, LIABILITY_CATEGORIES, METALS } from '@api';
 import {
-  useCreateHolding, useDeleteHolding, useHoldings, useMarketRefresh, useMe,
+  useCreateHolding, useDeleteHolding, useHoldingChanges, useHoldings, useMarketRefresh, useMe,
   usePropertyCountries, useRevalueHolding, useSymbolLookup, useUpdateHolding, type HoldingKind,
 } from '../api/queries.js';
-import { Button, Card, EmptyState, ErrorNote, Field, Input, Modal, Select, Spinner } from '../components/ui.js';
+import { RangePicker } from '../components/NetWorthChart.js';
+import { Button, Card, ChangeBadge, EmptyState, ErrorNote, Field, Input, Modal, Select, Spinner } from '../components/ui.js';
 import { useHistoricalView } from '../contexts/HistoricalView.js';
 import { categoryDisplay, categoryLabel, type HoldingSide } from '../lib/categories.js';
 import { formatMinor, minorToInput, parseToMinor } from '../lib/money.js';
@@ -64,6 +65,14 @@ export function HoldingsPage({ kind }: { kind: HoldingKind }) {
   const marketRefresh = useMarketRefresh();
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<HoldingDto | null>(null);
+  // Quick-select range driving the per-holding % change column.
+  const [range, setRange] = useState<HistoryRange>('1Y');
+  const changes = useHoldingChanges(kind, range, asOf);
+  const changeById = useMemo(() => {
+    const map = new Map<number, number | null>();
+    for (const c of changes.data ?? []) map.set(c.id, c.changePct);
+    return map;
+  }, [changes.data]);
   const currency = me?.currency ?? 'USD';
 
   const groups = useMemo(() => {
@@ -100,6 +109,15 @@ export function HoldingsPage({ kind }: { kind: HoldingKind }) {
         <p className="tabular text-xs font-medium uppercase tracking-wider text-loss-400">
           Historical view · as of {asOf} — read-only
         </p>
+      )}
+
+      {groups.length > 0 && (
+        <div className="flex items-center justify-between gap-2">
+          <span className="shrink-0 text-xs font-medium uppercase tracking-wider text-ink-400">
+            Change over
+          </span>
+          <RangePicker value={range} onChange={setRange} allLabel="Max" />
+        </div>
       )}
 
       {groups.length === 0 ? (
@@ -159,8 +177,11 @@ export function HoldingsPage({ kind }: { kind: HoldingKind }) {
                           )}
                         </span>
                       </span>
-                      <span className={`tabular shrink-0 text-sm font-semibold ${copy.tone === 'gain' ? 'text-gain-400' : 'text-loss-400'}`}>
-                        {formatMinor(h.currentValueMinor, currency)}
+                      <span className="flex shrink-0 flex-col items-end">
+                        <span className={`tabular text-sm font-semibold ${copy.tone === 'gain' ? 'text-gain-400' : 'text-loss-400'}`}>
+                          {formatMinor(h.currentValueMinor, currency)}
+                        </span>
+                        {changeById.has(h.id) && <ChangeBadge pct={changeById.get(h.id)!} />}
                       </span>
                     </button>
                   </li>

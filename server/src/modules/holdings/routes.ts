@@ -5,9 +5,10 @@ import { METALS } from '../../types/api.js';
 import type { HoldingKind } from './kind.js';
 import { audit } from '../../lib/audit.js';
 import { asOfParam, badRequest, idParam, parseBody } from '../../lib/http.js';
+import { isHistoryRange, HISTORY_RANGES } from '../../lib/dates.js';
 import { dateStringSchema, valueMinorSchema as valueSchema } from '../../lib/schemas.js';
 import {
-  addValuation, createHolding, deleteHolding, getHolding, listHoldings, updateHolding,
+  addValuation, createHolding, deleteHolding, getHolding, holdingChanges, listHoldings, updateHolding,
 } from './service.js';
 
 function buildSchemas(k: HoldingKind) {
@@ -60,6 +61,16 @@ export function holdingsRoutes(ctx: AppContext, k: HoldingKind): Router {
 
   router.get('/', (req, res) => {
     res.json(listHoldings(ctx, k, req.user!.id, asOfParam(req)));
+  });
+
+  // Per-holding % change over a range (registered before "/:id" so the static
+  // path is not captured as an id). asOf scopes it to the historical view.
+  router.get('/changes', (req, res) => {
+    const range = String(req.query.range ?? 'ALL').toUpperCase();
+    if (!isHistoryRange(range)) {
+      throw badRequest(`Invalid range; expected one of ${HISTORY_RANGES.join(', ')}`);
+    }
+    res.json(holdingChanges(ctx, k, req.user!.id, range, asOfParam(req)));
   });
 
   router.post('/', (req, res) => {

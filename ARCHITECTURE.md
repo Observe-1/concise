@@ -131,6 +131,13 @@ day.
   price); days the provider cannot price are skipped and flag the asset
   (`history_price_missing` → `historicalPriceMissing`), which the holdings
   page shows as a hoverable "incomplete history" label.
+- `GET /api/assets|liabilities/changes?range=1M|…|ALL` returns each holding's
+  percent change over the range (`{ id, changePct }`): the base is the latest
+  valuation on or before the period start (ALL measures from the first
+  valuation), `changePct` is `null` when the holding had no value then (didn't
+  exist yet) or the base was zero. `asOf` scopes it to the historical view.
+  The holdings pages render this as a green/red/grey badge per holding under a
+  range quick-select.
 - "Update value" appends a `manual` valuation row (history preserved), then
   upserts today's snapshot. For model-valued holdings this **re-anchors** the
   automatic estimate: the property-index and depreciation formulas grow from

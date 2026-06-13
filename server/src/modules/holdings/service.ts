@@ -1,12 +1,12 @@
 import type { AppContext } from '../../context.js';
 import type {
-  AssetCategory, HoldingDto, HoldingDetailDto, Metal, ValuationDto, ValuationMode, ValuationSource,
+  AssetCategory, HoldingChangeDto, HoldingDto, HoldingDetailDto, Metal, ValuationDto, ValuationMode, ValuationSource,
 } from '../../types/api.js';
 import { ASSET_VALUATION_MODES } from '../../types/api.js';
 import type { HoldingKind } from './kind.js';
 import { withTransaction } from '../../db/connection.js';
 import { badRequest, notFound } from '../../lib/http.js';
-import { addDays, todayISO } from '../../lib/dates.js';
+import { addDays, rangeStart, todayISO, type HistoryRange } from '../../lib/dates.js';
 import { PROPERTY_COUNTRIES, propertyValueMinor, vehicleValueMinor } from '../market/models.js';
 import { holdingValueMinor } from '../market/provider.js';
 import { recomputeSnapshotRange, refreshTodaySnapshot } from '../snapshots/service.js';
@@ -119,6 +119,47 @@ export function listHoldings(
     )
     .all(cutoff, cutoff, userId, cutoff) as unknown as HoldingRow[];
   return rows.map(toDto);
+}
+
+/**
+ * Percent change of every holding's value over a range, ending at the
+ * reference date (asOf in historical view, otherwise today). The base is the
+ * latest valuation on or before the period start; ALL/MAX measures from the
+ * holding's first valuation. Returns null when the holding had no value at
+ * the period start (it didn't exist yet) or the base was zero.
+ */
+export function holdingChanges(
+  ctx: AppContext,
+  k: HoldingKind,
+  userId: number,
+  range: HistoryRange,
+  asOfISO?: string,
+): HoldingChangeDto[] {
+  const ref = asOfISO ?? todayISO(ctx.now);
+  const start = rangeStart(range, ref);
+  const valueAt = ctx.db.prepare(
+    `SELECT value_minor FROM ${k.valuationTable}
+     WHERE ${k.fk} = ? AND recorded_at <= ?
+     ORDER BY recorded_at DESC, id DESC LIMIT 1`,
+  );
+  const earliest = ctx.db.prepare(
+    `SELECT value_minor FROM ${k.valuationTable}
+     WHERE ${k.fk} = ? ORDER BY recorded_at, id LIMIT 1`,
+  );
+  const ids = ctx.db
+    .prepare(`SELECT id FROM ${k.table} WHERE user_id = ? ORDER BY id`)
+    .all(userId) as { id: number }[];
+  const refCutoff = `${ref}T23:59:59.999Z`;
+  return ids.map(({ id }): HoldingChangeDto => {
+    const end = valueAt.get(id, refCutoff) as { value_minor: number } | undefined;
+    if (!end) return { id, changePct: null };
+    const base = (start
+      ? valueAt.get(id, `${start}T23:59:59.999Z`)
+      : earliest.get(id)) as { value_minor: number } | undefined;
+    if (!base || base.value_minor === 0) return { id, changePct: null };
+    const pct = ((end.value_minor - base.value_minor) / base.value_minor) * 100;
+    return { id, changePct: Math.round(pct * 100) / 100 };
+  });
 }
 
 function getRow(ctx: AppContext, k: HoldingKind, userId: number, id: number): HoldingRow {

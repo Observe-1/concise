@@ -2,7 +2,7 @@ import {
   keepPreviousData, useMutation, useQuery, useQueryClient,
 } from '@tanstack/react-query';
 import type {
-  DashboardSummaryDto, HistoryDto, HistoryEntryDto, HistoryRange, HoldingDetailDto,
+  DashboardSummaryDto, HistoryDto, HistoryEntryDto, HistoryRange, HoldingChangeDto, HoldingDetailDto,
   HoldingDto, LegacySnapshotDto, PropertyCountryDto, RecurringDto, SessionUser, SettingsDto,
   SymbolLookupDto, ValuationMode,
 } from '@api';
@@ -92,6 +92,16 @@ export function useHoldings(kind: HoldingKind, asOf?: string | null) {
   return useQuery({
     queryKey: ['holdings', kind, asOf ?? null],
     queryFn: () => api<HoldingDto[]>(`/api/${kind}${asOf ? `?asOf=${asOf}` : ''}`),
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** Per-holding % change over a range (for the quick-select on holdings pages). */
+export function useHoldingChanges(kind: HoldingKind, range: HistoryRange, asOf?: string | null) {
+  return useQuery({
+    queryKey: ['holdings', kind, 'changes', range, asOf ?? null],
+    queryFn: () =>
+      api<HoldingChangeDto[]>(`/api/${kind}/changes?range=${range}${asOf ? `&asOf=${asOf}` : ''}`),
     placeholderData: keepPreviousData,
   });
 }

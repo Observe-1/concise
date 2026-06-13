@@ -3,13 +3,12 @@ import type { AppContext } from '../../context.js';
 import type {
   CategoryTotalDto, DashboardSummaryDto, HistoryDto, HistoryPointDto, HistoryRange, HoldingDto,
 } from '../../types/api.js';
-import { rangeStart, todayISO } from '../../lib/dates.js';
+import { HISTORY_RANGES, isHistoryRange, rangeStart, todayISO } from '../../lib/dates.js';
 import { asOfParam, badRequest } from '../../lib/http.js';
 import { ASSET_KIND, LIABILITY_KIND } from '../holdings/kind.js';
 import { listHoldings } from '../holdings/service.js';
 
 const MAX_GRAPH_POINTS = 400;
-const RANGES: ReadonlySet<string> = new Set(['1M', '3M', '6M', 'YTD', '1Y', '5Y', '10Y', '20Y', 'ALL']);
 
 // Trend smoothing window in days. The client may override per request via
 // ?trendWindow= within these bounds; whatever the window, it is applied to
@@ -85,7 +84,7 @@ export function dashboardRoutes(ctx: AppContext): Router {
 
   router.get('/history', (req, res) => {
     const range = String(req.query.range ?? 'ALL').toUpperCase();
-    if (!RANGES.has(range)) throw badRequest(`Invalid range; expected one of ${[...RANGES].join(', ')}`);
+    if (!isHistoryRange(range)) throw badRequest(`Invalid range; expected one of ${HISTORY_RANGES.join(', ')}`);
     let trendWindow = TREND_WINDOW_DEFAULT_DAYS;
     if (req.query.trendWindow !== undefined) {
       trendWindow = Number(req.query.trendWindow);
