@@ -1,6 +1,6 @@
 # TODO — single source of truth for progress
 
-**Status: in progress — feature batch 2026-06-12 #3 (see below). Deployment is out of scope.**
+**Status: complete (phases 1–6 + four feature batches). Deployment is out of scope.**
 
 ## Phase 1: System architecture
 - [x] Tech stack decisions (Node 24 + node:sqlite + Express 5 / React 19 + Vite + Tailwind 4)
@@ -132,7 +132,7 @@ Implemented strictly in order; one commit per feature.
       range); MAX hidden in this mode; dotted line marks today; View-as still
       works over future values (handle defaults to the latest date); golden
       exit button that shifts when both modes are active
-- [ ] 10. Settings: delete all data for the account, gated by a confirmation
+- [x] 10. Settings: delete all data for the account, gated by a confirmation
       tickbox and typing "delete all" exactly (error message otherwise)
 
 ## Notes

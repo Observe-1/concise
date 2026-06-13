@@ -51,6 +51,37 @@ describe('settings sub pages', () => {
   });
 });
 
+describe('delete all data', () => {
+  it('requires the tickbox and the exact phrase before deleting', async () => {
+    const calls = mountSettings();
+    renderWithProviders(<App />, { route: '/settings' });
+
+    const user = userEvent.setup();
+    const deleteBtn = await screen.findByRole('button', { name: /delete all data/i });
+
+    // Nothing ticked/typed → error, no request.
+    await user.click(deleteBtn);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/100% sure/i);
+
+    // Ticked but wrong phrase → error, no request.
+    await user.click(screen.getByRole('checkbox', { name: /100% sure/i }));
+    await user.type(screen.getByLabelText(/type "delete all"/i), 'delete');
+    await user.click(deleteBtn);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/type "delete all" exactly/i);
+    expect(calls.some((c) => c.method === 'POST' && c.url.includes('/api/settings/delete-all'))).toBe(false);
+
+    // Correct phrase → the wipe request is sent.
+    const phrase = screen.getByLabelText(/type "delete all"/i);
+    await user.clear(phrase);
+    await user.type(phrase, 'delete all');
+    await user.click(deleteBtn);
+    await waitFor(() => {
+      const post = calls.find((c) => c.method === 'POST' && c.url.includes('/api/settings/delete-all'));
+      expect(post!.body).toEqual({ confirm: 'delete all' });
+    });
+  });
+});
+
 describe('settings history features', () => {
   it('shows legacy wealth entries and posts new points', async () => {
     const calls = mountSettings();

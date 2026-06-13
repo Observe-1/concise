@@ -259,6 +259,18 @@ export function useUpdateSettings() {
   });
 }
 
+/** Permanently delete all of the user's financial data (keeps the account). */
+export function useDeleteAllData() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (confirm: string) =>
+      api<void>('/api/settings/delete-all', { method: 'POST', body: { confirm } }),
+    onSuccess: () => {
+      void qc.invalidateQueries();
+    },
+  });
+}
+
 // ---------- historic entries ----------
 
 export interface HistoryEntryFilter {

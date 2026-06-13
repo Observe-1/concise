@@ -49,4 +49,36 @@ describe('settings API', () => {
     await csrf(agent.patch('/api/settings')).send({ currency: 'POUNDS' }).expect(400);
     await csrf(agent.patch('/api/settings')).send({ currency: '12$' }).expect(400);
   });
+
+  it('deletes all financial data on confirmation, keeping the account', async () => {
+    // Seed some data: an asset, a liability and a recurring schedule.
+    const asset = await csrf(agent.post('/api/assets'))
+      .send({ category: 'cash', name: 'Savings', valueMinor: 1_000_00 });
+    await csrf(agent.post('/api/liabilities'))
+      .send({ category: 'loan', name: 'Loan', valueMinor: 500_00 });
+    await csrf(agent.post('/api/recurring')).send({
+      name: 'Save', targetType: 'asset', targetId: asset.body.id,
+      amountMinor: 100_00, cadence: 'monthly', nextRunOn: '2026-07-11',
+    });
+    expect((await agent.get('/api/assets')).body.length).toBe(1);
+
+    // Wrong phrase is rejected and changes nothing.
+    await csrf(agent.post('/api/settings/delete-all')).send({ confirm: 'nope' }).expect(400);
+    expect((await agent.get('/api/assets')).body.length).toBe(1);
+
+    // Correct phrase wipes assets, liabilities, recurring and snapshots.
+    await csrf(agent.post('/api/settings/delete-all')).send({ confirm: 'delete all' }).expect(204);
+    expect((await agent.get('/api/assets')).body).toEqual([]);
+    expect((await agent.get('/api/liabilities')).body).toEqual([]);
+    expect((await agent.get('/api/recurring')).body).toEqual([]);
+
+    // The account and session survive — settings still load.
+    const settings = await agent.get('/api/settings');
+    expect(settings.body.username).toBe('alice');
+
+    // A clean baseline snapshot for today remains (zero net worth).
+    const summary = await agent.get('/api/dashboard/summary');
+    expect(summary.body.netWorthMinor).toBe(0);
+    expect(summary.body.assetsMinor).toBe(0);
+  });
 });

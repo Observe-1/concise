@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  useDeleteLegacyWealth, useLegacyWealth, useLogout, useMe, useSetLegacyWealth,
+  useDeleteAllData, useDeleteLegacyWealth, useLegacyWealth, useLogout, useMe, useSetLegacyWealth,
   useSettings, useUpdateSettings,
 } from '../api/queries.js';
 import { HistoryEntries } from '../components/HistoryEntries.js';
@@ -110,7 +110,87 @@ function AccountSection() {
           Sign out
         </Button>
       </Card>
+
+      <DangerZone />
     </>
+  );
+}
+
+const DELETE_PHRASE = 'delete all';
+
+function DangerZone() {
+  const deleteAll = useDeleteAllData();
+  const [sure, setSure] = useState(false);
+  const [confirmText, setConfirmText] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  const onDelete = () => {
+    setError(null);
+    setDone(false);
+    if (!sure) {
+      setError('Tick the box to confirm you are 100% sure.');
+      return;
+    }
+    if (confirmText !== DELETE_PHRASE) {
+      setError(`Type "${DELETE_PHRASE}" exactly to confirm.`);
+      return;
+    }
+    deleteAll.mutate(confirmText, {
+      onSuccess: () => {
+        setDone(true);
+        setSure(false);
+        setConfirmText('');
+      },
+      onError: (err) => setError(err instanceof Error ? err.message : 'Could not delete your data.'),
+    });
+  };
+
+  return (
+    <Card className="border-loss-500/40 p-5">
+      <h2 className="mb-2 text-xs font-medium uppercase tracking-widest text-loss-400">Danger zone</h2>
+      <p className="mb-4 text-sm text-ink-400">
+        Permanently delete all your assets, liabilities, recurring schedules and
+        net-worth history. Your account and preferences are kept. This cannot be
+        undone.
+      </p>
+
+      <label className="mb-3 flex cursor-pointer items-start gap-2 text-sm text-ink-300">
+        <input
+          type="checkbox"
+          checked={sure}
+          onChange={(e) => setSure(e.target.checked)}
+          className="mt-0.5 h-4 w-4 accent-loss-500"
+        />
+        <span>I am 100% sure I want to delete all of my data.</span>
+      </label>
+
+      <Field label={`Type "${DELETE_PHRASE}" to confirm`}>
+        {(id) => (
+          <Input
+            id={id}
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+            placeholder={DELETE_PHRASE}
+            autoComplete="off"
+          />
+        )}
+      </Field>
+
+      {error ? <div className="mt-3"><ErrorNote message={error} /></div> : null}
+      {done && !deleteAll.isPending ? (
+        <p role="status" className="mt-3 text-sm text-gain-400">All data deleted.</p>
+      ) : null}
+
+      <Button
+        variant="danger"
+        className="mt-4"
+        onClick={onDelete}
+        disabled={deleteAll.isPending}
+      >
+        {deleteAll.isPending ? 'Deleting…' : 'Delete all data'}
+      </Button>
+    </Card>
   );
 }
 

@@ -154,9 +154,16 @@ day.
 
 ### Settings (web)
 - `/settings/:section?` renders three sub pages selected by buttons at the
-  top: **User account** (profile, sign out — the default), **History**
-  (legacy wealth, historic-entry editor), **Calculation** (currency, birth
-  year). All share `GET/PATCH /api/settings`.
+  top: **User account** (profile, sign out, **Danger zone** — the default),
+  **History** (legacy wealth, historic-entry editor), **Calculation**
+  (currency, birth year). All share `GET/PATCH /api/settings`.
+- **Delete all data:** `POST /api/settings/delete-all` wipes the user's
+  assets, liabilities (and their valuations via cascade), recurring schedules
+  and snapshots, leaving the account, session and preferences intact and a
+  fresh zero baseline snapshot for today. The body must carry
+  `confirm: "delete all"` (server backstop); the UI's Danger zone gates it
+  behind a "100% sure" tickbox and a text box requiring the exact phrase,
+  showing an error otherwise.
 
 ### History editing (`/api/history`)
 - `GET /entries` lists every valuation across the user's holdings (filter by
