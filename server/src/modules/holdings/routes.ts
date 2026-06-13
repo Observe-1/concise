@@ -5,11 +5,12 @@ import { METALS } from '../../types/api.js';
 import type { HoldingKind } from './kind.js';
 import { audit } from '../../lib/audit.js';
 import { asOfParam, badRequest, idParam, parseBody } from '../../lib/http.js';
-import { isHistoryRange, HISTORY_RANGES } from '../../lib/dates.js';
+import { advanceCadence, isHistoryRange, todayISO, HISTORY_RANGES } from '../../lib/dates.js';
 import { dateStringSchema, valueMinorSchema as valueSchema } from '../../lib/schemas.js';
 import {
   addValuation, createHolding, deleteHolding, getHolding, holdingChanges, listHoldings, updateHolding,
 } from './service.js';
+import { createRecurring } from '../recurring/service.js';
 
 function buildSchemas(k: HoldingKind) {
   const base = {
@@ -27,9 +28,15 @@ function buildSchemas(k: HoldingKind) {
         manufactureDate: dateStringSchema.optional(),
       }
     : {};
+  // Liabilities only: an optional interest rate that auto-creates a yearly
+  // percent schedule growing the balance (capped to the recurring engine's
+  // per-occurrence ceiling).
+  const liabilityExtras = k.supportsMarket
+    ? {}
+    : { interestRatePct: z.number().finite().gt(0).max(1000).optional() };
   // metal only makes sense on the precious_metals class (DB CHECK mirrors this)
   const create = z.object({
-    ...base, ...market,
+    ...base, ...market, ...liabilityExtras,
     valueMinor: valueSchema.optional(),
     asOf: dateStringSchema.optional(),
   })
@@ -76,6 +83,7 @@ export function holdingsRoutes(ctx: AppContext, k: HoldingKind): Router {
   router.post('/', (req, res) => {
     const input = parseBody(schemas.create, req.body) as Record<string, unknown> & {
       valuationMode?: string; marketSymbol?: string; quantity?: number; valueMinor?: number;
+      interestRatePct?: number; asOf?: string; name?: string;
     };
     if (input.valuationMode === 'market') {
       if (!input.marketSymbol || !input.quantity) {
@@ -88,6 +96,22 @@ export function holdingsRoutes(ctx: AppContext, k: HoldingKind): Router {
     audit(ctx.db, {
       userId: req.user!.id, action: `${k.kind}.create`, entityType: k.kind, entityId: dto.id, ip: req.ip,
     });
+    // A liability with an interest rate gets a yearly percent schedule that
+    // grows its balance. First accrual is one year after the entry's start.
+    if (k.kind === 'liability' && typeof input.interestRatePct === 'number') {
+      const start = input.asOf ?? todayISO(ctx.now);
+      const rec = createRecurring(ctx, req.user!.id, {
+        name: `${dto.name} interest`,
+        targetType: 'liability',
+        targetId: dto.id,
+        percent: input.interestRatePct,
+        cadence: 'yearly',
+        nextRunOn: advanceCadence(start, 'yearly'),
+      });
+      audit(ctx.db, {
+        userId: req.user!.id, action: 'recurring.create', entityType: 'recurring', entityId: rec.id, ip: req.ip,
+      });
+    }
     res.status(201).json(dto);
   });
 

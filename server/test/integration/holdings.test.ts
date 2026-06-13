@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createUser, csrf, loginAgent, makeTestWorld, type TestWorld } from '../helpers.js';
 import { PROPERTY_COUNTRIES, propertyValueMinor, vehicleValueMinor } from '../../src/modules/market/models.js';
+import { runDueRecurring } from '../../src/modules/recurring/service.js';
 
 describe('assets & liabilities API', () => {
   let world: TestWorld;
@@ -399,6 +400,52 @@ describe('assets & liabilities API', () => {
         category: 'crypto', name: 'X', valuationMode: 'depreciation',
         manufactureDate: '2020-01-01', valueMinor: 1,
       }).expect(400); // method gated to the vehicles category
+    });
+  });
+
+  describe('liability interest rate', () => {
+    it('auto-creates a yearly percent schedule from an interest rate', async () => {
+      const res = await csrf(agent.post('/api/liabilities')).send({
+        category: 'loan', name: 'Car loan', valueMinor: 1_000_00, interestRatePct: 5,
+      });
+      expect(res.status).toBe(201);
+
+      const recs = (await agent.get('/api/recurring')).body;
+      expect(recs).toHaveLength(1);
+      expect(recs[0]).toMatchObject({
+        name: 'Car loan interest',
+        targetType: 'liability',
+        targetId: res.body.id,
+        amountType: 'percent',
+        percent: 5,
+        cadence: 'yearly',
+        nextRunOn: '2027-06-11', // one year after creation — no immediate accrual
+      });
+    });
+
+    it('grows the balance by the interest rate after a year', async () => {
+      const res = await csrf(agent.post('/api/liabilities')).send({
+        category: 'loan', name: 'Loan', valueMinor: 1_000_00, interestRatePct: 10,
+      });
+      // No accrual yet on the day it was created.
+      expect(runDueRecurring(world.ctx)).toBe(0);
+
+      world.advanceDays(370);
+      runDueRecurring(world.ctx);
+      agent = await loginAgent(world.app); // previous session expired with the clock jump
+      const loan = await agent.get(`/api/liabilities/${res.body.id}`);
+      expect(loan.body.currentValueMinor).toBe(1_100_00); // +10%
+    });
+
+    it('rejects a non-positive interest rate and ignores it on assets', async () => {
+      await csrf(agent.post('/api/liabilities')).send({
+        category: 'loan', name: 'Bad', valueMinor: 100, interestRatePct: 0,
+      }).expect(400);
+      // Assets silently ignore the field (no schedule created).
+      await csrf(agent.post('/api/assets')).send({
+        category: 'cash', name: 'Savings', valueMinor: 100, interestRatePct: 5,
+      }).expect(201);
+      expect((await agent.get('/api/recurring')).body).toHaveLength(0);
     });
   });
 

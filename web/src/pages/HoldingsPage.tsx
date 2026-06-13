@@ -224,6 +224,9 @@ function HoldingForm({
   const [manufactureDate, setManufactureDate] = useState(existing?.manufactureDate ?? '');
   const [value, setValue] = useState(existing ? minorToInput(existing.currentValueMinor) : '');
   const [asOf, setAsOf] = useState('');
+  // Liabilities only (on create): an interest rate that sets up a yearly
+  // percent schedule growing the balance.
+  const [interestRate, setInterestRate] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   // Symbol the user has confirmed via lookup. Editing an existing market
   // asset without touching the symbol needs no re-verification.
@@ -273,6 +276,11 @@ function HoldingForm({
       setFormError('Enter the manufacture date so depreciation can be applied correctly.');
       return;
     }
+    const interestRatePct = interestRate.trim() ? Number(interestRate) : undefined;
+    if (interestRate.trim() && (!Number.isFinite(interestRatePct) || interestRatePct! <= 0)) {
+      setFormError('Enter a positive interest rate, e.g. 5.5');
+      return;
+    }
 
     const onError = (err: unknown) =>
       setFormError(err instanceof Error ? err.message : 'Something went wrong');
@@ -290,7 +298,9 @@ function HoldingForm({
       create.mutate(
         {
           category, name, notes: notes || null,
-          ...(kind === 'assets' ? { ...metalField, ...modeFields } : { valueMinor: valueMinor! }),
+          ...(kind === 'assets'
+            ? { ...metalField, ...modeFields }
+            : { valueMinor: valueMinor!, ...(interestRatePct ? { interestRatePct } : {}) }),
           ...(asOf ? { asOf } : {}),
         },
         { onSuccess: onClose, onError },
@@ -485,6 +495,23 @@ function HoldingForm({
             {(id) => (
               <Input id={id} value={value} onChange={(e) => setValue(e.target.value)}
                 inputMode="decimal" placeholder="0.00" required />
+            )}
+          </Field>
+        )}
+
+        {kind === 'liabilities' && !existing && (
+          <Field
+            label="Interest rate % (optional)"
+            hint="Sets up a yearly schedule that grows the balance by this rate — manage or pause it on the Recurring page."
+          >
+            {(id) => (
+              <Input
+                id={id}
+                value={interestRate}
+                onChange={(e) => setInterestRate(e.target.value)}
+                inputMode="decimal"
+                placeholder="5.5"
+              />
             )}
           </Field>
         )}

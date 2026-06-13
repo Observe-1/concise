@@ -123,6 +123,12 @@ day.
 
 ### Assets / liabilities
 - CRUD under `/api/assets` and `/api/liabilities` (identical shape).
+- Creating a **liability** accepts an optional `interestRatePct`: the route
+  then auto-creates a yearly `percent` recurring schedule ("<name> interest")
+  that grows the balance by that rate, first accruing one year after the
+  entry's start date. It is a normal schedule thereafter (editable/pausable on
+  the Recurring page, and subject to the paid-off suspension rule). Assets
+  ignore the field.
 - Creating an entry writes the entry **and** its first valuation in one
   transaction, then upserts today's snapshot. An optional `asOf` backdate
   starts the entry's history on a past date and rebuilds daily snapshots from

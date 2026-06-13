@@ -369,6 +369,27 @@ describe('liabilities page', () => {
     expect(screen.queryByRole('option', { name: /Crypto/ })).not.toBeInTheDocument();
   });
 
+  it('sends an interest rate when adding a liability', async () => {
+    const calls = mockFetch([
+      [/\/api\/auth\/me/, { user: demoUser }],
+      [/\/api\/liabilities\/changes/, []],
+      [/\/api\/liabilities$/, []],
+    ]);
+    renderWithProviders(<App />, { route: '/liabilities' });
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /add liability/i }));
+    await user.type(screen.getByLabelText(/^name$/i), 'Car loan');
+    await user.type(screen.getByLabelText(/^value$/i), '10000');
+    await user.type(screen.getByLabelText(/interest rate/i), '5.5');
+    await user.click(screen.getByRole('button', { name: /^add$/i }));
+
+    await waitFor(() => {
+      const post = calls.find((c) => c.method === 'POST' && /\/api\/liabilities$/.test(c.url));
+      expect(post!.body).toMatchObject({ name: 'Car loan', valueMinor: 1_000_000, interestRatePct: 5.5 });
+    });
+  });
+
   it('marks a zero-balance liability as paid off', async () => {
     mockFetch([
       [/\/api\/auth\/me/, { user: demoUser }],

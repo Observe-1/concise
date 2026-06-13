@@ -121,7 +121,7 @@ Implemented strictly in order; one commit per feature.
 - [x] 6. "Paid off": a liability whose balance would go negative (percentage
       change or recurring payments) is set to 0 and its recurring payments
       are suspended
-- [ ] 7. Liabilities: interest-rate field when adding a new one; when filled
+- [x] 7. Liabilities: interest-rate field when adding a new one; when filled
       in it auto-creates a recurring entry increasing the value by that %
 - [ ] 8. Historical mode renamed to "View as"; its slider is incorporated into
       the graph's X axis (single bar, circle handle aligned with the X labels)

@@ -145,6 +145,8 @@ export interface HoldingInput {
   country?: string | null;
   manufactureDate?: string | null;
   asOf?: string;
+  /** Liabilities only: auto-creates a yearly percent interest schedule. */
+  interestRatePct?: number;
 }
 
 export function useCreateHolding(kind: HoldingKind) {
