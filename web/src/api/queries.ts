@@ -2,9 +2,9 @@ import {
   keepPreviousData, useMutation, useQuery, useQueryClient,
 } from '@tanstack/react-query';
 import type {
-  DashboardSummaryDto, HistoryDto, HistoryEntryDto, HistoryRange, HoldingChangeDto, HoldingDetailDto,
-  HoldingDto, LegacySnapshotDto, PropertyCountryDto, RecurringDto, SessionUser, SettingsDto,
-  SymbolLookupDto, ValuationMode,
+  DashboardChangesDto, DashboardSummaryDto, HistoryDto, HistoryEntryDto, HistoryRange,
+  HoldingChangeDto, HoldingDetailDto, HoldingDto, LegacySnapshotDto, PropertyCountryDto,
+  RecurringDto, SessionUser, SettingsDto, SymbolLookupDto, ValuationMode,
 } from '@api';
 import { api, ApiError } from './client.js';
 
@@ -71,6 +71,16 @@ export function useSummary(asOf?: string | null) {
     queryKey: ['dashboard', 'summary', asOf ?? null],
     queryFn: () =>
       api<DashboardSummaryDto>(`/api/dashboard/summary${asOf ? `?asOf=${asOf}` : ''}`),
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** Portfolio total % changes over a range, for the dashboard summary cards. */
+export function useDashboardChanges(range: HistoryRange, asOf?: string | null) {
+  return useQuery({
+    queryKey: ['dashboard', 'changes', range, asOf ?? null],
+    queryFn: () =>
+      api<DashboardChangesDto>(`/api/dashboard/changes?range=${range}${asOf ? `&asOf=${asOf}` : ''}`),
     placeholderData: keepPreviousData,
   });
 }

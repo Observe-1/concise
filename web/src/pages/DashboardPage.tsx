@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import type { HistoryRange } from '@api';
-import { useHistory, useMe, useSummary } from '../api/queries.js';
+import { useDashboardChanges, useHistory, useMe, useSummary } from '../api/queries.js';
 import { HistoricalScrubber } from '../components/HistoricalScrubber.js';
 import { NetWorthChart, RangePicker } from '../components/NetWorthChart.js';
-import { Card, Spinner } from '../components/ui.js';
+import { Card, ChangeBadge, Spinner } from '../components/ui.js';
 import { useHistoricalView } from '../contexts/HistoricalView.js';
 import { useDebouncedValue } from '../hooks/useDebouncedValue.js';
 import { categoryDisplay, type HoldingSide } from '../lib/categories.js';
@@ -15,6 +15,11 @@ const TREND_WINDOW_MIN = 7;
 const TREND_WINDOW_MAX = 365;
 const TREND_WINDOW_DEFAULT = 91;
 
+/** Short caption for the change figure, e.g. "vs 6M ago" / "all time". */
+function rangeLabel(range: HistoryRange): string {
+  return range === 'ALL' ? 'all time' : `vs ${range} ago`;
+}
+
 export function DashboardPage() {
   const { data: me } = useMe();
   const { asOf } = useHistoricalView();
@@ -24,6 +29,8 @@ export function DashboardPage() {
   const [trendWindow, setTrendWindow] = useState(TREND_WINDOW_DEFAULT);
   // Debounced so dragging the slider doesn't fire a request per step.
   const history = useHistory(range, useDebouncedValue(trendWindow));
+  // Portfolio % change over the graph's selected range, shown on the cards.
+  const changes = useDashboardChanges(range, asOf).data;
 
   if (summary.isLoading) return <Spinner label="Loading dashboard" />;
   if (summary.isError || !summary.data) {
@@ -98,21 +105,31 @@ export function DashboardPage() {
       </header>
 
       <Card className="p-5">
-        <p className="text-xs font-medium uppercase tracking-widest text-ink-400">Net worth</p>
+        <div className="flex items-baseline justify-between gap-2">
+          <p className="text-xs font-medium uppercase tracking-widest text-ink-400">Net worth</p>
+          {changes && (
+            <span className="flex items-baseline gap-1.5">
+              <ChangeBadge pct={changes.netWorthChangePct} />
+              <span className="text-[10px] uppercase tracking-wider text-ink-600">{rangeLabel(range)}</span>
+            </span>
+          )}
+        </div>
         <p className="tabular mt-1 text-3xl font-semibold text-gold-400 sm:text-4xl">
           {formatMinor(s.netWorthMinor, currency)}
         </p>
         <div className="mt-4 grid grid-cols-2 gap-3">
           <div className="rounded-xl bg-ink-800/60 px-3.5 py-3">
             <p className="text-[11px] font-medium uppercase tracking-wider text-ink-400">Assets</p>
-            <p className="tabular mt-0.5 text-lg font-semibold text-gain-400">
+            <p className="tabular mt-0.5 flex items-baseline gap-2 text-lg font-semibold text-gain-400">
               {formatMinor(s.assetsMinor, currency)}
+              {changes && <ChangeBadge pct={changes.assetsChangePct} />}
             </p>
           </div>
           <div className="rounded-xl bg-ink-800/60 px-3.5 py-3">
             <p className="text-[11px] font-medium uppercase tracking-wider text-ink-400">Liabilities</p>
-            <p className="tabular mt-0.5 text-lg font-semibold text-loss-400">
+            <p className="tabular mt-0.5 flex items-baseline gap-2 text-lg font-semibold text-loss-400">
               {formatMinor(s.liabilitiesMinor, currency)}
+              {changes && <ChangeBadge pct={changes.liabilitiesChangePct} />}
             </p>
           </div>
         </div>

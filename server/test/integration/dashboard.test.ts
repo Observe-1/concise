@@ -53,6 +53,36 @@ describe('dashboard API', () => {
     await agent.get('/api/dashboard/summary?asOf=06-11-2025').expect(400);
   });
 
+  it('reports portfolio percent change over a range, N/A beyond the history', async () => {
+    const res = await agent.get('/api/dashboard/changes?range=1Y');
+    expect(res.status).toBe(200);
+    expect(res.body.range).toBe('1Y');
+
+    // Matches a hand computation from the snapshot series.
+    const snap = (d: string) => world.ctx.db
+      .prepare('SELECT net_worth_minor AS n FROM snapshots WHERE snapshot_date <= ? ORDER BY snapshot_date DESC LIMIT 1')
+      .get(d) as { n: number };
+    const base = snap('2025-06-11').n;
+    const end = snap('2026-06-11').n;
+    const expected = Math.round(((end - base) / base) * 100 * 100) / 100;
+    expect(res.body.netWorthChangePct).toBe(expected);
+    expect(typeof res.body.assetsChangePct).toBe('number');
+
+    // 20Y reaches before the seeded history → no base snapshot → N/A.
+    const twenty = await agent.get('/api/dashboard/changes?range=20Y');
+    expect(twenty.body.netWorthChangePct).toBeNull();
+
+    // ALL measures from the earliest snapshot (null if its net worth was ≤ 0).
+    const all = await agent.get('/api/dashboard/changes?range=ALL');
+    const earliest = world.ctx.db
+      .prepare('SELECT net_worth_minor AS n FROM snapshots ORDER BY snapshot_date LIMIT 1')
+      .get() as { n: number };
+    const expectedAll = earliest.n > 0 ? Math.round(((end - earliest.n) / earliest.n) * 100 * 100) / 100 : null;
+    expect(all.body.netWorthChangePct).toBe(expectedAll);
+
+    await agent.get('/api/dashboard/changes?range=NOPE').expect(400);
+  });
+
   it('serves history for each range preset', async () => {
     for (const [range, expectedDays] of [
       ['1M', 31], ['3M', 93], ['6M', 183], ['1Y', 366],

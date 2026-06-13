@@ -132,6 +132,18 @@ export interface DashboardSummaryDto {
   liabilitiesByCategory: CategoryTotalDto[];
 }
 
+/**
+ * Percent change of the portfolio totals over a range (dashboard summary
+ * cards). Each field is null when it can't be computed: no snapshot on or
+ * before the period start, or a non-positive base (net worth can be ≤ 0).
+ */
+export interface DashboardChangesDto {
+  range: HistoryRange;
+  assetsChangePct: number | null;
+  liabilitiesChangePct: number | null;
+  netWorthChangePct: number | null;
+}
+
 export interface HistoryPointDto {
   date: string;
   assetsMinor: number;

@@ -26,9 +26,14 @@ const history = {
   ],
 };
 
+const changes = {
+  range: '6M', assetsChangePct: 4.2, liabilitiesChangePct: -4.8, netWorthChangePct: 11.1,
+};
+
 function mountDashboard() {
   const calls = mockFetch([
     [/\/api\/auth\/me/, { user: demoUser }],
+    [/\/api\/dashboard\/changes/, changes],
     [/\/api\/dashboard\/summary/, summary],
     [/\/api\/dashboard\/history/, history],
   ]);
@@ -45,6 +50,18 @@ describe('dashboard', () => {
     expect(screen.getAllByText(/50,000\.00/).length).toBeGreaterThan(0); // assets (green)
     expect(screen.getAllByText(/20,000\.00/).length).toBeGreaterThan(0); // liabilities (red)
     expect(screen.getByText(/welcome back, demo user/i)).toBeInTheDocument();
+  });
+
+  it('shows a percent change next to each total for the selected range', async () => {
+    const calls = mountDashboard();
+    // Net worth + assets growth in green, liabilities decline in red.
+    expect(await screen.findByText('+11.1%')).toBeInTheDocument();
+    expect(screen.getByText('+4.2%')).toBeInTheDocument();
+    expect(screen.getByText('-4.8%')).toBeInTheDocument();
+    expect(screen.getByText(/vs 6M ago/i)).toBeInTheDocument();
+
+    // The change figures are fetched for the graph's selected range.
+    expect(calls.some((c) => /\/api\/dashboard\/changes\?range=6M/.test(c.url))).toBe(true);
   });
 
   it('offers every range preset (including 10Y/20Y) and requests the chosen one', async () => {

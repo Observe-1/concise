@@ -116,7 +116,7 @@ Implemented strictly in order; one commit per feature.
 - [x] 4. Assets/Liabilities pages: 1M/3M/6M/YTD/1Y/5Y/10Y/20Y/MAX quick-select
       at the top showing each holding's % change over the period (growth
       green, decline red, N/A grey)
-- [ ] 5. Dashboard: % change next to values on the summary cards, driven by
+- [x] 5. Dashboard: % change next to values on the summary cards, driven by
       the graph's existing range toggles
 - [ ] 6. "Paid off": a liability whose balance would go negative (percentage
       change or recurring payments) is set to 0 and its recurring payments

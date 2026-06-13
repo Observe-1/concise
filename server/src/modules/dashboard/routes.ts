@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import type { AppContext } from '../../context.js';
 import type {
-  CategoryTotalDto, DashboardSummaryDto, HistoryDto, HistoryPointDto, HistoryRange, HoldingDto,
+  CategoryTotalDto, DashboardChangesDto, DashboardSummaryDto, HistoryDto, HistoryPointDto,
+  HistoryRange, HoldingDto,
 } from '../../types/api.js';
 import { HISTORY_RANGES, isHistoryRange, rangeStart, todayISO } from '../../lib/dates.js';
 import { asOfParam, badRequest } from '../../lib/http.js';
@@ -80,6 +81,48 @@ export function dashboardRoutes(ctx: AppContext): Router {
       liabilitiesByCategory: byCategory(liabilities),
     };
     res.json(summary);
+  });
+
+  // Percent change of the portfolio totals over a range, from the snapshot
+  // series (so it matches the graph). Mirrors the holdings /changes endpoint.
+  router.get('/changes', (req, res) => {
+    const range = String(req.query.range ?? 'ALL').toUpperCase();
+    if (!isHistoryRange(range)) {
+      throw badRequest(`Invalid range; expected one of ${HISTORY_RANGES.join(', ')}`);
+    }
+    const ref = asOfParam(req) ?? todayISO(ctx.now);
+    const start = rangeStart(range, ref);
+    const snapAt = (cutoff: string) =>
+      ctx.db
+        .prepare(
+          `SELECT assets_minor, liabilities_minor, net_worth_minor FROM snapshots
+           WHERE user_id = ? AND snapshot_date <= ? ORDER BY snapshot_date DESC LIMIT 1`,
+        )
+        .get(req.user!.id, cutoff) as
+        | { assets_minor: number; liabilities_minor: number; net_worth_minor: number }
+        | undefined;
+    const end = snapAt(ref);
+    const base = start
+      ? snapAt(start)
+      : (ctx.db
+          .prepare(
+            `SELECT assets_minor, liabilities_minor, net_worth_minor FROM snapshots
+             WHERE user_id = ? ORDER BY snapshot_date LIMIT 1`,
+          )
+          .get(req.user!.id) as
+          | { assets_minor: number; liabilities_minor: number; net_worth_minor: number }
+          | undefined);
+    // Percent change, null unless the base is strictly positive (handles a
+    // missing base and a non-positive net worth uniformly).
+    const pct = (e: number, b: number): number | null =>
+      b > 0 ? Math.round(((e - b) / b) * 100 * 100) / 100 : null;
+    const dto: DashboardChangesDto = {
+      range: range as HistoryRange,
+      assetsChangePct: end && base ? pct(end.assets_minor, base.assets_minor) : null,
+      liabilitiesChangePct: end && base ? pct(end.liabilities_minor, base.liabilities_minor) : null,
+      netWorthChangePct: end && base ? pct(end.net_worth_minor, base.net_worth_minor) : null,
+    };
+    res.json(dto);
   });
 
   router.get('/history', (req, res) => {

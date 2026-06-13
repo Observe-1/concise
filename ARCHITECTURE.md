@@ -175,6 +175,13 @@ day.
 ### Dashboard
 - `GET /api/dashboard/summary` — current totals + per-category breakdown
   computed from latest valuations.
+- `GET /api/dashboard/changes?range=…[&asOf=…]` — percent change of the
+  assets, liabilities and net-worth totals over the range, read from the
+  snapshot series (so it matches the graph): base = latest snapshot on or
+  before the period start (ALL from the earliest snapshot), each field `null`
+  when there is no base snapshot or the base is ≤ 0 (net worth can be
+  non-positive). The summary cards show these as green/red/grey badges keyed
+  to the graph's selected range.
 - `GET /api/dashboard/history?range=1M|3M|6M|YTD|1Y|5Y|10Y|20Y|ALL&trendWindow=N` —
   snapshot series for the graph. Every point carries `trendMinor`: a centred
   moving average (window `trendWindow` days, 7–365, default 91 — the UI
