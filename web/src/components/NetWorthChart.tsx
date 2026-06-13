@@ -68,9 +68,16 @@ interface ChartProps {
    * mode.
    */
   scrubber?: { asOf: string | null; setAsOf: (date: string | null) => void };
+  /** Prediction mode: draw a dotted "Now" line at this date (the boundary
+   *  between real history and projected future). */
+  nowLine?: string | null;
+  /** Hide the trend line (meaningless over projected values). */
+  showTrend?: boolean;
 }
 
-export function NetWorthChart({ points, currency, range, birthYear, height = 240, asOf, scrubber }: ChartProps) {
+export function NetWorthChart({
+  points, currency, range, birthYear, height = 240, asOf, scrubber, nowLine, showTrend = true,
+}: ChartProps) {
   // A single point in the window is duplicated into a flat full-width series
   // so it draws as the normal gold line rather than a lone dot.
   const data = useMemo(
@@ -89,6 +96,17 @@ export function NetWorthChart({ points, currency, range, birthYear, height = 240
     }
     return best;
   }, [data, asOf]);
+  // "Now" line (prediction mode): the last chart point on or before today, so
+  // it lands on an existing x-axis category.
+  const nowMarker = useMemo(() => {
+    if (!nowLine) return null;
+    let best: string | null = null;
+    for (const p of data) {
+      if (p.date <= nowLine) best = p.date;
+      else break;
+    }
+    return best;
+  }, [data, nowLine]);
   // A constant series needs an explicit padded domain — 'auto' would collapse
   // the Y range to a single value and pin the flat line to the plot edge.
   const yDomain = useMemo((): [number | 'auto', number | 'auto'] => {
@@ -181,6 +199,20 @@ export function NetWorthChart({ points, currency, range, birthYear, height = 240
               }}
             />
           )}
+          {nowMarker && (
+            <ReferenceLine
+              x={nowMarker}
+              stroke="#d4af37"
+              strokeWidth={1.5}
+              strokeDasharray="3 4"
+              label={{
+                value: 'Now',
+                position: 'insideTopRight',
+                fill: '#ddc06c',
+                fontSize: 10,
+              }}
+            />
+          )}
           <Area
             type="monotone"
             dataKey="netWorthMinor"
@@ -190,18 +222,21 @@ export function NetWorthChart({ points, currency, range, birthYear, height = 240
             animationDuration={300}
           />
           {/* Trend: computed server-side over the FULL history, so its shape
-              is identical whatever range is selected. */}
-          <Line
-            type="monotone"
-            dataKey="trendMinor"
-            stroke="#ecd9a0"
-            strokeOpacity={0.55}
-            strokeWidth={1.5}
-            strokeDasharray="6 4"
-            dot={false}
-            activeDot={false}
-            animationDuration={300}
-          />
+              is identical whatever range is selected. Hidden in prediction
+              mode, where a trend over projected values is meaningless. */}
+          {showTrend && (
+            <Line
+              type="monotone"
+              dataKey="trendMinor"
+              stroke="#ecd9a0"
+              strokeOpacity={0.55}
+              strokeWidth={1.5}
+              strokeDasharray="6 4"
+              dot={false}
+              activeDot={false}
+              animationDuration={300}
+            />
+          )}
         </ComposedChart>
       </ResponsiveContainer>
       </div>

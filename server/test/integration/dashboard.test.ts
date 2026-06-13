@@ -83,6 +83,38 @@ describe('dashboard API', () => {
     await agent.get('/api/dashboard/changes?range=NOPE').expect(400);
   });
 
+  it('projects a prediction series: history slice + future values', async () => {
+    const res = await agent.get('/api/dashboard/prediction?range=1Y');
+    expect(res.status).toBe(200);
+    expect(res.body.range).toBe('1Y');
+    expect(res.body.today).toBe('2026-06-11');
+
+    const pts = res.body.points as { date: string; netWorthMinor: number }[];
+    expect(pts.length).toBeGreaterThan(10);
+    expect(pts.length).toBeLessThanOrEqual(400);
+    // ascending dates
+    expect(pts.every((p, i, arr) => i === 0 || p.date > arr[i - 1]!.date)).toBe(true);
+    // a small slice of history (~1/10 year) precedes today …
+    expect(pts.some((p) => p.date < '2026-06-11')).toBe(true);
+    expect(pts[0]!.date >= '2026-05-01').toBe(true);
+    // … and a full year of projected future follows, ending at the horizon
+    expect(pts.some((p) => p.date > '2026-06-11')).toBe(true);
+    expect(pts[pts.length - 1]!.date).toBe('2027-06-11');
+
+    // ALL has no bounded future; unknown ranges rejected
+    await agent.get('/api/dashboard/prediction?range=ALL').expect(400);
+    await agent.get('/api/dashboard/prediction?range=NOPE').expect(400);
+  });
+
+  it('prediction scales the history slice to the range (10Y → ~1Y history)', async () => {
+    const res = await agent.get('/api/dashboard/prediction?range=10Y');
+    const pts = res.body.points as { date: string }[];
+    // history reaches about a year back, future to ~10 years on
+    expect(pts[0]!.date < '2025-07-11').toBe(true);
+    expect(pts[0]!.date > '2025-05-11').toBe(true);
+    expect(pts[pts.length - 1]!.date).toBe('2036-06-11');
+  });
+
   it('serves history for each range preset', async () => {
     for (const [range, expectedDays] of [
       ['1M', 31], ['3M', 93], ['6M', 183], ['1Y', 366],

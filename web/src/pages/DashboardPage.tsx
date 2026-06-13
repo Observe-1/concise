@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { HistoryRange } from '@api';
-import { useDashboardChanges, useHistory, useMe, useSummary } from '../api/queries.js';
-import { NetWorthChart, RangePicker } from '../components/NetWorthChart.js';
+import { useDashboardChanges, useHistory, useMe, usePrediction, useSummary } from '../api/queries.js';
+import { NetWorthChart, RANGES, RangePicker } from '../components/NetWorthChart.js';
 import { Card, ChangeBadge, Spinner } from '../components/ui.js';
 import { useHistoricalView } from '../contexts/HistoricalView.js';
 import { useDebouncedValue } from '../hooks/useDebouncedValue.js';
@@ -14,6 +14,9 @@ const TREND_WINDOW_MIN = 7;
 const TREND_WINDOW_MAX = 365;
 const TREND_WINDOW_DEFAULT = 91;
 
+// Prediction mode can't project an unbounded future, so MAX (ALL) is hidden.
+const PREDICTION_RANGES = RANGES.filter((r) => r !== 'ALL');
+
 /** Short caption for the change figure, e.g. "vs 6M ago" / "all time". */
 function rangeLabel(range: HistoryRange): string {
   return range === 'ALL' ? 'all time' : `vs ${range} ago`;
@@ -25,11 +28,21 @@ export function DashboardPage() {
   const summary = useSummary(asOf);
   const [range, setRange] = useState<HistoryRange>('6M');
   const [fullscreen, setFullscreen] = useState(false);
+  const [predicting, setPredicting] = useState(false);
   const [trendWindow, setTrendWindow] = useState(TREND_WINDOW_DEFAULT);
   // Debounced so dragging the slider doesn't fire a request per step.
   const history = useHistory(range, useDebouncedValue(trendWindow));
+  const prediction = usePrediction(range, predicting);
   // Portfolio % change over the graph's selected range, shown on the cards.
   const changes = useDashboardChanges(range, asOf).data;
+
+  // MAX has no bounded future — leaving it selected on entering prediction
+  // mode would have nothing to project, so fall back to 1Y.
+  useEffect(() => {
+    if (predicting && range === 'ALL') setRange('1Y');
+  }, [predicting, range]);
+
+  const chartPoints = predicting ? prediction.data?.points ?? [] : history.data?.points ?? [];
 
   if (summary.isLoading) return <Spinner label="Loading dashboard" />;
   if (summary.isError || !summary.data) {
@@ -41,25 +54,32 @@ export function DashboardPage() {
   const chartSection = (
     <>
       <div className="mb-3 flex items-center justify-between gap-2">
-        <RangePicker value={range} onChange={setRange} />
+        <RangePicker
+          value={range}
+          onChange={setRange}
+          ranges={predicting ? PREDICTION_RANGES : RANGES}
+        />
         <div className="flex shrink-0 items-center gap-2">
-          <label
-            className="flex items-center gap-2"
-            title="Rolling-average window of the trend line"
-          >
-            <span className="tabular whitespace-nowrap text-[10px] font-medium uppercase tracking-wider text-ink-400">
-              Trend {trendWindow}d
-            </span>
-            <input
-              type="range"
-              min={TREND_WINDOW_MIN}
-              max={TREND_WINDOW_MAX}
-              value={trendWindow}
-              onChange={(e) => setTrendWindow(Number(e.target.value))}
-              aria-label="Trend rolling average window in days"
-              className="h-1 w-20 cursor-pointer accent-gold-500 sm:w-28"
-            />
-          </label>
+          {/* The trend line is hidden in prediction mode, so its slider is too. */}
+          {!predicting && (
+            <label
+              className="flex items-center gap-2"
+              title="Rolling-average window of the trend line"
+            >
+              <span className="tabular whitespace-nowrap text-[10px] font-medium uppercase tracking-wider text-ink-400">
+                Trend {trendWindow}d
+              </span>
+              <input
+                type="range"
+                min={TREND_WINDOW_MIN}
+                max={TREND_WINDOW_MAX}
+                value={trendWindow}
+                onChange={(e) => setTrendWindow(Number(e.target.value))}
+                aria-label="Trend rolling average window in days"
+                className="h-1 w-20 cursor-pointer accent-gold-500 sm:w-28"
+              />
+            </label>
+          )}
           <button
             type="button"
             onClick={() => setFullscreen(!fullscreen)}
@@ -71,13 +91,15 @@ export function DashboardPage() {
         </div>
       </div>
       <NetWorthChart
-        points={history.data?.points ?? []}
+        points={chartPoints}
         currency={currency}
         range={range}
         birthYear={me?.birthYear}
         height={fullscreen ? Math.max(300, window.innerHeight - 200) : 240}
         asOf={asOf}
         scrubber={{ asOf, setAsOf }}
+        nowLine={predicting ? prediction.data?.today ?? null : null}
+        showTrend={!predicting}
       />
     </>
   );
@@ -141,6 +163,30 @@ export function DashboardPage() {
           <BreakdownCard title="Assets" tone="gain" side="asset" items={s.assetsByCategory} currency={currency} />
           <BreakdownCard title="Liabilities" tone="loss" side="liability" items={s.liabilitiesByCategory} currency={currency} />
         </div>
+      )}
+
+      {/* Prediction mode: a golden button at the bottom projects the graph into
+          the future. While active a matching golden exit button floats; it
+          shifts up when the red "view as" exit button is also showing so they
+          don't overlap. */}
+      {!predicting ? (
+        <button
+          type="button"
+          onClick={() => setPredicting(true)}
+          className="w-full rounded-xl bg-gold-500 px-4 py-3 text-sm font-semibold text-ink-950 transition-colors hover:bg-gold-400"
+        >
+          ✨ Prediction mode
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setPredicting(false)}
+          className={`tabular fixed right-4 z-50 rounded-full bg-gold-500 px-4 py-2.5 text-sm font-semibold text-ink-950 shadow-lg shadow-gold-500/30 transition-colors hover:bg-gold-400 ${
+            asOf ? 'bottom-36 md:bottom-20' : 'bottom-20 md:bottom-6'
+          }`}
+        >
+          ✨ Exit prediction
+        </button>
       )}
     </div>
   );

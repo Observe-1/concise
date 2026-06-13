@@ -76,3 +76,23 @@ export function rangeStart(range: HistoryRange, todayIso: string): string | null
     case 'ALL': return null;
   }
 }
+
+/**
+ * Forward horizon for prediction mode: how far into the future the projected
+ * graph reaches for a range (mirrors rangeStart). YTD projects to year end.
+ * ALL has no bounded future, so prediction hides it (returns null).
+ */
+export function rangeForwardEnd(range: HistoryRange, todayIso: string): string | null {
+  const d = parseDateISO(todayIso);
+  switch (range) {
+    case '1M': return addMonthsClamped(todayIso, 1);
+    case '3M': return addMonthsClamped(todayIso, 3);
+    case '6M': return addMonthsClamped(todayIso, 6);
+    case 'YTD': return `${d.getUTCFullYear()}-12-31`;
+    case '1Y': return addMonthsClamped(todayIso, 12);
+    case '5Y': return addMonthsClamped(todayIso, 60);
+    case '10Y': return addMonthsClamped(todayIso, 120);
+    case '20Y': return addMonthsClamped(todayIso, 240);
+    case 'ALL': return null;
+  }
+}

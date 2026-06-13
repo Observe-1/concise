@@ -30,10 +30,21 @@ const changes = {
   range: '6M', assetsChangePct: 4.2, liabilitiesChangePct: -4.8, netWorthChangePct: 11.1,
 };
 
+const prediction = {
+  range: '6M',
+  today: '2026-06-01',
+  points: [
+    { date: '2026-05-20', assetsMinor: 49_000_00, liabilitiesMinor: 20_500_00, netWorthMinor: 28_500_00, trendMinor: 28_500_00 },
+    { date: '2026-06-01', assetsMinor: 50_000_00, liabilitiesMinor: 20_000_00, netWorthMinor: 30_000_00, trendMinor: 30_000_00 },
+    { date: '2026-12-01', assetsMinor: 56_000_00, liabilitiesMinor: 18_000_00, netWorthMinor: 38_000_00, trendMinor: 38_000_00 },
+  ],
+};
+
 function mountDashboard() {
   const calls = mockFetch([
     [/\/api\/auth\/me/, { user: demoUser }],
     [/\/api\/dashboard\/changes/, changes],
+    [/\/api\/dashboard\/prediction/, prediction],
     [/\/api\/dashboard\/summary/, summary],
     [/\/api\/dashboard\/history/, history],
   ]);
@@ -89,6 +100,30 @@ describe('dashboard', () => {
     await waitFor(() => {
       expect(calls.some((c) => c.url.includes('trendWindow=30'))).toBe(true);
     });
+  });
+
+  it('enters prediction mode: fetches projections, hides MAX, offers a golden exit', async () => {
+    const calls = mountDashboard();
+    const user = userEvent.setup();
+
+    // The golden enter button is at the bottom; MAX (All) is offered until then.
+    const group = await screen.findByRole('group', { name: /history range/i });
+    expect(within(group).getByRole('button', { name: 'All' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /prediction mode/i }));
+
+    // Projections are fetched and MAX disappears from the range picker.
+    await waitFor(() => {
+      expect(calls.some((c) => /\/api\/dashboard\/prediction\?range=/.test(c.url))).toBe(true);
+    });
+    expect(within(group).queryByRole('button', { name: 'All' })).not.toBeInTheDocument();
+
+    // A golden exit button replaces the enter button.
+    expect(screen.getByRole('button', { name: /exit prediction/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^prediction mode/i })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /exit prediction/i }));
+    expect(await screen.findByRole('button', { name: /prediction mode/i })).toBeInTheDocument();
   });
 
   it('toggles full-screen graph mode', async () => {

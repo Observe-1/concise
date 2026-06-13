@@ -3,7 +3,7 @@ import {
 } from '@tanstack/react-query';
 import type {
   DashboardChangesDto, DashboardSummaryDto, HistoryDto, HistoryEntryDto, HistoryRange,
-  HoldingChangeDto, HoldingDetailDto, HoldingDto, LegacySnapshotDto, PropertyCountryDto,
+  HoldingChangeDto, HoldingDetailDto, HoldingDto, LegacySnapshotDto, PredictionDto, PropertyCountryDto,
   RecurringDto, SessionUser, SettingsDto, SymbolLookupDto, ValuationMode,
 } from '@api';
 import { api, ApiError } from './client.js';
@@ -81,6 +81,17 @@ export function useDashboardChanges(range: HistoryRange, asOf?: string | null) {
     queryKey: ['dashboard', 'changes', range, asOf ?? null],
     queryFn: () =>
       api<DashboardChangesDto>(`/api/dashboard/changes?range=${range}${asOf ? `&asOf=${asOf}` : ''}`),
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** Prediction-mode series (history slice + projected future). Disabled until
+ *  prediction mode is on. */
+export function usePrediction(range: HistoryRange, enabled: boolean) {
+  return useQuery({
+    queryKey: ['dashboard', 'prediction', range],
+    queryFn: () => api<PredictionDto>(`/api/dashboard/prediction?range=${range}`),
+    enabled,
     placeholderData: keepPreviousData,
   });
 }

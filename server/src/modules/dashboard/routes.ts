@@ -8,6 +8,7 @@ import { HISTORY_RANGES, isHistoryRange, rangeStart, todayISO } from '../../lib/
 import { asOfParam, badRequest } from '../../lib/http.js';
 import { ASSET_KIND, LIABILITY_KIND } from '../holdings/kind.js';
 import { listHoldings } from '../holdings/service.js';
+import { buildPrediction } from './prediction.js';
 
 const MAX_GRAPH_POINTS = 400;
 
@@ -123,6 +124,17 @@ export function dashboardRoutes(ctx: AppContext): Router {
       netWorthChangePct: end && base ? pct(end.net_worth_minor, base.net_worth_minor) : null,
     };
     res.json(dto);
+  });
+
+  // Prediction mode: a small slice of history plus on-the-fly projected
+  // future values. ALL is unbounded and not offered (the UI hides it).
+  router.get('/prediction', (req, res) => {
+    const range = String(req.query.range ?? '1Y').toUpperCase();
+    if (!isHistoryRange(range)) {
+      throw badRequest(`Invalid range; expected one of ${HISTORY_RANGES.join(', ')}`);
+    }
+    if (range === 'ALL') throw badRequest('Prediction is not available for the ALL range');
+    res.json(buildPrediction(ctx, req.user!.id, range as HistoryRange));
   });
 
   router.get('/history', (req, res) => {

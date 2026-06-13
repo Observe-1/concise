@@ -203,6 +203,25 @@ day.
 - The chart shows a muted age marker (vertical line labelled "Age N") when
   the user has set a birth year and the visible series spans ≥ 5 years.
 
+### Prediction mode
+- `GET /api/dashboard/prediction?range=…` (`modules/dashboard/prediction.ts`)
+  returns a small slice of real history (≈ range/10) followed by **on-the-fly**
+  projected future values out to the range's forward horizon
+  (`rangeForwardEnd`), plus the `today` boundary date. Nothing is persisted.
+  Projection per holding: market holdings grow by their average annualised
+  return over the last ~10 years (or the max the provider supplies), clamped
+  to ±40%; property/depreciation holdings continue their model formula from
+  the re-anchorable base; manual holdings (and liabilities) follow their
+  active recurring schedules (fixed/percent, floored at 0, with the same
+  paid-off suspension rule). ALL has no bounded future and is rejected.
+- The dashboard has a golden "Prediction mode" button at the bottom. While
+  active the graph shows the projected series with a dotted gold "Now" line at
+  `today`, the trend line is hidden, MAX is removed from the range picker, and
+  a floating golden "Exit prediction" button appears (shifted up when the red
+  "view as" exit button is also showing). "View as" still works over the
+  projected series — the scrubber handle defaults to the latest projected
+  date.
+
 ### "View as" mode (historical view)
 - A red scrubber pins the app to a past date (`asOf`). The scrubber is drawn
   **along the dashboard chart's X axis** (one bar, not a separate slider row):

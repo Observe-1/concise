@@ -125,7 +125,7 @@ Implemented strictly in order; one commit per feature.
       in it auto-creates a recurring entry increasing the value by that %
 - [x] 8. Historical mode renamed to "View as"; its slider is incorporated into
       the graph's X axis (single bar, circle handle aligned with the X labels)
-- [ ] 9. Prediction mode: golden button at the bottom of the dashboard; graph
+- [x] 9. Prediction mode: golden button at the bottom of the dashboard; graph
       projects future values on the fly (valuation methods, recurring
       payments, stocks via average returns over the last 10 years or max
       available); shows a small slice of history (~1/10 of the selected

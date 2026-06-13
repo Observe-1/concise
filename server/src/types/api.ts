@@ -165,6 +165,17 @@ export interface HistoryDto {
   points: HistoryPointDto[];
 }
 
+/**
+ * Prediction mode series: a small slice of real history (≈ range/10) followed
+ * by on-the-fly projected future values out to the range's forward horizon.
+ * `today` is the boundary date (the graph draws a dotted "now" line there).
+ */
+export interface PredictionDto {
+  range: HistoryRange;
+  today: string;
+  points: HistoryPointDto[];
+}
+
 /** User-entered "on this date my net worth was X" point. */
 export interface LegacySnapshotDto {
   date: string;
