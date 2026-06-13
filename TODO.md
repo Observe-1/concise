@@ -110,7 +110,7 @@ Implemented strictly in order; one commit per feature.
       assets (they keep manual + their model method)
 - [x] 2. Historic entries (Settings → History): highlight automatically
       generated entries and add a toggle to hide them
-- [ ] 3. Re-anchor on update: updating a holding's value never overwrites the
+- [x] 3. Re-anchor on update: updating a holding's value never overwrites the
       historical value/date, but subsequent automatic calculations
       (model/market valuations) work from the new value as their base
 - [ ] 4. Assets/Liabilities pages: 1M/3M/6M/YTD/1Y/5Y/10Y/20Y/MAX quick-select

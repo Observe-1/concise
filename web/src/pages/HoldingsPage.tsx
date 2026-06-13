@@ -290,8 +290,11 @@ function HoldingForm({
       },
       {
         onSuccess: () => {
-          // Manual value changed? Record a new valuation (history preserved).
-          if (mode === 'manual' && valueMinor !== null && valueMinor !== existing.currentValueMinor) {
+          // Value changed? Record a new valuation (history preserved). For
+          // model methods this re-bases future automatic estimates on the new
+          // figure (the server anchors them on the latest manual value).
+          // Market-mode values are provider-derived, so never revalued here.
+          if (mode !== 'market' && valueMinor !== null && valueMinor !== existing.currentValueMinor) {
             revalue.mutate({ id: existing.id, valueMinor }, { onSuccess: onClose, onError });
           } else {
             onClose();
@@ -438,12 +441,14 @@ function HoldingForm({
               )}
             </Field>
           </>
-        ) : (mode === 'property_index' || mode === 'depreciation') && existing ? null : (
+        ) : (
           <Field
             label={existing ? 'Current value' : 'Value'}
             hint={
               existing
-                ? 'Changing this records a new valuation.'
+                ? mode === 'property_index' || mode === 'depreciation'
+                  ? 'Updating this re-bases future automatic estimates on the new figure — past entries are kept.'
+                  : 'Changing this records a new valuation.'
                 : mode === 'property_index'
                   ? 'Value on the start date — the index applies the average change from there.'
                   : mode === 'depreciation'

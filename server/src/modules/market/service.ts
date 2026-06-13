@@ -39,7 +39,16 @@ export function refreshMarketValuations(ctx: AppContext, userId?: number): numbe
        WHERE asset_id = ? AND source = 'market' AND recorded_at >= ? AND recorded_at <= ?
        LIMIT 1`,
     );
-    const firstValuation = ctx.db.prepare(
+    // A model method grows from the latest value the user typed in, so an
+    // "update value" re-bases future calculations on the new number (history
+    // is left intact). Falls back to the earliest valuation if there is no
+    // manual entry — model holdings always have a manual base, so this only
+    // matters defensively.
+    const latestManual = ctx.db.prepare(
+      `SELECT value_minor, recorded_at FROM asset_valuations
+       WHERE asset_id = ? AND source = 'manual' ORDER BY recorded_at DESC, id DESC LIMIT 1`,
+    );
+    const earliest = ctx.db.prepare(
       `SELECT value_minor, recorded_at FROM asset_valuations
        WHERE asset_id = ? ORDER BY recorded_at, id LIMIT 1`,
     );
@@ -52,7 +61,7 @@ export function refreshMarketValuations(ctx: AppContext, userId?: number): numbe
         const price = ctx.prices.getPriceMinor(row.market_symbol!, today);
         return price === null ? null : holdingValueMinor(price, row.quantity!);
       }
-      const base = firstValuation.get(row.id) as
+      const base = (latestManual.get(row.id) ?? earliest.get(row.id)) as
         | { value_minor: number; recorded_at: string }
         | undefined;
       if (!base) return null;

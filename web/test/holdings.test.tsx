@@ -262,6 +262,41 @@ describe('assets page', () => {
     });
   });
 
+  it('lets you update a property-index value, re-anchoring via a revaluation', async () => {
+    const property = {
+      id: 3, category: 'property', name: 'Home', notes: null, metal: null,
+      valuationMode: 'property_index', marketSymbol: null, quantity: null,
+      country: 'GB', manufactureDate: null, historicalPriceMissing: false,
+      currentValueMinor: 30_000_000,
+      lastValuedAt: '2026-06-11T12:00:00.000Z', createdAt: '2024-06-11T12:00:00.000Z',
+    };
+    const calls = mockFetch([
+      [/\/api\/auth\/me/, { user: demoUser }],
+      [/\/api\/market\/property-countries/, [{ code: 'GB', name: 'United Kingdom', annualRatePct: 3.7 }]],
+      [/\/api\/assets\/3\/valuations/, { ...property, currentValueMinor: 35_000_000 }],
+      [/\/api\/assets\/3$/, property],
+      [/\/api\/assets$/, [property]],
+    ]);
+    renderWithProviders(<App />, { route: '/assets' });
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /home/i }));
+
+    // The value field is offered when editing a model asset (so it can be re-anchored).
+    const valueInput = await screen.findByLabelText(/current value/i);
+    await user.clear(valueInput);
+    await user.type(valueInput, '350000');
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    // Metadata PATCH keeps the model method, then a revaluation re-anchors the value.
+    await waitFor(() => {
+      const revalue = calls.find((c) => c.method === 'POST' && /\/api\/assets\/3\/valuations/.test(c.url));
+      expect(revalue!.body).toEqual({ valueMinor: 35_000_000 });
+    });
+    const patch = calls.find((c) => c.method === 'PATCH' && /\/api\/assets\/3$/.test(c.url));
+    expect(patch!.body).toMatchObject({ valuationMode: 'property_index', country: 'GB' });
+  });
+
   it('rejects invalid amounts before hitting the API', async () => {
     mockFetch([
       [/\/api\/auth\/me/, { user: demoUser }],

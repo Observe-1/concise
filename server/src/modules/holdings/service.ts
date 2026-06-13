@@ -187,12 +187,27 @@ function requireManufactureDate(raw: string | null | undefined, today: string): 
   return raw;
 }
 
-/** Earliest valuation of a holding — the base point model methods grow from. */
-function firstValuation(
+/**
+ * Anchor a model method (property index / depreciation) grows from: the most
+ * recent value the user typed in (latest `source='manual'` valuation).
+ * "Update value" appends a manual valuation, so this re-bases all future
+ * automatic calculations on the new number while the historical entries are
+ * left untouched. Falls back to the earliest valuation of any source if (only
+ * defensively — model holdings always have a manual base) no manual entry
+ * exists.
+ */
+function modelAnchor(
   ctx: AppContext,
   k: HoldingKind,
   holdingId: number,
 ): { value_minor: number; recorded_at: string } | undefined {
+  const manual = ctx.db
+    .prepare(
+      `SELECT value_minor, recorded_at FROM ${k.valuationTable}
+       WHERE ${k.fk} = ? AND source = 'manual' ORDER BY recorded_at DESC, id DESC LIMIT 1`,
+    )
+    .get(holdingId) as { value_minor: number; recorded_at: string } | undefined;
+  if (manual) return manual;
   return ctx.db
     .prepare(
       `SELECT value_minor, recorded_at FROM ${k.valuationTable}
@@ -402,7 +417,7 @@ export function updateHolding(
           (mode !== (existing.valuation_mode ?? 'manual') ||
             manufactureDate !== (existing.manufacture_date ?? null)));
       if (modelInputsChanged) {
-        const base = firstValuation(ctx, k, id);
+        const base = modelAnchor(ctx, k, id);
         if (base) {
           const baseDate = base.recorded_at.slice(0, 10);
           const value = mode === 'property_index'

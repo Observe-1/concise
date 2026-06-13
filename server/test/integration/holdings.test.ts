@@ -279,6 +279,35 @@ describe('assets & liabilities API', () => {
       expect(list.body[0].currentValueMinor).toBeGreaterThan(50_000_000);
     });
 
+    it('re-anchors index growth on the latest manual update, keeping history', async () => {
+      const created = await csrf(agent.post('/api/assets')).send({
+        category: 'property', name: 'Home', valuationMode: 'property_index',
+        country: 'US', valueMinor: 50_000_000,
+      });
+      const id = created.body.id;
+
+      // The user updates the value to a new figure (e.g. a fresh appraisal).
+      await csrf(agent.post(`/api/assets/${id}/valuations`)).send({ valueMinor: 60_000_000 });
+
+      // History is preserved (base entry still there) — value reads the update.
+      const detail = await agent.get(`/api/assets/${id}`);
+      expect(detail.body.currentValueMinor).toBe(60_000_000);
+      expect(detail.body.valuations.some((v: { valueMinor: number }) => v.valueMinor === 50_000_000)).toBe(true);
+
+      // The daily refresh now grows from 60,000,000, not the original base.
+      world.advanceDays(10);
+      const refresh = await csrf(agent.post('/api/market/refresh'));
+      expect(refresh.body.updated).toBe(1);
+      const list = await agent.get('/api/assets');
+      const rate = PROPERTY_COUNTRIES.US!.annualRatePct;
+      const refDate = world.ctx.now().toISOString().slice(0, 10);
+      // Grown from the manual update's date (the fixed clock) to refDate.
+      expect(list.body[0].currentValueMinor).toBe(
+        propertyValueMinor(60_000_000, '2026-06-11', refDate, rate),
+      );
+      expect(list.body[0].currentValueMinor).toBeGreaterThan(60_000_000);
+    });
+
     it('validates the country and the category', async () => {
       await csrf(agent.post('/api/assets')).send({
         category: 'property', name: 'X', valuationMode: 'property_index', valueMinor: 1,

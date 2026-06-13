@@ -131,8 +131,13 @@ day.
   price); days the provider cannot price are skipped and flag the asset
   (`history_price_missing` → `historicalPriceMissing`), which the holdings
   page shows as a hoverable "incomplete history" label.
-- "Update value" appends a valuation row (history preserved), then upserts
-  today's snapshot.
+- "Update value" appends a `manual` valuation row (history preserved), then
+  upserts today's snapshot. For model-valued holdings this **re-anchors** the
+  automatic estimate: the property-index and depreciation formulas grow from
+  the latest `manual` valuation (the most recent figure the user typed in),
+  not the original base, so an update re-bases all future automatic
+  calculations on the new number while the old entries stay intact. The web
+  edit form exposes a value field for model holdings so they can be re-anchored.
 
 ### Settings (web)
 - `/settings/:section?` renders three sub pages selected by buttons at the
@@ -202,7 +207,10 @@ day.
   Vehicle assets may use `valuation_mode='depreciation'` — average age-based
   depreciation (20%/yr under 1 year old, 15%/yr to 5 years, 10%/yr after,
   floored at 5% scrap value) derived from the required `manufacture_date`.
-  Backdated model entries backfill one valuation per day like market entries.
+  Both formulas grow from the holding's **latest `manual` valuation** (its
+  re-anchorable base), so "Update value" re-bases them; backdated model
+  entries backfill one valuation per day like market entries. (Property and
+  vehicles are never `market`-valued — they are not exchange-traded.)
 - Daily job + `POST /api/market/refresh` append valuations for every
   auto-valued asset (market price or model formula), at most one per day.
 
