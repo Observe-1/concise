@@ -192,14 +192,21 @@ day.
 
 ### Dashboard
 - `GET /api/dashboard/summary` — current totals + per-category breakdown
-  computed from latest valuations.
+  computed from latest valuations. With `?predict=1&range=…[&asOf=…]`
+  (prediction mode) it instead returns the portfolio **projected** forward —
+  the same per-holding maths as the prediction graph — so every card reflects
+  the future: projected to the range's forward horizon by default, or to the
+  view-as date when one is pinned (a non-future date / the ALL range falls back
+  to the live summary).
 - `GET /api/dashboard/changes?range=…[&asOf=…]` — percent change of the
   assets, liabilities and net-worth totals over the range, read from the
   snapshot series (so it matches the graph): base = latest snapshot on or
   before the period start (ALL from the earliest snapshot), each field `null`
   when there is no base snapshot or the base is ≤ 0 (net worth can be
   non-positive). The summary cards show these as green/red/grey badges keyed
-  to the graph's selected range.
+  to the graph's selected range. With `?predict=1` the percentages become
+  projected **growth from today's live totals** to the projected (horizon or
+  view-as) date.
 - `GET /api/dashboard/history?range=1M|3M|6M|YTD|1Y|5Y|10Y|20Y|ALL&trendWindow=N` —
   snapshot series for the graph. Every point carries `trendMinor`: a centred
   moving average (window `trendWindow` days, 7–365, default 91 — the UI
@@ -228,12 +235,26 @@ day.
   "view as" exit button is also showing). "View as" still works over the
   projected series — the scrubber handle defaults to the latest projected
   date.
+- **Every surrounding number follows the projection too**, not just the hover
+  tooltip: the summary cards (net worth / assets / liabilities), their
+  per-category breakdowns, and the percentage badges all read from the
+  prediction (`useSummary`/`useDashboardChanges` send `predict=1`). They show
+  the portfolio projected to the horizon by default, or to the view-as date
+  when the scrubber is dragged into the future; the percentages are projected
+  growth vs today, captioned "projected". The projected summary at the horizon
+  equals the graph's final point, so card and chart agree. The projection is
+  computed once in `projectPortfolioAt` (an extract of the prediction engine's
+  per-holding projection), shared by the graph series and the summary/changes
+  routes so all three stay consistent.
 
 ### "View as" mode (historical view)
 - A red scrubber pins the app to a past date (`asOf`). The scrubber is drawn
   **along the dashboard chart's X axis** (one bar, not a separate slider row):
-  its track spans the plot area and the circle handle lines up with the date
-  labels. `GET /api/assets|liabilities|dashboard/summary?asOf=YYYY-MM-DD`
+  its track spans the plot area and its circular grab handle (a fixed-diameter
+  `.scrubber` thumb) rides in a lane just above the X-axis date labels — the
+  XAxis band reserves a label row plus the handle lane and pushes the labels
+  down (`tickMargin`) so the handle never overlaps them.
+  `GET /api/assets|liabilities|dashboard/summary?asOf=YYYY-MM-DD`
   return the portfolio exactly as it stood at the end of that day: values are
   the latest valuation on or before the date, and entries whose history
   starts later are omitted entirely.

@@ -25,16 +25,21 @@ function rangeLabel(range: HistoryRange): string {
 export function DashboardPage() {
   const { data: me } = useMe();
   const { asOf, setAsOf } = useHistoricalView();
-  const summary = useSummary(asOf);
   const [range, setRange] = useState<HistoryRange>('6M');
   const [fullscreen, setFullscreen] = useState(false);
   const [predicting, setPredicting] = useState(false);
   const [trendWindow, setTrendWindow] = useState(TREND_WINDOW_DEFAULT);
+  // In prediction mode every surrounding number reflects the projected
+  // portfolio (the cards, breakdowns and percentages), not just the graph.
+  // ALL has no bounded future, so it can't drive a projection.
+  const predict = predicting && range !== 'ALL';
+  const summary = useSummary(asOf, predict ? { range } : undefined);
   // Debounced so dragging the slider doesn't fire a request per step.
   const history = useHistory(range, useDebouncedValue(trendWindow));
   const prediction = usePrediction(range, predicting);
-  // Portfolio % change over the graph's selected range, shown on the cards.
-  const changes = useDashboardChanges(range, asOf).data;
+  // Portfolio % change shown on the cards: over the graph's selected range, or
+  // projected growth vs today while predicting.
+  const changes = useDashboardChanges(range, asOf, predict).data;
 
   // MAX has no bounded future — leaving it selected on entering prediction
   // mode would have nothing to project, so fall back to 1Y.
@@ -131,7 +136,9 @@ export function DashboardPage() {
           {changes && (
             <span className="flex items-baseline gap-1.5">
               <ChangeBadge pct={changes.netWorthChangePct} />
-              <span className="text-[10px] uppercase tracking-wider text-ink-600">{rangeLabel(range)}</span>
+              <span className="text-[10px] uppercase tracking-wider text-ink-600">
+                {predict ? 'projected' : rangeLabel(range)}
+              </span>
             </span>
           )}
         </div>

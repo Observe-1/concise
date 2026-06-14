@@ -135,6 +135,22 @@ Implemented strictly in order; one commit per feature.
 - [x] 10. Settings: delete all data for the account, gated by a confirmation
       tickbox and typing "delete all" exactly (error message otherwise)
 
+## Bug fixes (2026-06-13)
+- [x] 1. View-as scrubber: the circle handle, though aligned along the chart's
+      X axis, overlapped the date labels. The X-axis band now reserves a label
+      row plus a handle lane; the date labels are pushed down (taller XAxis
+      `height` + `tickMargin`) so the handle rides ~5px above them. The handle
+      diameter is fixed in CSS (`.scrubber`) so the lane is deterministic;
+      offsets were tuned against the measured SVG tick positions.
+- [x] 2. Prediction mode: only the hover tooltip showed projected figures — the
+      surrounding numbers (net worth / assets / liabilities totals, their
+      category breakdowns, and every percentage) stayed at today's live values.
+      Now every dashboard number reflects the projection while prediction mode
+      is on: `summary`/`changes` take a `predict` flag and the server projects
+      the portfolio forward (`projectPortfolioAt`) to the range's horizon by
+      default — or to the view-as date when scrubbed; percentages become
+      projected growth vs today, captioned "projected".
+
 ## Notes
 - Deployment (Docker/CI/runbooks) is intentionally out of scope. The app still
   runs in production directly: `npm run build` then `npm start` serves the API

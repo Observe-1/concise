@@ -39,3 +39,43 @@ body {
 .tabular {
   font-variant-numeric: tabular-nums;
 }
+
+/*
+ * "View as" timeline scrubber: a thin red track with a defined circular grab
+ * handle, drawn along the dashboard chart's X axis. Sizing the thumb
+ * explicitly (rather than relying on the native control) keeps its height
+ * deterministic across browsers, so its lane above the date labels is stable.
+ */
+.scrubber {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+}
+.scrubber::-webkit-slider-runnable-track {
+  height: 2px;
+  border-radius: 9999px;
+  background: var(--color-loss-500);
+}
+.scrubber::-moz-range-track {
+  height: 2px;
+  border-radius: 9999px;
+  background: var(--color-loss-500);
+}
+.scrubber::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -6px; /* centre the 14px thumb on the 2px track */
+  border-radius: 9999px;
+  background: var(--color-loss-500);
+  cursor: pointer;
+}
+.scrubber::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: none;
+  border-radius: 9999px;
+  background: var(--color-loss-500);
+  cursor: pointer;
+}

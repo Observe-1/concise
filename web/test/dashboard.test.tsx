@@ -40,9 +40,30 @@ const prediction = {
   ],
 };
 
+// The portfolio projected to the horizon (what the server returns for
+// summary?predict=1 / changes?predict=1) — distinct from the live figures.
+const projectedSummary = {
+  assetsMinor: 56_000_00,
+  liabilitiesMinor: 18_000_00,
+  netWorthMinor: 38_000_00,
+  currency: 'USD',
+  assetsByCategory: [
+    { category: 'cash', totalMinor: 36_000_00, count: 2 },
+    { category: 'crypto', totalMinor: 20_000_00, count: 1 },
+  ],
+  liabilitiesByCategory: [{ category: 'loan', totalMinor: 18_000_00, count: 1 }],
+};
+
+const projectedChanges = {
+  range: '6M', assetsChangePct: 12.0, liabilitiesChangePct: -10.0, netWorthChangePct: 26.7,
+};
+
 function mountDashboard() {
   const calls = mockFetch([
     [/\/api\/auth\/me/, { user: demoUser }],
+    // predict requests must be matched before the generic live routes
+    [/\/api\/dashboard\/summary\?.*predict=1/, projectedSummary],
+    [/\/api\/dashboard\/changes\?.*predict=1/, projectedChanges],
     [/\/api\/dashboard\/changes/, changes],
     [/\/api\/dashboard\/prediction/, prediction],
     [/\/api\/dashboard\/summary/, summary],
@@ -124,6 +145,29 @@ describe('dashboard', () => {
 
     await user.click(screen.getByRole('button', { name: /exit prediction/i }));
     expect(await screen.findByRole('button', { name: /prediction mode/i })).toBeInTheDocument();
+  });
+
+  it('prediction mode updates every surrounding number, not just the chart', async () => {
+    const calls = mountDashboard();
+    const user = userEvent.setup();
+
+    // Live figures before entering prediction mode.
+    expect((await screen.findAllByText(/30,000\.00/)).length).toBeGreaterThan(0); // net worth
+    expect(screen.getByText(/vs 6M ago/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /prediction mode/i }));
+
+    // The cards, breakdowns and percentages switch to the projected figures.
+    expect((await screen.findAllByText(/38,000\.00/)).length).toBeGreaterThan(0); // projected net worth
+    expect(screen.getAllByText(/56,000\.00/).length).toBeGreaterThan(0); // projected assets
+    expect(screen.getByText('+26.7%')).toBeInTheDocument(); // projected net worth growth
+    expect(screen.getByText('+12.0%')).toBeInTheDocument(); // projected assets growth
+    expect(screen.getByText(/projected/i)).toBeInTheDocument(); // caption, not "vs 6M ago"
+    expect(screen.queryByText(/vs 6M ago/i)).not.toBeInTheDocument();
+
+    // The projected data was fetched with predict=1 for the selected range.
+    expect(calls.some((c) => /\/api\/dashboard\/summary\?.*predict=1&range=6M/.test(c.url))).toBe(true);
+    expect(calls.some((c) => /\/api\/dashboard\/changes\?range=6M.*predict=1/.test(c.url))).toBe(true);
   });
 
   it('toggles full-screen graph mode', async () => {

@@ -4,11 +4,11 @@ import type {
   CategoryTotalDto, DashboardChangesDto, DashboardSummaryDto, HistoryDto, HistoryPointDto,
   HistoryRange, HoldingDto,
 } from '../../types/api.js';
-import { HISTORY_RANGES, isHistoryRange, rangeStart, todayISO } from '../../lib/dates.js';
+import { HISTORY_RANGES, isHistoryRange, rangeForwardEnd, rangeStart, todayISO } from '../../lib/dates.js';
 import { asOfParam, badRequest } from '../../lib/http.js';
 import { ASSET_KIND, LIABILITY_KIND } from '../holdings/kind.js';
 import { listHoldings } from '../holdings/service.js';
-import { buildPrediction } from './prediction.js';
+import { buildPrediction, projectPortfolioAt } from './prediction.js';
 
 const MAX_GRAPH_POINTS = 400;
 
@@ -36,15 +36,34 @@ export function computeTrend(values: number[], windowDays = TREND_WINDOW_DEFAULT
   });
 }
 
-function byCategory(holdings: HoldingDto[]): CategoryTotalDto[] {
+function byCategory(items: { category: string; valueMinor: number }[]): CategoryTotalDto[] {
   const map = new Map<string, CategoryTotalDto>();
-  for (const h of holdings) {
-    const entry = map.get(h.category) ?? { category: h.category, totalMinor: 0, count: 0 };
-    entry.totalMinor += h.currentValueMinor;
+  for (const item of items) {
+    const entry = map.get(item.category) ?? { category: item.category, totalMinor: 0, count: 0 };
+    entry.totalMinor += item.valueMinor;
     entry.count += 1;
-    map.set(h.category, entry);
+    map.set(item.category, entry);
   }
   return [...map.values()].sort((a, b) => b.totalMinor - a.totalMinor);
+}
+
+const catItems = (holdings: HoldingDto[]) =>
+  holdings.map((h) => ({ category: h.category, valueMinor: h.currentValueMinor }));
+
+/**
+ * Prediction mode reports the portfolio as projected forward. The target is
+ * the view-as date when one is pinned, otherwise the range's forward horizon
+ * (clamped to it). Returns null when the range has no bounded future (ALL) or
+ * is invalid, or when the target is not actually in the future — in those
+ * cases the routes fall back to the live (real) data path.
+ */
+function predictionTarget(range: string, asOf: string | undefined, today: string): string | null {
+  if (!isHistoryRange(range) || range === 'ALL') return null;
+  const horizon = rangeForwardEnd(range as HistoryRange, today);
+  if (!horizon) return null;
+  let target = asOf ?? horizon;
+  if (target > horizon) target = horizon;
+  return target > today ? target : null;
 }
 
 /** Thin the series to at most `max` points, always keeping both endpoints
@@ -67,8 +86,31 @@ export function dashboardRoutes(ctx: AppContext): Router {
 
   router.get('/summary', (req, res) => {
     const userId = req.user!.id;
-    // Historical view: totals and breakdowns as the portfolio stood on asOf.
     const asOf = asOfParam(req);
+
+    // Prediction mode: report the projected portfolio (totals + breakdowns) so
+    // every summary card reflects the future, not today's live values. The
+    // target is the view-as date if pinned, else the range's forward horizon.
+    if (req.query.predict === '1') {
+      const target = predictionTarget(String(req.query.range ?? '').toUpperCase(), asOf, todayISO(ctx.now));
+      if (target) {
+        const { assets, liabilities } = projectPortfolioAt(ctx, userId, todayISO(ctx.now), target);
+        const assetsMinor = assets.reduce((sum, a) => sum + a.projectedMinor, 0);
+        const liabilitiesMinor = liabilities.reduce((sum, l) => sum + l.projectedMinor, 0);
+        const projected: DashboardSummaryDto = {
+          assetsMinor,
+          liabilitiesMinor,
+          netWorthMinor: assetsMinor - liabilitiesMinor,
+          currency: req.user!.currency,
+          assetsByCategory: byCategory(assets.map((a) => ({ category: a.category, valueMinor: a.projectedMinor }))),
+          liabilitiesByCategory: byCategory(liabilities.map((l) => ({ category: l.category, valueMinor: l.projectedMinor }))),
+        };
+        res.json(projected);
+        return;
+      }
+    }
+
+    // Historical view: totals and breakdowns as the portfolio stood on asOf.
     const assets = listHoldings(ctx, ASSET_KIND, userId, asOf);
     const liabilities = listHoldings(ctx, LIABILITY_KIND, userId, asOf);
     const assetsMinor = assets.reduce((sum, a) => sum + a.currentValueMinor, 0);
@@ -78,8 +120,8 @@ export function dashboardRoutes(ctx: AppContext): Router {
       liabilitiesMinor,
       netWorthMinor: assetsMinor - liabilitiesMinor,
       currency: req.user!.currency,
-      assetsByCategory: byCategory(assets),
-      liabilitiesByCategory: byCategory(liabilities),
+      assetsByCategory: byCategory(catItems(assets)),
+      liabilitiesByCategory: byCategory(catItems(liabilities)),
     };
     res.json(summary);
   });
@@ -91,7 +133,35 @@ export function dashboardRoutes(ctx: AppContext): Router {
     if (!isHistoryRange(range)) {
       throw badRequest(`Invalid range; expected one of ${HISTORY_RANGES.join(', ')}`);
     }
-    const ref = asOfParam(req) ?? todayISO(ctx.now);
+    const asOf = asOfParam(req);
+    // Percent change, null unless the base is strictly positive (handles a
+    // missing base and a non-positive net worth uniformly).
+    const pct = (e: number, b: number): number | null =>
+      b > 0 ? Math.round(((e - b) / b) * 100 * 100) / 100 : null;
+
+    // Prediction mode: percentages become projected growth from today's live
+    // totals to the projected (horizon or view-as) date.
+    if (req.query.predict === '1') {
+      const target = predictionTarget(range, asOf, todayISO(ctx.now));
+      if (target) {
+        const { assets, liabilities } = projectPortfolioAt(ctx, req.user!.id, todayISO(ctx.now), target);
+        const sum = (xs: { currentMinor: number; projectedMinor: number }[], k: 'currentMinor' | 'projectedMinor') =>
+          xs.reduce((s, x) => s + x[k], 0);
+        const baseA = sum(assets, 'currentMinor');
+        const baseL = sum(liabilities, 'currentMinor');
+        const endA = sum(assets, 'projectedMinor');
+        const endL = sum(liabilities, 'projectedMinor');
+        res.json({
+          range: range as HistoryRange,
+          assetsChangePct: pct(endA, baseA),
+          liabilitiesChangePct: pct(endL, baseL),
+          netWorthChangePct: pct(endA - endL, baseA - baseL),
+        } satisfies DashboardChangesDto);
+        return;
+      }
+    }
+
+    const ref = asOf ?? todayISO(ctx.now);
     const start = rangeStart(range, ref);
     const snapAt = (cutoff: string) =>
       ctx.db
@@ -113,10 +183,6 @@ export function dashboardRoutes(ctx: AppContext): Router {
           .get(req.user!.id) as
           | { assets_minor: number; liabilities_minor: number; net_worth_minor: number }
           | undefined);
-    // Percent change, null unless the base is strictly positive (handles a
-    // missing base and a non-positive net worth uniformly).
-    const pct = (e: number, b: number): number | null =>
-      b > 0 ? Math.round(((e - b) / b) * 100 * 100) / 100 : null;
     const dto: DashboardChangesDto = {
       range: range as HistoryRange,
       assetsChangePct: end && base ? pct(end.assets_minor, base.assets_minor) : null,

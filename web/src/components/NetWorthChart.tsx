@@ -48,10 +48,23 @@ export function RangePicker({
 }
 
 // Chart geometry — shared between the recharts layout and the scrubber overlay
-// so the slider track lines up with the plot area (and its handle with the X
-// labels). The Y axis reserves 56px on the left; margins are small.
+// so the slider track lines up with the plot area. The Y axis reserves 56px on
+// the left; margins are small.
 const Y_AXIS_WIDTH = 56;
 const CHART_MARGIN = { top: 8, right: 4, left: 4, bottom: 0 };
+
+// The "view as" scrubber's circular handle rides in its own lane just above
+// the X-axis date labels. We reserve a taller X-axis band — a row for the
+// labels, a small gap, then a lane for the handle — and push the labels to the
+// bottom of it (`tickMargin`) so the circle clears them. The handle diameter
+// is fixed in CSS (`.scrubber`); the offsets below were tuned against the
+// measured SVG tick positions so the handle sits ~5px above the date labels.
+const SCRUBBER_CIRCLE_PX = 14;
+const X_AXIS_LABEL_PX = 19; // bottom row reserved for the date labels
+const SCRUBBER_GAP_PX = 5; // breathing room between the labels and the handle
+const SCRUBBER_BOTTOM_PX = X_AXIS_LABEL_PX + SCRUBBER_GAP_PX;
+const X_AXIS_HEIGHT = SCRUBBER_BOTTOM_PX + SCRUBBER_CIRCLE_PX;
+const X_AXIS_TICK_MARGIN = X_AXIS_HEIGHT - 1 - X_AXIS_LABEL_PX;
 
 interface ChartProps {
   points: HistoryPointDto[];
@@ -162,6 +175,8 @@ export function NetWorthChart({
             tickLine={false}
             axisLine={false}
             minTickGap={48}
+            height={X_AXIS_HEIGHT}
+            tickMargin={X_AXIS_TICK_MARGIN}
           />
           <YAxis
             tickFormatter={(v: number) => formatMinorCompact(v, currency)}
@@ -243,7 +258,7 @@ export function NetWorthChart({
 
       {/* "View as" scrubber, drawn along the X axis so the chart shows a single
           bar (not a separate slider row). Its track spans the plot area and the
-          circle handle lines up with the date labels. */}
+          circle handle rides in a lane just above the X-axis date labels. */}
       {showScrubber && (
         <>
           <input
@@ -254,11 +269,12 @@ export function NetWorthChart({
             onChange={(e) => onScrub(Number(e.target.value))}
             aria-label="View as date"
             title="Drag along the timeline to view your finances as they were on a past date"
-            className="absolute z-10 h-1 cursor-pointer accent-loss-500"
+            className="scrubber absolute z-10 cursor-pointer"
             style={{
               left: Y_AXIS_WIDTH + CHART_MARGIN.left,
               right: CHART_MARGIN.right,
-              bottom: 18,
+              bottom: SCRUBBER_BOTTOM_PX,
+              height: SCRUBBER_CIRCLE_PX,
             }}
           />
           {scrubber!.asOf && (

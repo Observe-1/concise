@@ -106,6 +106,61 @@ describe('dashboard API', () => {
     await agent.get('/api/dashboard/prediction?range=NOPE').expect(400);
   });
 
+  it('prediction mode summary projects every total + breakdown to the horizon', async () => {
+    const live = await agent.get('/api/dashboard/summary');
+    const projected = await agent.get('/api/dashboard/summary?predict=1&range=1Y');
+    expect(projected.status).toBe(200);
+
+    // The projected summary differs from today's live one (a year of growth),
+    // and its net worth equals the prediction graph's final (horizon) point —
+    // the surrounding cards now agree with the chart's last value.
+    expect(projected.body.netWorthMinor).not.toBe(live.body.netWorthMinor);
+    const pred = await agent.get('/api/dashboard/prediction?range=1Y');
+    const last = pred.body.points[pred.body.points.length - 1];
+    expect(last.date).toBe('2027-06-11');
+    expect(projected.body.assetsMinor).toBe(last.assetsMinor);
+    expect(projected.body.liabilitiesMinor).toBe(last.liabilitiesMinor);
+    expect(projected.body.netWorthMinor).toBe(last.netWorthMinor);
+
+    // The projected breakdowns are coherent (sum to the projected totals).
+    const catSum = projected.body.assetsByCategory.reduce(
+      (s: number, c: { totalMinor: number }) => s + c.totalMinor, 0,
+    );
+    expect(catSum).toBe(projected.body.assetsMinor);
+    expect(projected.body.assetsByCategory.length).toBeGreaterThan(0);
+  });
+
+  it('prediction mode summary honours a pinned view-as date, and falls back otherwise', async () => {
+    // A future view-as date projects to that date (between today and horizon).
+    const live = await agent.get('/api/dashboard/summary');
+    const horizon = await agent.get('/api/dashboard/summary?predict=1&range=1Y');
+    const mid = await agent.get('/api/dashboard/summary?predict=1&range=1Y&asOf=2026-12-11');
+    expect(mid.body.assetsMinor).not.toBe(live.body.assetsMinor);
+    expect(mid.body.assetsMinor).not.toBe(horizon.body.assetsMinor);
+
+    // predict has no bounded future for ALL, and a non-future asOf isn't a
+    // projection — both fall back to the live (real) summary.
+    const all = await agent.get('/api/dashboard/summary?predict=1&range=ALL');
+    expect(all.body.netWorthMinor).toBe(live.body.netWorthMinor);
+    const todayAsOf = await agent.get('/api/dashboard/summary?predict=1&range=1Y&asOf=2026-06-11');
+    expect(todayAsOf.body.netWorthMinor).toBe(live.body.netWorthMinor);
+  });
+
+  it('prediction mode percentages are projected growth from today', async () => {
+    const live = await agent.get('/api/dashboard/summary');
+    const projected = await agent.get('/api/dashboard/summary?predict=1&range=1Y');
+    const changes = await agent.get('/api/dashboard/changes?predict=1&range=1Y');
+    expect(changes.status).toBe(200);
+    expect(changes.body.range).toBe('1Y');
+
+    const expectedPct = (e: number, b: number) =>
+      b > 0 ? Math.round(((e - b) / b) * 100 * 100) / 100 : null;
+    expect(changes.body.netWorthChangePct)
+      .toBe(expectedPct(projected.body.netWorthMinor, live.body.netWorthMinor));
+    expect(changes.body.assetsChangePct)
+      .toBe(expectedPct(projected.body.assetsMinor, live.body.assetsMinor));
+  });
+
   it('prediction scales the history slice to the range (10Y → ~1Y history)', async () => {
     const res = await agent.get('/api/dashboard/prediction?range=10Y');
     const pts = res.body.points as { date: string }[];

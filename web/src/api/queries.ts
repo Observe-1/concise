@@ -66,21 +66,37 @@ export function useLogout() {
 
 // ---------- dashboard ----------
 
-export function useSummary(asOf?: string | null) {
+/**
+ * Dashboard summary. In prediction mode (`predict` set) the server returns the
+ * portfolio projected forward to the range's horizon — or to the view-as date
+ * when one is pinned — so every card reflects the future rather than today.
+ */
+export function useSummary(asOf?: string | null, predict?: { range: HistoryRange }) {
   return useQuery({
-    queryKey: ['dashboard', 'summary', asOf ?? null],
-    queryFn: () =>
-      api<DashboardSummaryDto>(`/api/dashboard/summary${asOf ? `?asOf=${asOf}` : ''}`),
+    queryKey: ['dashboard', 'summary', asOf ?? null, predict?.range ?? null],
+    queryFn: () => {
+      const params: string[] = [];
+      if (asOf) params.push(`asOf=${asOf}`);
+      if (predict) params.push('predict=1', `range=${predict.range}`);
+      const qs = params.length ? `?${params.join('&')}` : '';
+      return api<DashboardSummaryDto>(`/api/dashboard/summary${qs}`);
+    },
     placeholderData: keepPreviousData,
   });
 }
 
-/** Portfolio total % changes over a range, for the dashboard summary cards. */
-export function useDashboardChanges(range: HistoryRange, asOf?: string | null) {
+/**
+ * Portfolio total % changes over a range, for the dashboard summary cards.
+ * With `predict`, the percentages become projected growth from today's live
+ * totals to the projected (horizon or view-as) date.
+ */
+export function useDashboardChanges(range: HistoryRange, asOf?: string | null, predict = false) {
   return useQuery({
-    queryKey: ['dashboard', 'changes', range, asOf ?? null],
+    queryKey: ['dashboard', 'changes', range, asOf ?? null, predict],
     queryFn: () =>
-      api<DashboardChangesDto>(`/api/dashboard/changes?range=${range}${asOf ? `&asOf=${asOf}` : ''}`),
+      api<DashboardChangesDto>(
+        `/api/dashboard/changes?range=${range}${asOf ? `&asOf=${asOf}` : ''}${predict ? '&predict=1' : ''}`,
+      ),
     placeholderData: keepPreviousData,
   });
 }
