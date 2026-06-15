@@ -151,7 +151,3 @@ Implemented strictly in order; one commit per feature.
       default — or to the view-as date when scrubbed; percentages become
       projected growth vs today, captioned "projected".
 
-## Notes
-- Deployment (Docker/CI/runbooks) is intentionally out of scope. The app still
-  runs in production directly: `npm run build` then `npm start` serves the API
-  and the built SPA from one Node process; back up by copying the SQLite file.
