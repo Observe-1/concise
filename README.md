@@ -97,5 +97,47 @@ origin. Back up by copying the SQLite file (WAL mode — copy `*.db`, `*.db-wal`
 | `DB_PATH`          | `../data/concise.db` | SQLite file location                    |
 | `NODE_ENV`         | `development`      | `production` enables Secure cookies       |
 | `SESSION_TTL_HOURS`| `336` (14 days)    | Session lifetime                          |
+| `COOKIE_SECURE`    | (prod: `true`)     | Send `Secure` cookies (requires HTTPS)    |
 | `TRUST_PROXY`      | `0`                | Hops to trust for client IP               |
 | `TRUSTED_ORIGINS`  | (none)             | Extra CSRF-trusted origins, comma-sep     |
+| `API_RATE_LIMIT`   | `300`              | API requests per IP per minute            |
+| `LOGIN_RATE_LIMIT` | `10`               | Login attempts per IP per 15 minutes      |
+| `SEED_ON_START`    | `0`                | `1` (re)seeds the demo account at startup |
+
+## Run with Docker
+
+The repo ships a multi-stage [Dockerfile](Dockerfile) (it builds the server
+bundle and static SPA, then assembles a slim runtime image) and a
+[docker-compose.yml](docker-compose.yml) template. The image runs as a non-root
+user, applies migrations on startup, and stores the SQLite database on a volume
+mounted at `/data`.
+
+```bash
+cp .env.docker.example .env     # adjust for your deployment
+docker compose up -d --build
+```
+
+Open http://localhost:3000. Set `SEED_ON_START=1` in `.env` to create the demo
+account (`demo` / `demo`) on first run. Testing over plain HTTP on `localhost`?
+Uncomment `COOKIE_SECURE=false` in `.env` first, or logins silently fail (see
+the HTTPS note below).
+
+Without Compose:
+
+```bash
+docker build -t concise .
+docker run -d --init --name concise -p 3000:3000 -v concise-data:/data concise
+```
+
+- **Serve over HTTPS.** `COOKIE_SECURE` defaults to `true`, so session cookies
+  require HTTPS — put Concise behind a TLS-terminating reverse proxy (Caddy,
+  nginx, Traefik). For local plain-HTTP testing on `localhost` only, add
+  `-e COOKIE_SECURE=false` (otherwise logins silently fail). Behind a proxy also
+  set `TRUST_PROXY=1` (correct client IPs) and `TRUSTED_ORIGINS` if the SPA is
+  served from another origin.
+- The database is the `/data` volume; back it up by copying the volume (WAL mode
+  — copy `*.db`, `*.db-wal`, `*.db-shm` together, or checkpoint first).
+- The container runs as a non-root user and exposes `GET /api/health` for the
+  built-in healthcheck and external probes.
+
+See [.env.docker.example](.env.docker.example) for all tunables.

@@ -329,3 +329,31 @@ concise/
    are idempotent so missed ticks self-heal on next start.
 6. **Server runtime is compiled** — dev uses `tsx watch`; production runs
    `esbuild`-bundled JS. The web build is static files served by Express.
+
+## 7. Deployment
+
+The single-process / single-file-DB shape (§1) makes the container trivial: one
+image, one port, one volume.
+
+- **Multi-stage [Dockerfile](Dockerfile)** — a `build` stage runs `npm ci` and
+  `npm run build` (esbuild server bundle + Vite static SPA); a `prod-deps` stage
+  installs production-only `node_modules`; the `runtime` stage (slim, non-root
+  `node` user) copies the bundle, the static SPA, and the prod deps. No compiler
+  in the final image — `node:sqlite` is built in, and the project has no native
+  dependencies by design (§1).
+- **Migrations travel with the bundle** — `migrate.ts` reads `*.sql` from
+  `import.meta.dirname/migrations`, i.e. next to the running file. esbuild emits
+  only `dist/index.js`, so the Dockerfile copies `src/db/migrations` to
+  `dist/migrations`. Migrations run automatically on startup (`index.ts`); the
+  scheduler self-heals missed ticks (§6.5), so a container restart needs no
+  manual steps.
+- **State is the volume** — `DB_PATH` points at `/data/concise.db` on a mounted
+  volume owned by the runtime user. Backup = copy the volume (WAL: copy
+  `*.db`, `*.db-wal`, `*.db-shm` together, or checkpoint first).
+- **Config is env-only** — [config.ts](server/src/config.ts) is the single
+  source of runtime knobs; the [docker-compose.yml](docker-compose.yml) and
+  [.env.docker.example](.env.docker.example) templates surface them. Behind a
+  reverse proxy, set `TRUST_PROXY` (correct client IPs for rate limiting and the
+  audit log) and `COOKIE_SECURE=true` over HTTPS.
+- **Health** — `GET /api/health` returns `{ ok: true }`; the image's
+  `HEALTHCHECK` polls it with Node's global `fetch` (no curl in the slim image).

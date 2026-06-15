@@ -1,0 +1,41 @@
+# Keep the build context small and never ship host artifacts into the image.
+
+# dependencies (reinstalled inside the image; host copies are platform-specific)
+node_modules
+**/node_modules
+
+# build outputs (regenerated in the build stage)
+dist
+**/dist
+build
+
+# local data — never bake a database into the image
+data
+*.db
+*.db-wal
+*.db-shm
+
+# tests / coverage reports
+coverage
+**/coverage
+playwright-report
+test-results
+
+# version control & tooling
+.git
+.gitignore
+.github
+.claude
+
+# local env files (use .env.docker.example as the template)
+.env
+.env.*
+!.env.docker.example
+
+# docs and misc (not needed to build the image)
+*.md
+Dockerfile
+.dockerignore
+docker-compose.yml
+npm-debug.log*
+.DS_Store

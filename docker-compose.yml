@@ -1,0 +1,67 @@
+# Concise — container template.
+#
+# Quick start:
+#   cp .env.docker.example .env      # adjust values for your deployment
+#   docker compose up -d --build
+#   open http://localhost:3000
+#
+# Data lives in the named volume `concise-data` (the SQLite file). Back up by
+# copying that volume or by mounting a host path instead (see `volumes` below).
+
+services:
+  concise:
+    build: .
+    # To run a pre-built image instead of building locally, comment out `build`
+    # above and uncomment:
+    # image: concise:latest
+    container_name: concise
+    restart: unless-stopped
+    init: true                       # reap zombies, forward signals cleanly
+    # Defense-in-depth: the app only needs to write to /data, so the rest of
+    # the filesystem is read-only and the process can gain no extra privileges.
+    read_only: true
+    security_opt:
+      - "no-new-privileges:true"
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp                         # Node's os.tmpdir() under the read-only rootfs
+    ports:
+      # host:container — the container always listens on 3000. This publishes on
+      # ALL host interfaces (0.0.0.0). When a reverse proxy terminates TLS, bind
+      # to loopback instead: "127.0.0.1:${PORT:-3000}:3000". Direct 0.0.0.0
+      # exposure MUST be paired with HTTPS + COOKIE_SECURE=true.
+      - "${PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DB_PATH: /data/concise.db
+      WEB_DIST_DIR: /app/web/dist
+      # Tunables (defaults shown; override in .env). See .env.docker.example.
+      SESSION_TTL_HOURS: "${SESSION_TTL_HOURS:-336}"
+      COOKIE_SECURE: "${COOKIE_SECURE:-true}"        # true requires HTTPS
+      TRUST_PROXY: "${TRUST_PROXY:-0}"               # set to 1 behind a reverse proxy
+      TRUSTED_ORIGINS: "${TRUSTED_ORIGINS:-}"
+      API_RATE_LIMIT: "${API_RATE_LIMIT:-300}"
+      LOGIN_RATE_LIMIT: "${LOGIN_RATE_LIMIT:-10}"
+      SEED_ON_START: "${SEED_ON_START:-0}"           # 1 = (re)seed demo account
+    volumes:
+      - concise-data:/data
+      # Prefer a host directory? The container runs as non-root UID 1000, and a
+      # host bind dir does NOT inherit the image's ownership. Create it writable
+      # by UID 1000 first (e.g. mkdir -p ./data && sudo chown 1000:1000 ./data),
+      # then replace the line above with:
+      # - ./data:/data
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+volumes:
+  concise-data:
