@@ -2,7 +2,9 @@ import { Router } from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { AppContext } from '../../context.js';
-import type { DetailedHealthDto, HealthCheck, HealthDto, HealthStatus } from '../../types/api.js';
+import type {
+  DetailedHealthDto, HealthCheck, HealthDto, HealthRuntime, HealthStatus,
+} from '../../types/api.js';
 
 /**
  * Health endpoints. Both are UNAUTHENTICATED — Docker's HEALTHCHECK, reverse
@@ -38,12 +40,31 @@ export function healthRoutes(ctx: AppContext): Router {
       version,
       uptimeSeconds: Math.round(process.uptime()),
       timestamp: ctx.now().toISOString(),
+      runtime: runtimeInfo(ctx),
+      network: { port: ctx.config.port },
       checks,
     };
     res.status(status === 'down' ? 503 : 200).json(body);
   });
 
   return router;
+}
+
+/** Non-sensitive runtime diagnostics: versions, host and memory. All
+ *  non-financial and safe to expose unauthenticated. */
+function runtimeInfo(ctx: AppContext): HealthRuntime {
+  const mem = process.memoryUsage();
+  const toMb = (bytes: number) => Math.round((bytes / 1024 / 1024) * 10) / 10;
+  return {
+    node: process.version,
+    sqlite: process.versions.sqlite ?? 'unknown',
+    platform: process.platform,
+    arch: process.arch,
+    environment: ctx.config.env,
+    pid: process.pid,
+    memoryRssMb: toMb(mem.rss),
+    memoryHeapUsedMb: toMb(mem.heapUsed),
+  };
 }
 
 /** Trivial SELECT 1 against SQLite, timed. Never echoes the raw error (it can

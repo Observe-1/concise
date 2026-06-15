@@ -229,18 +229,46 @@ export interface HealthCheck {
   latencyMs?: number;
 }
 
+/** Diagnostic runtime facts (no up/down semantics) — versions, host and
+ *  resource usage. All non-sensitive and non-financial. */
+export interface HealthRuntime {
+  /** Node.js version, e.g. "v24.16.0". */
+  node: string;
+  /** Bundled SQLite library version, e.g. "3.53.0". */
+  sqlite: string;
+  /** OS platform, e.g. "linux". */
+  platform: string;
+  /** CPU architecture, e.g. "x64" / "arm64". */
+  arch: string;
+  /** Which config profile is running. */
+  environment: 'development' | 'production' | 'test';
+  /** Process id (handy when reading container logs). */
+  pid: number;
+  /** Resident set size (whole process memory) in MB. */
+  memoryRssMb: number;
+  /** V8 heap actually in use in MB. */
+  memoryHeapUsedMb: number;
+}
+
 /**
  * Detailed readiness response (GET /api/health/detailed). Reports only the
- * operational status of the UI, server and database — never any financial,
- * account or secret data. `status` is `down` (HTTP 503) only when the database
- * is unreachable; a missing UI bundle is `degraded` (still HTTP 200). See
- * HEALTHCHECK.md.
+ * operational status of the UI, server and database plus non-sensitive runtime
+ * diagnostics — never any financial, account or secret data. `status` is `down`
+ * (HTTP 503) only when the database is unreachable; a missing UI bundle is
+ * `degraded` (still HTTP 200). See HEALTHCHECK.md.
  */
 export interface DetailedHealthDto {
   status: HealthStatus;
+  /** Application (server) version. */
   version: string;
   uptimeSeconds: number;
   timestamp: string;
+  runtime: HealthRuntime;
+  /** Ports this process is using. */
+  network: {
+    /** Configured HTTP port the API + SPA are served on. */
+    port: number;
+  };
   checks: {
     server: HealthCheck;
     database: HealthCheck;

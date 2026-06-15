@@ -53,9 +53,22 @@ deployment depends on — the **UI**, the **server**, and the **database**:
 GET /api/health/detailed  →  200 OK
 {
   "status": "ok",                       // ok | degraded | down
-  "version": "0.1.0",                   // server version (best-effort)
+  "version": "0.1.0",                   // app (server) version, best-effort
   "uptimeSeconds": 4096,
   "timestamp": "2026-06-15T12:00:00.000Z",
+  "runtime": {
+    "node": "v24.16.0",                 // Node.js version
+    "sqlite": "3.53.0",                 // bundled SQLite library version
+    "platform": "linux",               // OS platform
+    "arch": "x64",                     // CPU architecture (x64 / arm64)
+    "environment": "production",        // config profile
+    "pid": 1,                           // process id (for log correlation)
+    "memoryRssMb": 78.2,                // whole-process memory (RSS)
+    "memoryHeapUsedMb": 21.4            // V8 heap in use
+  },
+  "network": {
+    "port": 3000                        // HTTP port the API + SPA are served on
+  },
   "checks": {
     "server":   { "status": "up", "detail": "process responding" },
     "database": { "status": "up", "detail": "reachable", "latencyMs": 0.4 },
@@ -63,6 +76,15 @@ GET /api/health/detailed  →  200 OK
   }
 }
 ```
+
+### Runtime diagnostics
+
+The `runtime` and `network` blocks are non-pass/fail diagnostics — the things
+you actually want when something looks off on a self-hosted box: the **Node** and
+**SQLite** versions in play, the **platform/arch** (handy on ARM unraid/NAS
+hardware), which **environment** profile is running, the **pid** for correlating
+container logs, current **memory** use, and the **port** the process is serving
+on. All of it is non-sensitive and non-financial.
 
 ### What each check means
 

@@ -37,6 +37,23 @@ describe('health', () => {
       expect(res.body.checks.ui.status).toBe('skipped');
     });
 
+    it('reports runtime diagnostics (versions, host, memory) and the port', async () => {
+      const res = await request(world.app).get('/api/health/detailed');
+      const { runtime, network } = res.body;
+      expect(runtime.node).toBe(process.version);
+      expect(typeof runtime.sqlite).toBe('string');
+      expect(runtime.sqlite.length).toBeGreaterThan(0);
+      expect(runtime.platform).toBe(process.platform);
+      expect(runtime.arch).toBe(process.arch);
+      expect(runtime.environment).toBe('test');
+      expect(typeof runtime.pid).toBe('number');
+      expect(typeof runtime.memoryRssMb).toBe('number');
+      expect(runtime.memoryRssMb).toBeGreaterThan(0);
+      expect(typeof runtime.memoryHeapUsedMb).toBe('number');
+      // makeTestWorld uses the default config (PORT defaults to 3000).
+      expect(network.port).toBe(3000);
+    });
+
     it('never leaks any financial or account data', async () => {
       const res = await request(world.app).get('/api/health/detailed');
       const serialized = JSON.stringify(res.body).toLowerCase();
