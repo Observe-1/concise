@@ -9,6 +9,7 @@ import { csrfProtection } from './middleware/csrf.js';
 import { errorHandler, notFoundHandler } from './middleware/errors.js';
 import { authRoutes } from './modules/auth/routes.js';
 import { dashboardRoutes } from './modules/dashboard/routes.js';
+import { healthRoutes } from './modules/health/routes.js';
 import { historyRoutes } from './modules/history/routes.js';
 import { ASSET_KIND, LIABILITY_KIND } from './modules/holdings/kind.js';
 import { holdingsRoutes } from './modules/holdings/routes.js';
@@ -50,9 +51,8 @@ export function buildApp(ctx: AppContext): express.Express {
   api.use(csrfProtection(ctx));
   api.use(sessionLoader(ctx));
 
-  api.get('/health', (_req, res) => {
-    res.json({ ok: true });
-  });
+  // Public health endpoints (no auth) — liveness + readiness. See HEALTHCHECK.md.
+  api.use('/health', healthRoutes(ctx));
   api.use('/auth', authRoutes(ctx));
   api.use('/assets', requireAuth, holdingsRoutes(ctx, ASSET_KIND));
   api.use('/liabilities', requireAuth, holdingsRoutes(ctx, LIABILITY_KIND));

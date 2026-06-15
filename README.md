@@ -138,6 +138,15 @@ docker run -d --init --name concise -p 3000:3000 -v concise-data:/data concise
 - The database is the `/data` volume; back it up by copying the volume (WAL mode
   — copy `*.db`, `*.db-wal`, `*.db-shm` together, or checkpoint first).
 - The container runs as a non-root user and exposes `GET /api/health` for the
-  built-in healthcheck and external probes.
+  built-in healthcheck and external probes. A richer `GET /api/health/detailed`
+  reports the UI, server and database status (never any financial data) for
+  dashboards and monitors — see [HEALTHCHECK.md](HEALTHCHECK.md).
 
 See [.env.docker.example](.env.docker.example) for all tunables.
+
+## Health checks
+
+Concise exposes a simple liveness probe (`GET /api/health` → `{ ok: true }`) and
+a detailed readiness probe (`GET /api/health/detailed`, checking UI, server and
+database) for unraid / Docker / Uptime Kuma. Neither ever reports financial
+data. See [HEALTHCHECK.md](HEALTHCHECK.md).

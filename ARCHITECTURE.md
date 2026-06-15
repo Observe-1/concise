@@ -355,5 +355,9 @@ image, one port, one volume.
   [.env.docker.example](.env.docker.example) templates surface them. Behind a
   reverse proxy, set `TRUST_PROXY` (correct client IPs for rate limiting and the
   audit log) and `COOKIE_SECURE=true` over HTTPS.
-- **Health** — `GET /api/health` returns `{ ok: true }`; the image's
+- **Health** — `GET /api/health` returns `{ ok: true }` (liveness); the image's
   `HEALTHCHECK` polls it with Node's global `fetch` (no curl in the slim image).
+  `GET /api/health/detailed` is a readiness probe that checks the UI, server and
+  database (returning `503` when the database is unreachable). Both are
+  unauthenticated and report only operational status — never any financial data.
+  See [HEALTHCHECK.md](HEALTHCHECK.md).

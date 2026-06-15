@@ -206,3 +206,11 @@ export interface ApiError {
   error: string;
   details?: unknown;
 }
+
+/**
+ * Liveness probe response (GET /api/health). Deliberately minimal — "UP or
+ * NOT". Reports no financial or account data. See HEALTHCHECK.md.
+ */
+export interface HealthDto {
+  ok: true;
+}
