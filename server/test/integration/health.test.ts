@@ -51,7 +51,11 @@ describe('health', () => {
       expect(runtime.memoryRssMb).toBeGreaterThan(0);
       expect(typeof runtime.memoryHeapUsedMb).toBe('number');
       // makeTestWorld uses the default config (PORT defaults to 3000).
-      expect(network.port).toBe(3000);
+      expect(network.server.port).toBe(3000);
+      // SQLite is embedded (a local file) — it has no network port.
+      expect(network.database.port).toBeNull();
+      // No SPA bundle in the test world, so the UI is served elsewhere.
+      expect(network.ui.port).toBeNull();
     });
 
     it('never leaks any financial or account data', async () => {
@@ -72,6 +76,8 @@ describe('health', () => {
         expect(res.status).toBe(200);
         expect(res.body.status).toBe('ok');
         expect(res.body.checks.ui.status).toBe('up');
+        // Served in-process, so the UI shares the server's HTTP port.
+        expect(res.body.network.ui.port).toBe(res.body.network.server.port);
       } finally {
         fs.rmSync(dir, { recursive: true, force: true });
       }

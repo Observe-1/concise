@@ -251,6 +251,29 @@ export interface HealthRuntime {
 }
 
 /**
+ * How one component is reached over the network. `port` is null when the
+ * component uses no network port of its own — an embedded database (SQLite is
+ * a local file) or a UI served by a separate process (the Vite dev server).
+ * `detail` explains which case applies.
+ */
+export interface HealthEndpoint {
+  port: number | null;
+  detail: string;
+}
+
+/**
+ * Ports each component is using. The UI, server and database can sit on
+ * different ports (or none): the server has the HTTP port; the UI shares it
+ * when served in-process but has its own when served by the dev server; the
+ * embedded SQLite database has no port at all.
+ */
+export interface HealthNetwork {
+  server: HealthEndpoint;
+  ui: HealthEndpoint;
+  database: HealthEndpoint;
+}
+
+/**
  * Detailed readiness response (GET /api/health/detailed). Reports only the
  * operational status of the UI, server and database plus non-sensitive runtime
  * diagnostics — never any financial, account or secret data. `status` is `down`
@@ -264,11 +287,7 @@ export interface DetailedHealthDto {
   uptimeSeconds: number;
   timestamp: string;
   runtime: HealthRuntime;
-  /** Ports this process is using. */
-  network: {
-    /** Configured HTTP port the API + SPA are served on. */
-    port: number;
-  };
+  network: HealthNetwork;
   checks: {
     server: HealthCheck;
     database: HealthCheck;

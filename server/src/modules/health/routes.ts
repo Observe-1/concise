@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { AppContext } from '../../context.js';
 import type {
-  DetailedHealthDto, HealthCheck, HealthDto, HealthRuntime, HealthStatus,
+  DetailedHealthDto, HealthCheck, HealthDto, HealthNetwork, HealthRuntime, HealthStatus,
 } from '../../types/api.js';
 
 /**
@@ -41,7 +41,7 @@ export function healthRoutes(ctx: AppContext): Router {
       uptimeSeconds: Math.round(process.uptime()),
       timestamp: ctx.now().toISOString(),
       runtime: runtimeInfo(ctx),
-      network: { port: ctx.config.port },
+      network: networkInfo(ctx, checks.ui),
       checks,
     };
     res.status(status === 'down' ? 503 : 200).json(body);
@@ -64,6 +64,23 @@ function runtimeInfo(ctx: AppContext): HealthRuntime {
     pid: process.pid,
     memoryRssMb: toMb(mem.rss),
     memoryHeapUsedMb: toMb(mem.heapUsed),
+  };
+}
+
+/** Per-component ports. They are not necessarily the same one:
+ *  - server   — the HTTP port Express listens on.
+ *  - ui       — shares the server's port when the SPA is served in-process
+ *               (production), but is a separate process (the Vite dev server)
+ *               in development, whose port this process does not own → null.
+ *  - database — embedded SQLite is a local file, so it has no network port. */
+function networkInfo(ctx: AppContext, ui: HealthCheck): HealthNetwork {
+  const serverServesUi = ui.status === 'up';
+  return {
+    server: { port: ctx.config.port, detail: 'HTTP API' },
+    ui: serverServesUi
+      ? { port: ctx.config.port, detail: 'served in-process with the API' }
+      : { port: null, detail: 'served by a separate process (dev server)' },
+    database: { port: null, detail: 'embedded SQLite (local file, no network port)' },
   };
 }
 

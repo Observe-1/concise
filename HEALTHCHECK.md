@@ -66,8 +66,10 @@ GET /api/health/detailed  →  200 OK
     "memoryRssMb": 78.2,                // whole-process memory (RSS)
     "memoryHeapUsedMb": 21.4            // V8 heap in use
   },
-  "network": {
-    "port": 3000                        // HTTP port the API + SPA are served on
+  "network": {                          // per-component ports — they can differ
+    "server":   { "port": 3000, "detail": "HTTP API" },
+    "ui":       { "port": 3000, "detail": "served in-process with the API" },
+    "database": { "port": null, "detail": "embedded SQLite (local file, no network port)" }
   },
   "checks": {
     "server":   { "status": "up", "detail": "process responding" },
@@ -83,8 +85,22 @@ The `runtime` and `network` blocks are non-pass/fail diagnostics — the things
 you actually want when something looks off on a self-hosted box: the **Node** and
 **SQLite** versions in play, the **platform/arch** (handy on ARM unraid/NAS
 hardware), which **environment** profile is running, the **pid** for correlating
-container logs, current **memory** use, and the **port** the process is serving
-on. All of it is non-sensitive and non-financial.
+container logs, and current **memory** use. All of it is non-sensitive and
+non-financial.
+
+`network` reports a port **per component**, because the UI, server and database
+do not necessarily share one:
+
+- **server** — the HTTP port Express listens on.
+- **ui** — the same port when the SPA is served in-process (the production
+  single-process deployment), but `null` when it is served by a separate
+  process (the Vite dev server in development) whose port this process does not
+  own.
+- **database** — `null`: Concise uses **embedded SQLite** (a local file on the
+  data volume), which has no network port at all. `detail` says so.
+
+A `null` port therefore means "this component uses no network port of its own",
+not "missing" — `detail` always explains which case applies.
 
 ### What each check means
 
