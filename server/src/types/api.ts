@@ -214,3 +214,36 @@ export interface ApiError {
 export interface HealthDto {
   ok: true;
 }
+
+/** Rolled-up health of the whole service. */
+export type HealthStatus = 'ok' | 'degraded' | 'down';
+/** Health of a single component. `skipped` = not applicable here (e.g. the UI
+ *  is served by the dev server, not this process). */
+export type ComponentStatus = 'up' | 'down' | 'skipped';
+
+export interface HealthCheck {
+  status: ComponentStatus;
+  /** Short, non-sensitive human note (never an internal error string). */
+  detail: string;
+  /** Round-trip time of the probe in milliseconds (database check only). */
+  latencyMs?: number;
+}
+
+/**
+ * Detailed readiness response (GET /api/health/detailed). Reports only the
+ * operational status of the UI, server and database — never any financial,
+ * account or secret data. `status` is `down` (HTTP 503) only when the database
+ * is unreachable; a missing UI bundle is `degraded` (still HTTP 200). See
+ * HEALTHCHECK.md.
+ */
+export interface DetailedHealthDto {
+  status: HealthStatus;
+  version: string;
+  uptimeSeconds: number;
+  timestamp: string;
+  checks: {
+    server: HealthCheck;
+    database: HealthCheck;
+    ui: HealthCheck;
+  };
+}
