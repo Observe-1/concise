@@ -3,8 +3,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { AppContext } from '../../context.js';
 import type {
-  DetailedHealthDto, HealthCheck, HealthDto, HealthNetwork, HealthRuntime, HealthStatus,
+  DetailedHealthDto, HealthBackup, HealthCheck, HealthDto, HealthNetwork, HealthRuntime, HealthStatus,
 } from '../../types/api.js';
+import { backupStatus } from '../backup/service.js';
 
 /**
  * Health endpoints. Both are UNAUTHENTICATED — Docker's HEALTHCHECK, reverse
@@ -42,6 +43,7 @@ export function healthRoutes(ctx: AppContext): Router {
       timestamp: ctx.now().toISOString(),
       runtime: runtimeInfo(ctx),
       network: networkInfo(ctx, checks.ui),
+      backup: backupInfo(ctx),
       checks,
     };
     res.status(status === 'down' ? 503 : 200).json(body);
@@ -82,6 +84,16 @@ function networkInfo(ctx: AppContext, ui: HealthCheck): HealthNetwork {
       : { port: null, detail: 'served by a separate process (dev server)' },
     database: { port: null, detail: 'embedded SQLite (local file, no network port)' },
   };
+}
+
+/** Non-sensitive backup state (last backup time/name, location, count). Robust
+ *  to a missing/unreadable backup directory — never throws. See BACKUP.md. */
+function backupInfo(ctx: AppContext): HealthBackup {
+  try {
+    return backupStatus(ctx);
+  } catch {
+    return { lastBackupAt: null, lastBackupName: null, location: ctx.config.backupDir, count: 0 };
+  }
 }
 
 /** Trivial SELECT 1 against SQLite, timed. Never echoes the raw error (it can

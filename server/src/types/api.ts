@@ -207,6 +207,46 @@ export interface ApiError {
   details?: unknown;
 }
 
+// ---------- database backups (see BACKUP.md) ----------
+
+/** Configurable backup behaviour (a single global row — backups cover the whole
+ *  database, not one user's data). */
+export interface BackupSettingsDto {
+  /** Filename prefix for new backups, e.g. "concise-backup". */
+  namePrefix: string;
+  /** How many backups to retain — manual AND automatic combined. */
+  keepCount: number;
+  /** Whether the scheduler takes backups automatically. On by default. */
+  autoEnabled: boolean;
+  /** How often automatic backups run, and the startup staleness threshold. */
+  intervalHours: number;
+}
+
+/** One backup file on disk. */
+export interface BackupFileDto {
+  name: string;
+  sizeBytes: number;
+  /** ISO timestamp the backup was taken (parsed from the filename). */
+  createdAt: string;
+}
+
+/** Everything the Settings → Backup page needs in one request. */
+export interface BackupOverviewDto {
+  settings: BackupSettingsDto;
+  /** Absolute path of the backup directory. */
+  location: string;
+  /** Existing backups, newest first. */
+  backups: BackupFileDto[];
+}
+
+/** Result of taking a backup on demand. */
+export interface BackupRunResultDto {
+  /** The backup just created (already validated to exist on disk). */
+  backup: BackupFileDto;
+  /** The refreshed list of existing backups, newest first. */
+  backups: BackupFileDto[];
+}
+
 /**
  * Liveness probe response (GET /api/health). Deliberately minimal — "UP or
  * NOT". Reports no financial or account data. See HEALTHCHECK.md.
@@ -274,6 +314,22 @@ export interface HealthNetwork {
 }
 
 /**
+ * Non-pass/fail snapshot of the database-backup state, for monitors that want
+ * to alert when backups go stale. Carries only operational facts about the
+ * backup files — never any financial or account data. See BACKUP.md.
+ */
+export interface HealthBackup {
+  /** ISO timestamp of the most recent backup, or null when none exist yet. */
+  lastBackupAt: string | null;
+  /** Filename of the most recent backup, or null when none exist yet. */
+  lastBackupName: string | null;
+  /** Backup directory path. */
+  location: string;
+  /** How many backups currently exist on disk. */
+  count: number;
+}
+
+/**
  * Detailed readiness response (GET /api/health/detailed). Reports only the
  * operational status of the UI, server and database plus non-sensitive runtime
  * diagnostics — never any financial, account or secret data. `status` is `down`
@@ -288,6 +344,8 @@ export interface DetailedHealthDto {
   timestamp: string;
   runtime: HealthRuntime;
   network: HealthNetwork;
+  /** Non-sensitive database-backup state (see BACKUP.md). */
+  backup: HealthBackup;
   checks: {
     server: HealthCheck;
     database: HealthCheck;

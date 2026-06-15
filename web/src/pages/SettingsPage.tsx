@@ -1,11 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  useDeleteAllData, useDeleteLegacyWealth, useLegacyWealth, useLogout, useMe, useSetLegacyWealth,
-  useSettings, useUpdateSettings,
+  useBackupOverview, useDeleteAllData, useDeleteLegacyWealth, useLegacyWealth, useLogout, useMe,
+  useRunBackup, useSetLegacyWealth, useSettings, useUpdateBackupSettings, useUpdateSettings,
 } from '../api/queries.js';
 import { HistoryEntries } from '../components/HistoryEntries.js';
-import { Button, Card, ErrorNote, Field, Input, Select, Spinner } from '../components/ui.js';
+import { Button, Card, EmptyState, ErrorNote, Field, Input, Select, Spinner, SuccessNote } from '../components/ui.js';
 import { formatMinor, parseSignedToMinor } from '../lib/money.js';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'NZD', 'SEK', 'NOK', 'DKK', 'SGD', 'HKD', 'INR'];
@@ -14,6 +14,7 @@ const SECTIONS = [
   { key: 'account', label: 'User account' },
   { key: 'history', label: 'History' },
   { key: 'calculation', label: 'Calculation' },
+  { key: 'backup', label: 'Backup' },
 ] as const;
 type SectionKey = (typeof SECTIONS)[number]['key'];
 
@@ -47,6 +48,7 @@ export function SettingsPage() {
       {active === 'account' && <AccountSection />}
       {active === 'history' && <HistorySection />}
       {active === 'calculation' && <CalculationSection />}
+      {active === 'backup' && <BackupSection />}
 
       <p className="px-1 text-center text-xs text-ink-600">Concise — private, self-hosted personal finance.</p>
     </div>
@@ -266,6 +268,227 @@ function CalculationSection() {
         {saved && !update.isPending ? (
           <p role="status" className="text-sm text-gain-400">Saved.</p>
         ) : null}
+        <Button type="submit" disabled={update.isPending}>
+          {update.isPending ? 'Saving…' : 'Save'}
+        </Button>
+      </form>
+    </Card>
+  );
+}
+
+// ---------- backup ----------
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let value = bytes / 1024;
+  let i = 0;
+  while (value >= 1024 && i < units.length - 1) {
+    value /= 1024;
+    i += 1;
+  }
+  return `${value.toFixed(value < 10 ? 1 : 0)} ${units[i]}`;
+}
+
+function formatAge(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  if (ms < 60_000) return 'just now';
+  const mins = Math.floor(ms / 60_000);
+  if (mins < 60) return `${mins} min${mins === 1 ? '' : 's'} ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} day${days === 1 ? '' : 's'} ago`;
+}
+
+function BackupSection() {
+  return (
+    <>
+      <BackupInfoCard />
+      <BackupRunCard />
+      <BackupSettingsCard />
+    </>
+  );
+}
+
+function BackupInfoCard() {
+  return (
+    <Card className="p-5">
+      <h2 className="mb-2 text-xs font-medium uppercase tracking-widest text-ink-400">How backups work</h2>
+      <p className="text-sm text-ink-400">
+        Concise keeps all your data in a single database file, so a backup is a
+        validated copy of that file. Each backup flushes pending writes, copies
+        the database, then re-opens the copy to confirm it is sound before
+        reporting success.
+      </p>
+      <ul className="mt-3 space-y-1.5 text-sm text-ink-400">
+        <li>• <span className="text-ink-300">Automatic backups</span> run on a regular interval (on by default).</li>
+        <li>• <span className="text-ink-300">On startup</span> a backup is taken straight away if the last one is stale.</li>
+        <li>• <span className="text-ink-300">Manual backups</span> can be taken any time with the button below.</li>
+        <li>• Older backups are pruned so only the most recent are kept.</li>
+      </ul>
+    </Card>
+  );
+}
+
+function BackupRunCard() {
+  const overview = useBackupOverview();
+  const runBackup = useRunBackup();
+  const [done, setDone] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const onRun = () => {
+    setDone(null);
+    setError(null);
+    runBackup.mutate(undefined, {
+      onSuccess: (res) => setDone(res.backup.name),
+      onError: (err) => setError(err instanceof Error ? err.message : 'Backup failed.'),
+    });
+  };
+
+  if (overview.isLoading) return <Spinner label="Loading backups" />;
+  if (!overview.data) {
+    return <p role="alert" className="py-10 text-center text-sm text-loss-400">Could not load backups.</p>;
+  }
+
+  const { backups, location } = overview.data;
+
+  return (
+    <Card className="p-5">
+      <h2 className="mb-2 text-xs font-medium uppercase tracking-widest text-ink-400">Existing backups</h2>
+      <p className="mb-4 break-all text-xs text-ink-400">
+        {backups.length} backup{backups.length === 1 ? '' : 's'} · stored in <span className="text-ink-300">{location}</span>
+      </p>
+
+      {error ? <div className="mb-3"><ErrorNote message={error} /></div> : null}
+      {done && !runBackup.isPending ? (
+        <div className="mb-3"><SuccessNote message={`Backup created and verified: ${done}`} /></div>
+      ) : null}
+
+      <Button onClick={onRun} disabled={runBackup.isPending}>
+        {runBackup.isPending ? 'Backing up…' : 'Back up now'}
+      </Button>
+
+      {backups.length === 0 ? (
+        <div className="mt-4">
+          <EmptyState title="No backups yet" hint="Run one now, or wait for the automatic schedule." />
+        </div>
+      ) : (
+        <ul className="mt-4 divide-y divide-ink-800 border-t border-ink-800">
+          {backups.map((b) => (
+            <li key={b.name} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-ink-300">{b.name}</span>
+                <span className="text-xs text-ink-400">{formatAge(b.createdAt)}</span>
+              </span>
+              <span className="tabular shrink-0 text-xs text-ink-400">{formatBytes(b.sizeBytes)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+function BackupSettingsCard() {
+  const overview = useBackupOverview();
+  const update = useUpdateBackupSettings();
+  const [namePrefix, setNamePrefix] = useState('');
+  const [keepCount, setKeepCount] = useState('');
+  const [autoEnabled, setAutoEnabled] = useState(true);
+  const [intervalHours, setIntervalHours] = useState('');
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (overview.data) {
+      const s = overview.data.settings;
+      setNamePrefix(s.namePrefix);
+      setKeepCount(String(s.keepCount));
+      setAutoEnabled(s.autoEnabled);
+      setIntervalHours(String(s.intervalHours));
+    }
+  }, [overview.data]);
+
+  if (overview.isLoading || !overview.data) return null;
+
+  const onSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    setSaved(false);
+    setError(null);
+    const keep = Number(keepCount);
+    const interval = Number(intervalHours);
+    if (!namePrefix.trim()) {
+      setError('Enter a backup name.');
+      return;
+    }
+    if (!Number.isInteger(keep) || keep < 1) {
+      setError('Keep count must be a whole number of at least 1.');
+      return;
+    }
+    if (!Number.isInteger(interval) || interval < 1) {
+      setError('Interval must be a whole number of hours, at least 1.');
+      return;
+    }
+    update.mutate(
+      { namePrefix: namePrefix.trim(), keepCount: keep, autoEnabled, intervalHours: interval },
+      {
+        onSuccess: () => setSaved(true),
+        onError: (err) => setError(err instanceof Error ? err.message : 'Could not save backup settings.'),
+      },
+    );
+  };
+
+  return (
+    <Card className="p-5">
+      <h2 className="mb-4 text-xs font-medium uppercase tracking-widest text-ink-400">Backup settings</h2>
+      <form onSubmit={onSubmit} className="space-y-4">
+        <Field label="Name" hint="Filename prefix for new backups, e.g. concise-backup.">
+          {(id) => (
+            <Input id={id} value={namePrefix} onChange={(e) => setNamePrefix(e.target.value)} maxLength={64} required />
+          )}
+        </Field>
+        <Field
+          label="Backups to keep"
+          hint="Includes both manual and automatic backups. Older ones are pruned automatically."
+        >
+          {(id) => (
+            <Input
+              id={id}
+              type="number"
+              min={1}
+              max={1000}
+              value={keepCount}
+              onChange={(e) => setKeepCount(e.target.value)}
+              required
+            />
+          )}
+        </Field>
+        <label className="flex cursor-pointer items-start gap-2 text-sm text-ink-300">
+          <input
+            type="checkbox"
+            checked={autoEnabled}
+            onChange={(e) => setAutoEnabled(e.target.checked)}
+            className="mt-0.5 h-4 w-4 accent-gold-500"
+          />
+          <span>Automatic backups — take a backup on a regular interval.</span>
+        </label>
+        <Field label="Interval (hours)" hint="How often automatic backups run, and how stale is too stale on startup.">
+          {(id) => (
+            <Input
+              id={id}
+              type="number"
+              min={1}
+              max={8760}
+              value={intervalHours}
+              onChange={(e) => setIntervalHours(e.target.value)}
+              disabled={!autoEnabled}
+              required
+            />
+          )}
+        </Field>
+        {error ? <ErrorNote message={error} /> : null}
+        {saved && !update.isPending ? <SuccessNote message="Backup settings saved." /> : null}
         <Button type="submit" disabled={update.isPending}>
           {update.isPending ? 'Saving…' : 'Save'}
         </Button>

@@ -105,6 +105,15 @@ export function ErrorNote({ message }: { message: string }) {
   );
 }
 
+/** Success counterpart to ErrorNote — same shape, green tones. */
+export function SuccessNote({ message }: { message: string }) {
+  return (
+    <p role="status" className="rounded-xl border border-gain-500/30 bg-gain-500/10 px-3 py-2 text-sm text-gain-400">
+      {message}
+    </p>
+  );
+}
+
 // ---------- modal (mobile bottom sheet, centered on desktop) ----------
 
 export function Modal({

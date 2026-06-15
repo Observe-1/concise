@@ -37,9 +37,13 @@ RUN npm ci --omit=dev
 FROM node:24-slim AS runtime
 WORKDIR /app
 
+# BACKUP_DIR sits under the same /data volume as the database, so automatic and
+# manual backups persist across container rebuilds (see BACKUP.md). For disaster
+# recovery still copy the volume off-host periodically.
 ENV NODE_ENV=production \
     PORT=3000 \
     DB_PATH=/data/concise.db \
+    BACKUP_DIR=/data/backups \
     WEB_DIST_DIR=/app/web/dist
 
 # Production node_modules, the compiled server, and the static web app.

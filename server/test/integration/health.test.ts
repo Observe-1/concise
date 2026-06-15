@@ -58,6 +58,16 @@ describe('health', () => {
       expect(network.ui.port).toBeNull();
     });
 
+    it('reports a non-sensitive backup block', async () => {
+      const res = await request(world.app).get('/api/health/detailed');
+      const { backup } = res.body;
+      // No backups in the test world yet.
+      expect(backup.lastBackupAt).toBeNull();
+      expect(backup.lastBackupName).toBeNull();
+      expect(backup.count).toBe(0);
+      expect(typeof backup.location).toBe('string');
+    });
+
     it('never leaks any financial or account data', async () => {
       const res = await request(world.app).get('/api/health/detailed');
       const serialized = JSON.stringify(res.body).toLowerCase();

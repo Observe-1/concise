@@ -5,6 +5,7 @@ import { openDatabase } from './db/connection.js';
 import { migrate } from './db/migrate.js';
 import { seed } from './db/seed.js';
 import { startScheduler } from './jobs/scheduler.js';
+import { checkBackupDir } from './modules/backup/service.js';
 import { SimulatedPriceProvider } from './modules/market/provider.js';
 
 const config = loadConfig();
@@ -22,6 +23,10 @@ const ctx: AppContext = {
   now: () => new Date(),
   prices: new SimulatedPriceProvider(),
 };
+
+// Surface a misconfigured/unwritable backup directory loudly at startup rather
+// than letting every backup fail silently in the background (see BACKUP.md).
+checkBackupDir(ctx);
 
 const app = buildApp(ctx);
 const stopScheduler = startScheduler(ctx);

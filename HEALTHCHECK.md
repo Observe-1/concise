@@ -71,6 +71,12 @@ GET /api/health/detailed  →  200 OK
     "ui":       { "port": 3000, "detail": "served in-process with the API" },
     "database": { "port": null, "detail": "embedded SQLite (local file, no network port)" }
   },
+  "backup": {                           // operational backup state (see BACKUP.md)
+    "lastBackupAt": "2026-06-15T11:00:00.000Z", // null if none yet
+    "lastBackupName": "concise-backup-2026-06-15T11-00-00-000Z.db",
+    "location": "/data/backups",
+    "count": 7
+  },
   "checks": {
     "server":   { "status": "up", "detail": "process responding" },
     "database": { "status": "up", "detail": "reachable", "latencyMs": 0.4 },
@@ -101,6 +107,18 @@ do not necessarily share one:
 
 A `null` port therefore means "this component uses no network port of its own",
 not "missing" — `detail` always explains which case applies.
+
+### Backup state
+
+The `backup` block is non-pass/fail operational state for the database-backup
+feature (see [BACKUP.md](BACKUP.md)): when the **last** backup ran
+(`lastBackupAt`, `null` if none yet), its filename, the backup `location`, and
+how many backups currently exist (`count`). It carries no financial or account
+data — only facts about the backup files. Monitors can alert when `lastBackupAt`
+falls too far behind now, or when `count` is `0`. The directory path is included
+deliberately as operational diagnostics (it is the same path already documented
+for deployment), and is robust to a missing/unreadable backup directory — the
+block never makes the endpoint fail.
 
 ### What each check means
 

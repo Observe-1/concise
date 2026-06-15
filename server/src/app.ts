@@ -8,6 +8,7 @@ import { requireAuth, sessionLoader } from './middleware/auth.js';
 import { csrfProtection } from './middleware/csrf.js';
 import { errorHandler, notFoundHandler } from './middleware/errors.js';
 import { authRoutes } from './modules/auth/routes.js';
+import { backupRoutes } from './modules/backup/routes.js';
 import { dashboardRoutes } from './modules/dashboard/routes.js';
 import { healthRoutes } from './modules/health/routes.js';
 import { historyRoutes } from './modules/history/routes.js';
@@ -61,6 +62,7 @@ export function buildApp(ctx: AppContext): express.Express {
   api.use('/history', requireAuth, historyRoutes(ctx));
   api.use('/market', requireAuth, marketRoutes(ctx));
   api.use('/settings', requireAuth, settingsRoutes(ctx));
+  api.use('/backup', requireAuth, backupRoutes(ctx));
 
   app.use('/api', api);
 

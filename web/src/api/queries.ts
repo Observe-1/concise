@@ -2,6 +2,7 @@ import {
   keepPreviousData, useMutation, useQuery, useQueryClient,
 } from '@tanstack/react-query';
 import type {
+  BackupOverviewDto, BackupRunResultDto, BackupSettingsDto,
   DashboardChangesDto, DashboardSummaryDto, HistoryDto, HistoryEntryDto, HistoryRange,
   HoldingChangeDto, HoldingDetailDto, HoldingDto, LegacySnapshotDto, PredictionDto, PropertyCountryDto,
   RecurringDto, SessionUser, SettingsDto, SymbolLookupDto, ValuationMode,
@@ -283,6 +284,38 @@ export function useDeleteAllData() {
       api<void>('/api/settings/delete-all', { method: 'POST', body: { confirm } }),
     onSuccess: () => {
       void qc.invalidateQueries();
+    },
+  });
+}
+
+// ---------- database backups ----------
+
+/** Backup settings, location, and the list of existing backups. */
+export function useBackupOverview() {
+  return useQuery({
+    queryKey: ['backup'],
+    queryFn: () => api<BackupOverviewDto>('/api/backup'),
+  });
+}
+
+/** Take a backup now; refreshes the overview on success. */
+export function useRunBackup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api<BackupRunResultDto>('/api/backup/run', { method: 'POST' }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['backup'] });
+    },
+  });
+}
+
+export function useUpdateBackupSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: Partial<BackupSettingsDto>) =>
+      api<BackupSettingsDto>('/api/backup/settings', { method: 'PATCH', body: patch }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['backup'] });
     },
   });
 }

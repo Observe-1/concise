@@ -39,6 +39,10 @@ all in a fast, private, self-hostable app.
   weekly, monthly, quarterly or yearly cadences, applied automatically.
 - **Multi-user** — self-service account creation, session auth, rate
   limiting, and audit logging.
+- **Database backups** — validated point-in-time copies of the SQLite file,
+  taken automatically on a configurable interval (on by default), on startup
+  when the last one is stale, or on demand from Settings → Backup. A bounded
+  number are kept (manual and automatic pruned together). See [BACKUP.md](BACKUP.md).
 
 ## Tech stack
 
@@ -88,13 +92,15 @@ npm start         # serves the API and the built SPA on $PORT (default 3000)
 Set `NODE_ENV=production` (enables `Secure` cookies — serve over HTTPS) and a
 persistent `DB_PATH`. Behind a reverse proxy, set `TRUST_PROXY=1` so client IPs
 are correct, and `TRUSTED_ORIGINS` if the frontend is hosted on a different
-origin. Back up by copying the SQLite file (WAL mode — copy `*.db`, `*.db-wal`,
-`*.db-shm` together, or checkpoint first). See [ARCHITECTURE.md](ARCHITECTURE.md).
+origin. Concise takes its own validated backups (automatic + manual; see
+[BACKUP.md](BACKUP.md)) into `BACKUP_DIR` — keep that on persistent storage and
+copy it off-host for disaster recovery. See [ARCHITECTURE.md](ARCHITECTURE.md).
 
 | Env var            | Default            | Purpose                                   |
 |--------------------|--------------------|-------------------------------------------|
 | `PORT`             | `3000`             | HTTP port                                 |
 | `DB_PATH`          | `../data/concise.db` | SQLite file location                    |
+| `BACKUP_DIR`       | `<dirname(DB_PATH)>/backups` | Where database backups are written |
 | `NODE_ENV`         | `development`      | `production` enables Secure cookies       |
 | `SESSION_TTL_HOURS`| `336` (14 days)    | Session lifetime                          |
 | `COOKIE_SECURE`    | (prod: `true`)     | Send `Secure` cookies (requires HTTPS)    |
@@ -135,8 +141,9 @@ docker run -d --init --name concise -p 3000:3000 -v concise-data:/data concise
   `-e COOKIE_SECURE=false` (otherwise logins silently fail). Behind a proxy also
   set `TRUST_PROXY=1` (correct client IPs) and `TRUSTED_ORIGINS` if the SPA is
   served from another origin.
-- The database is the `/data` volume; back it up by copying the volume (WAL mode
-  — copy `*.db`, `*.db-wal`, `*.db-shm` together, or checkpoint first).
+- The database is the `/data` volume; Concise writes its own validated backups
+  to `/data/backups` (automatic + manual — see [BACKUP.md](BACKUP.md)). Copy the
+  volume off-host as well for true disaster recovery.
 - The container runs as a non-root user and exposes `GET /api/health` for the
   built-in healthcheck and external probes. A richer `GET /api/health/detailed`
   reports the UI, server and database status (never any financial data) for

@@ -1,3 +1,4 @@
+import path from 'node:path';
 import type { Express } from 'express';
 import request from 'supertest';
 import type TestAgent from 'supertest/lib/agent.js';
@@ -20,9 +21,12 @@ export interface TestWorld {
   setNow: (iso: string) => void;
 }
 
-export function makeTestWorld(opts: { env?: 'test' | 'development' | 'production' } = {}): TestWorld {
+export function makeTestWorld(
+  opts: { env?: 'test' | 'development' | 'production'; dbPath?: string; backupDir?: string } = {},
+): TestWorld {
   let current = new Date(FIXED_NOW);
-  const db = openDatabase(':memory:');
+  const dbPath = opts.dbPath ?? ':memory:';
+  const db = openDatabase(dbPath);
   migrate(db);
   const ctx: AppContext = {
     db,
@@ -30,7 +34,9 @@ export function makeTestWorld(opts: { env?: 'test' | 'development' | 'production
       ...loadConfig({}),
       env: opts.env ?? 'test',
       cookieSecure: false,
-      dbPath: ':memory:',
+      dbPath,
+      backupDir: opts.backupDir
+        ?? path.join(dbPath === ':memory:' ? '.' : path.dirname(dbPath), 'backups'),
       webDistDir: '/nonexistent',
       // 'development' worlds exercise real limits (rate-limit tests)
       loginRateLimit: opts.env === 'development' ? 10 : 1000,

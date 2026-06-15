@@ -5,8 +5,10 @@
 #   docker compose up -d --build
 #   open http://localhost:3000
 #
-# Data lives in the named volume `concise-data` (the SQLite file). Back up by
-# copying that volume or by mounting a host path instead (see `volumes` below).
+# Data lives in the named volume `concise-data` (the SQLite file + the
+# backups/ folder Concise writes). Concise takes validated backups itself
+# (automatic + manual; see BACKUP.md); for off-host disaster recovery also copy
+# that volume, or mount a host path instead (see `volumes` below).
 
 services:
   concise:
@@ -36,6 +38,9 @@ services:
       NODE_ENV: production
       PORT: 3000
       DB_PATH: /data/concise.db
+      # Database backups live on the same /data volume (see BACKUP.md). Automatic
+      # backups are on by default; tune them in Settings → Backup.
+      BACKUP_DIR: /data/backups
       WEB_DIST_DIR: /app/web/dist
       # Tunables (defaults shown; override in .env). See .env.docker.example.
       SESSION_TTL_HOURS: "${SESSION_TTL_HOURS:-336}"

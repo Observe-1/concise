@@ -34,7 +34,8 @@ In development the Vite dev server proxies `/api` to the backend.
 - **Single process, single file DB** — a personal finance app for a small
   number of users does not need horizontal scaling. One process means
   background jobs, API, and DB access share one transaction boundary and one
-  deployment artifact. Backups are a file copy.
+  deployment artifact. Backups are a (checkpoint + validate) file copy — built
+  in; see [BACKUP.md](BACKUP.md).
 - **`node:sqlite` (built-in)** — synchronous, transactional, zero native build
   step (no node-gyp / prebuilt binary risk on any platform). WAL mode for
   concurrent reads.
@@ -87,6 +88,7 @@ users 1──* audit_log
 | `recurring_transactions` | Recurring movements | `amount_type` ∈ fixed (signed `amount_minor` delta) \| percent (signed `percent` of current value, compounds), `cadence` ∈ daily, weekly, monthly, quarterly, yearly, `next_run_on` date cursor; CHECKs enforce exactly one target and exactly one of amount/percent |
 | `snapshots` | Daily net-worth | `UNIQUE(user_id, snapshot_date)`; assets/liabilities/net-worth totals; `source` ∈ computed, legacy — legacy rows are user-entered past net-worth points that recomputation never overwrites. Graphs read this table |
 | `audit_log` | Security audit | Auth events + mutations, with IP |
+| `backup_settings` | Database-backup config | A **single global row** (`id = 1` CHECK) — backups cover the whole DB, not one user. Holds the filename prefix, retention count, automatic-backup toggle (on by default) and interval. See [BACKUP.md](BACKUP.md) |
 
 **History strategy:** valuations are append-only per entry; `snapshots` is the
 denormalized daily aggregate that powers the dashboard graph. Snapshots are
@@ -153,10 +155,13 @@ day.
   edit form exposes a value field for model holdings so they can be re-anchored.
 
 ### Settings (web)
-- `/settings/:section?` renders three sub pages selected by buttons at the
+- `/settings/:section?` renders four sub pages selected by buttons at the
   top: **User account** (profile, sign out, **Danger zone** — the default),
   **History** (legacy wealth, historic-entry editor), **Calculation**
-  (currency, birth year). All share `GET/PATCH /api/settings`.
+  (currency, birth year), and **Backup** (how backups work, existing backups
+  with age/size, a "Back up now" button, and the backup settings). The first
+  three share `GET/PATCH /api/settings`; Backup uses `/api/backup` (see
+  [BACKUP.md](BACKUP.md)).
 - **Delete all data:** `POST /api/settings/delete-all` wipes the user's
   assets, liabilities (and their valuations via cascade), recurring schedules
   and snapshots, leaving the account, session and preferences intact and a
@@ -265,6 +270,25 @@ day.
   read-only (mutating the past from this lens would be misleading). Recurring
   schedules and settings are not date-scoped.
 
+### Database backups (`/api/backup`, see [BACKUP.md](BACKUP.md))
+- A backup is a validated point-in-time copy of the SQLite file:
+  `PRAGMA wal_checkpoint(TRUNCATE)` flushes the WAL into the main file, the file
+  is copied to `BACKUP_DIR` (default `<dirname(DB_PATH)>/backups`), and the copy
+  is re-opened read-only and `PRAGMA integrity_check`-ed before success is
+  reported. node:sqlite is synchronous and the app is single-process, so no
+  write interleaves the copy.
+- **Automatic** backups (on by default) are an interval job: the scheduler
+  checks every tick (a cheap directory stat) whether the newest backup is older
+  than the configured interval — or absent — and takes one if so. Because the
+  scheduler ticks immediately on startup, this also performs the "back up now if
+  stale on boot" catch-up. **Manual** backups (`POST /api/backup/run`) run the
+  same path. After every backup, retention prunes the pool (manual + automatic
+  together) to the most recent N.
+- The list of backups is derived from the filesystem (the source of truth, so a
+  hand-deleted file is reflected at once); only behaviour lives in
+  `backup_settings`. `GET /api/health/detailed` surfaces a non-sensitive backup
+  block (last time/name, location, count) for monitors.
+
 ### Market valuations
 - Assets with `valuation_mode='market'` hold a `market_symbol` and `quantity`.
 - A `PriceProvider` interface supplies prices and symbol lookup;
@@ -301,9 +325,9 @@ concise/
 │       ├── db/           # connection, migrate.ts, migrations/*.sql, seed.ts
 │       ├── lib/          # passwords, money, dates, http helpers
 │       ├── middleware/   # auth, csrf, rate-limit, errors, audit
-│       ├── modules/      # auth/ assets/ liabilities/ recurring/
+│       ├── modules/      # auth/ assets/ liabilities/ recurring/ backup/
 │       │                 # dashboard/ market/ settings/  (routes + service)
-│       ├── jobs/         # scheduler + recurring/snapshots/market jobs
+│       ├── jobs/         # scheduler + recurring/snapshots/market/backup jobs
 │       └── types/api.ts  # API DTOs (web imports these type-only)
 ├── web/
 │   └── src/
@@ -348,8 +372,10 @@ image, one port, one volume.
   scheduler self-heals missed ticks (§6.5), so a container restart needs no
   manual steps.
 - **State is the volume** — `DB_PATH` points at `/data/concise.db` on a mounted
-  volume owned by the runtime user. Backup = copy the volume (WAL: copy
-  `*.db`, `*.db-wal`, `*.db-shm` together, or checkpoint first).
+  volume owned by the runtime user. The app writes its own validated backups to
+  `BACKUP_DIR` (default `/data/backups`, same volume) automatically and on
+  demand — see [BACKUP.md](BACKUP.md); copy the volume off-host as well for
+  disaster recovery.
 - **Config is env-only** — [config.ts](server/src/config.ts) is the single
   source of runtime knobs; the [docker-compose.yml](docker-compose.yml) and
   [.env.docker.example](.env.docker.example) templates surface them. Behind a
