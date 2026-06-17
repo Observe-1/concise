@@ -44,6 +44,18 @@ describe('assets page', () => {
     expect(screen.getByText('Gold')).toBeInTheDocument();
   });
 
+  it('shows a total figure at the top, summing every entry', async () => {
+    mockFetch([
+      [/\/api\/auth\/me/, { user: demoUser }],
+      [/\/api\/assets$/, assets],
+    ]);
+    renderWithProviders(<App />, { route: '/assets' });
+
+    // 4,250.00 + 20,990.97 + 9,200.00 = 34,440.97
+    expect(await screen.findByText(/total assets/i)).toBeInTheDocument();
+    expect(screen.getByText(/34,?440\.97/)).toBeInTheDocument();
+  });
+
   it('shows a per-holding percent change for the selected range', async () => {
     const calls = mockFetch([
       [/\/api\/auth\/me/, { user: demoUser }],
@@ -391,6 +403,9 @@ describe('liabilities page', () => {
     expect(screen.getByRole('region', { name: 'Mortgage' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /add liability/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /refresh prices/i })).not.toBeInTheDocument();
+    // Total figure at the top (its value coincides with the lone entry here).
+    expect(screen.getByText(/total liabilities/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/248,?000\.00/).length).toBeGreaterThanOrEqual(1);
 
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: /add liability/i }));

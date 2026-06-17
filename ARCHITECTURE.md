@@ -151,7 +151,8 @@ day.
   valuation), `changePct` is `null` when the holding had no value then (didn't
   exist yet) or the base was zero. `asOf` scopes it to the historical view.
   The holdings pages render this as a green/red/grey badge per holding under a
-  range quick-select.
+  range quick-select, and show a **running total** of the side (sum of every
+  entry's current value) at the top of the page — as-of in the historical view.
 - "Update value" appends a `manual` valuation row (history preserved), then
   upserts today's snapshot. For model-valued holdings this **re-anchors** the
   automatic estimate: the property-index and depreciation formulas grow from

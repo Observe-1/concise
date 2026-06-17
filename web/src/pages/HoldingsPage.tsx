@@ -83,6 +83,11 @@ export function HoldingsPage({ kind }: { kind: HoldingKind }) {
     return [...map.entries()];
   }, [holdings.data]);
 
+  const total = useMemo(
+    () => (holdings.data ?? []).reduce((sum, h) => sum + h.currentValueMinor, 0),
+    [holdings.data],
+  );
+
   const hasMarketEntries = kind === 'assets' && (holdings.data ?? []).some((h) => h.valuationMode === 'market');
 
   if (holdings.isLoading) return <Spinner label={`Loading ${copy.title.toLowerCase()}`} />;
@@ -104,6 +109,17 @@ export function HoldingsPage({ kind }: { kind: HoldingKind }) {
           {!historical && <Button onClick={() => setAdding(true)}>{copy.addLabel}</Button>}
         </div>
       </header>
+
+      {groups.length > 0 && (
+        <Card className="flex items-center justify-between px-4 py-3.5">
+          <span className="text-xs font-medium uppercase tracking-wider text-ink-400">
+            Total {copy.title.toLowerCase()}
+          </span>
+          <span className={`tabular text-xl font-semibold ${copy.tone === 'gain' ? 'text-gain-400' : 'text-loss-400'}`}>
+            {formatMinor(total, currency)}
+          </span>
+        </Card>
+      )}
 
       {historical && (
         <p className="tabular text-xs font-medium uppercase tracking-wider text-loss-400">

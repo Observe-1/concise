@@ -23,14 +23,22 @@ all in a fast, private, self-hostable app.
   emoji (💵 cash, 📈 stock investments, 🏠 property, 🚗 vehicles, 🪙 crypto,
   🥇 precious metals with gold/silver/platinum/palladium sub-selection, 📦
   other / 🏦 mortgage, 💸 loans, 💳 credit cards, 🎓 student loans, ⚖️
-  other), full value history per entry, and optional backdating on creation.
+  other), full value history per entry, optional backdating on creation (with
+  an optional present-day value), and a running total of each side at the top
+  of the page.
 - **Valuation methods per category** — cash is always a manual figure;
   anything tradable can be market-priced (symbol × quantity with a
-  verification step); property can auto-apply a country's yearly average
-  price change; vehicles can auto-depreciate by age from their manufacture
-  date. Backdated auto-valued entries are backfilled with one historically
-  accurate value per day — entries whose history the provider cannot price
-  are flagged on the page.
+  verification step) across many instruments on several exchanges (London,
+  US, Europe, crypto, spot metals), with prices converted from the
+  instrument's currency into yours; property can auto-apply a country's yearly
+  average price change; vehicles can auto-depreciate by age from their
+  manufacture date (anchored on a present-day value when you give one).
+  Backdated auto-valued entries are backfilled with one historically accurate
+  value per day — entries whose history the provider cannot price are flagged
+  on the page.
+- **Multi-currency** — pick your display currency; switching re-denominates
+  your whole portfolio and history at rough exchange rates, and any value
+  pulled in a foreign currency is converted before it is used.
 - **History editing** — Settings → History lists every historic entry across
   all holdings for editing or deletion, and accepts legacy wealth points
   ("on X date my net worth was Y") that appear on the graph.

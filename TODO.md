@@ -1,6 +1,6 @@
 # TODO — single source of truth for progress
 
-**Status: phases 1–6 + feature batches complete. Batch 2026-06-17 in progress. Deployment is out of scope.**
+**Status: complete (phases 1–6 + five feature batches). Deployment is out of scope.**
 
 ## Phase 1: System architecture
 - [x] Tech stack decisions (Node 24 + node:sqlite + Express 5 / React 19 + Vite + Tailwind 4)
@@ -151,7 +151,7 @@ Implemented strictly in order; one commit per feature.
       snapshots, fixed schedules) at the latest rate, and any value pulled from a
       market/valuation source in a foreign currency is converted to the user's
       currency before it is stored or used.
-- [ ] 4. A total figure at the top of the Assets and Liabilities pages.
+- [x] 4. A total figure at the top of the Assets and Liabilities pages.
 
 ## Bug fixes (2026-06-13)
 - [x] 1. View-as scrubber: the circle handle, though aligned along the chart's
