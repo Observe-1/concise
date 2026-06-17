@@ -118,6 +118,7 @@ copy it off-host for disaster recovery. See [ARCHITECTURE.md](ARCHITECTURE.md).
 | `API_RATE_LIMIT`   | `300`              | API requests per IP per minute            |
 | `LOGIN_RATE_LIMIT` | `10`               | Login attempts per IP per 15 minutes      |
 | `SEED_ON_START`    | `0`                | `1` (re)seeds the demo account at startup |
+| `PRICE_PROVIDER`   | `real`             | Market price source: `real` (live Yahoo Finance quotes, no API key) or `simulated` (deterministic offline) |
 
 ## Run with Docker
 

@@ -333,14 +333,21 @@ function backfillMarketValuations(
   return { missing, inserted };
 }
 
-export function createHolding(
+export async function createHolding(
   ctx: AppContext,
   k: HoldingKind,
   userId: number,
   input: CreateHoldingInput,
-): HoldingDto {
+): Promise<HoldingDto> {
   const today = todayISO(ctx.now);
   if (input.asOf && input.asOf > today) throw badRequest('Backdate cannot be in the future');
+  // Market holdings: fetch real prices for the whole (possibly backdated) range
+  // up front, so the synchronous valuation transaction reads from a warm cache.
+  // Priming must run outside the transaction; it is a no-op for the simulation.
+  if (k.supportsMarket && input.valuationMode === 'market' && input.marketSymbol) {
+    const from = input.asOf && input.asOf < today ? input.asOf : today;
+    await ctx.prices.prime([input.marketSymbol.toUpperCase()], from, today);
+  }
   return withTransaction(ctx.db, () => {
     const mode: ValuationMode = k.supportsMarket ? input.valuationMode ?? 'manual' : 'manual';
     if (k.supportsMarket) assertModeAllowed(input.category, mode);
@@ -437,13 +444,27 @@ export function createHolding(
   });
 }
 
-export function updateHolding(
+export async function updateHolding(
   ctx: AppContext,
   k: HoldingKind,
   userId: number,
   id: number,
   patch: UpdateHoldingInput,
-): HoldingDto {
+): Promise<HoldingDto> {
+  // If this update leaves the holding market-valued, warm its price before the
+  // transaction revalues it (a no-op for the simulation). The symbol may be the
+  // one being set, or the existing one when only quantity/mode changes.
+  if (k.supportsMarket) {
+    const existing = getRow(ctx, k, userId, id); // also surfaces a 404 early
+    const mode = patch.valuationMode ?? existing.valuation_mode ?? 'manual';
+    const symbol = patch.marketSymbol !== undefined
+      ? patch.marketSymbol?.toUpperCase() ?? null
+      : existing.market_symbol ?? null;
+    if (mode === 'market' && symbol) {
+      const today = todayISO(ctx.now);
+      await ctx.prices.prime([symbol], today, today);
+    }
+  }
   return withTransaction(ctx.db, () => {
     const existing = getRow(ctx, k, userId, id);
     const nowIso = ctx.now().toISOString();

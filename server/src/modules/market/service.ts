@@ -22,7 +22,7 @@ interface AutoValuedRow {
  * over the base valuation. At most one valuation is appended per asset per
  * day. Returns the number of assets re-priced.
  */
-export function refreshMarketValuations(ctx: AppContext, userId?: number): number {
+export async function refreshMarketValuations(ctx: AppContext, userId?: number): Promise<number> {
   const today = todayISO(ctx.now);
   const rows = ctx.db
     .prepare(
@@ -31,6 +31,12 @@ export function refreshMarketValuations(ctx: AppContext, userId?: number): numbe
     )
     .all(...(userId ? [userId] : [])) as unknown as AutoValuedRow[];
   if (rows.length === 0) return 0;
+
+  // Fetch today's real prices for every market holding up front (a no-op for
+  // the simulated provider), so the synchronous valuation transaction below
+  // reads from a warm cache. Must happen outside the transaction.
+  const symbols = rows.filter((r) => r.valuation_mode === 'market' && r.market_symbol).map((r) => r.market_symbol!);
+  if (symbols.length > 0) await ctx.prices.prime(symbols, today, today);
 
   let updated = 0;
   const touchedUsers = new Set<number>();
@@ -107,4 +113,24 @@ export function refreshMarketValuations(ctx: AppContext, userId?: number): numbe
     for (const uid of touchedUsers) upsertSnapshot(ctx.db, uid, today);
   });
   return updated;
+}
+
+/**
+ * Warm the price cache for a user's market holdings over `[fromISO, toISO]`, so
+ * a subsequent synchronous valuation or projection reads real prices rather
+ * than the fallback. A no-op for the simulated provider. Never throws.
+ */
+export async function primeUserMarketPrices(
+  ctx: AppContext,
+  userId: number,
+  fromISO: string,
+  toISO: string,
+): Promise<void> {
+  const rows = ctx.db
+    .prepare(
+      `SELECT DISTINCT market_symbol FROM assets
+       WHERE valuation_mode = 'market' AND market_symbol IS NOT NULL AND user_id = ?`,
+    )
+    .all(userId) as { market_symbol: string }[];
+  if (rows.length > 0) await ctx.prices.prime(rows.map((r) => r.market_symbol), fromISO, toISO);
 }

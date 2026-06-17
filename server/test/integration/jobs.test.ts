@@ -35,7 +35,7 @@ describe('snapshot backfill', () => {
 });
 
 describe('scheduler', () => {
-  it('runs recurring catch-up, snapshots and market refresh on startup', () => {
+  it('runs recurring catch-up, snapshots and market refresh on startup', async () => {
     const world = makeTestWorld();
     seed(world.ctx.db, world.ctx.now);
     // Make one schedule overdue so the startup tick has work to do.
@@ -43,7 +43,8 @@ describe('scheduler', () => {
       .prepare("UPDATE recurring_transactions SET next_run_on = '2026-06-01' WHERE name = 'Mortgage payment'")
       .run();
 
-    const stop = startScheduler(world.ctx);
+    const { stop, firstTick } = startScheduler(world.ctx);
+    await firstTick;
     stop();
 
     const overdue = world.ctx.db

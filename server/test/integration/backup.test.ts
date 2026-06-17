@@ -134,8 +134,9 @@ describe('backup service', () => {
     expect(listBackups(world.ctx)).toHaveLength(1);
   });
 
-  it('takes a backup on startup when none exist (scheduler first tick)', () => {
-    const stop = startScheduler(world.ctx);
+  it('takes a backup on startup when none exist (scheduler first tick)', async () => {
+    const { stop, firstTick } = startScheduler(world.ctx);
+    await firstTick;
     stop();
     expect(listBackups(world.ctx).length).toBeGreaterThanOrEqual(1);
   });

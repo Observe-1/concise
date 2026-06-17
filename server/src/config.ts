@@ -34,6 +34,13 @@ export interface Config {
   apiRateLimit: number;
   /** Run the seed script at startup (resets the demo account). */
   seedOnStart: boolean;
+  /**
+   * Price source: 'real' fetches live quotes from Yahoo Finance (no API key);
+   * 'simulated' uses the deterministic offline simulation. Defaults to 'real'
+   * so symbol prices match the market; set PRICE_PROVIDER=simulated to opt out
+   * (e.g. for an air-gapped deployment).
+   */
+  priceProvider: 'real' | 'simulated';
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -58,5 +65,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     loginRateLimit: Number(env.LOGIN_RATE_LIMIT ?? 10),
     apiRateLimit: Number(env.API_RATE_LIMIT ?? 300),
     seedOnStart: env.SEED_ON_START === '1',
+    priceProvider: env.PRICE_PROVIDER === 'simulated' ? 'simulated' : 'real',
   };
 }

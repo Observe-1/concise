@@ -306,12 +306,29 @@ day.
 - A `PriceProvider` interface supplies prices, symbol lookup, an instrument's
   quote currency (`instrumentCurrency`) and the full instrument list
   (`listInstruments`); `getPriceMinor` returns `null` for dates outside the
-  provider's coverage and prices in the instrument's own currency. The default
-  `SimulatedPriceProvider` is a deterministic seeded random walk over a fixed
-  instrument list spanning several exchanges and currencies — London (GBP, e.g.
-  VUAG/VWRP/VUKE/ISF), US (USD, NASDAQ/NYSE), Europe (EUR, Xetra/Euronext),
-  crypto and spot metals (USD) — with no API keys, stable for tests, data from
-  2020-01-01. A real provider can be swapped in via one factory.
+  provider's coverage and prices in the instrument's own currency. Because the
+  store and its transactions are synchronous (`node:sqlite`), `getPriceMinor`
+  is synchronous too — network-backed providers expose an async `prime(symbols,
+  from, to)` that callers `await` once (outside any transaction) to warm a
+  cache the synchronous reads then hit.
+- Two implementations (`PRICE_PROVIDER` selects; default `real`):
+  - `RealPriceProvider` (default) fetches live quotes from **Yahoo Finance's**
+    public chart endpoint (no API key). Each instrument maps to a Yahoo symbol
+    (London `.L`, Xetra `.DE`, Euronext `.AS`/`.PA`, crypto `-USD`, spot metals
+    to COMEX/NYMEX futures). `prime` fetches and caches a date range per symbol
+    (15-min TTL on the live end); `getPriceMinor` reads the cache, carrying the
+    last trading day forward over weekends/holidays. London quotes arrive in
+    `GBp` (pence — already GBP minor units, so not scaled by 100) or `GBP`
+    (pounds — scaled); the parser keys off the response's `currency`. Anything
+    not primed (unknown symbol, failed fetch, date before listing) **falls back
+    to the simulation**, so a flaky feed or an offline box never breaks a
+    request — `prime` never throws.
+  - `SimulatedPriceProvider` (set `PRICE_PROVIDER=simulated`, and used by the
+    tests and the seed) is a deterministic seeded random walk over the same
+    fixed instrument list spanning several exchanges and currencies — London
+    (GBP, e.g. VUAG/VWRP/VUKE/ISF), US (USD, NASDAQ/NYSE), Europe (EUR,
+    Xetra/Euronext), crypto and spot metals (USD) — with no API keys, stable
+    for tests, data from 2020-01-01. Its `prime` is a no-op.
 - `GET /api/market/instruments` lists every known instrument (symbol, name,
   exchange, currency) for the asset form's symbol autocomplete.
   `GET /api/market/lookup?symbol=` resolves a ticker to its instrument (name,

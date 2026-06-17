@@ -4,13 +4,19 @@ import type {
   CategoryTotalDto, DashboardChangesDto, DashboardSummaryDto, HistoryDto, HistoryPointDto,
   HistoryRange, HoldingDto,
 } from '../../types/api.js';
-import { HISTORY_RANGES, isHistoryRange, rangeForwardEnd, rangeStart, todayISO } from '../../lib/dates.js';
+import { addDays, HISTORY_RANGES, isHistoryRange, rangeForwardEnd, rangeStart, todayISO } from '../../lib/dates.js';
 import { asOfParam, badRequest } from '../../lib/http.js';
 import { ASSET_KIND, LIABILITY_KIND } from '../holdings/kind.js';
 import { listHoldings } from '../holdings/service.js';
+import { primeUserMarketPrices } from '../market/service.js';
 import { buildPrediction, projectPortfolioAt } from './prediction.js';
 
 const MAX_GRAPH_POINTS = 400;
+
+// Projections estimate a market holding's growth from ~10 years of its own
+// price history, so the price cache is warmed over this window before any
+// projection runs (a no-op for the simulated provider).
+const PREDICTION_LOOKBACK_DAYS = 3660;
 
 // Trend smoothing window in days. The client may override per request via
 // ?trendWindow= within these bounds; whatever the window, it is applied to
@@ -84,7 +90,7 @@ export function downsample<T>(points: T[], max: number): T[] {
 export function dashboardRoutes(ctx: AppContext): Router {
   const router = Router();
 
-  router.get('/summary', (req, res) => {
+  router.get('/summary', async (req, res) => {
     const userId = req.user!.id;
     const asOf = asOfParam(req);
 
@@ -92,9 +98,11 @@ export function dashboardRoutes(ctx: AppContext): Router {
     // every summary card reflects the future, not today's live values. The
     // target is the view-as date if pinned, else the range's forward horizon.
     if (req.query.predict === '1') {
-      const target = predictionTarget(String(req.query.range ?? '').toUpperCase(), asOf, todayISO(ctx.now));
+      const today = todayISO(ctx.now);
+      const target = predictionTarget(String(req.query.range ?? '').toUpperCase(), asOf, today);
       if (target) {
-        const { assets, liabilities } = projectPortfolioAt(ctx, userId, todayISO(ctx.now), target);
+        await primeUserMarketPrices(ctx, userId, addDays(today, -PREDICTION_LOOKBACK_DAYS), today);
+        const { assets, liabilities } = projectPortfolioAt(ctx, userId, today, target);
         const assetsMinor = assets.reduce((sum, a) => sum + a.projectedMinor, 0);
         const liabilitiesMinor = liabilities.reduce((sum, l) => sum + l.projectedMinor, 0);
         const projected: DashboardSummaryDto = {
@@ -128,7 +136,7 @@ export function dashboardRoutes(ctx: AppContext): Router {
 
   // Percent change of the portfolio totals over a range, from the snapshot
   // series (so it matches the graph). Mirrors the holdings /changes endpoint.
-  router.get('/changes', (req, res) => {
+  router.get('/changes', async (req, res) => {
     const range = String(req.query.range ?? 'ALL').toUpperCase();
     if (!isHistoryRange(range)) {
       throw badRequest(`Invalid range; expected one of ${HISTORY_RANGES.join(', ')}`);
@@ -142,9 +150,11 @@ export function dashboardRoutes(ctx: AppContext): Router {
     // Prediction mode: percentages become projected growth from today's live
     // totals to the projected (horizon or view-as) date.
     if (req.query.predict === '1') {
-      const target = predictionTarget(range, asOf, todayISO(ctx.now));
+      const today = todayISO(ctx.now);
+      const target = predictionTarget(range, asOf, today);
       if (target) {
-        const { assets, liabilities } = projectPortfolioAt(ctx, req.user!.id, todayISO(ctx.now), target);
+        await primeUserMarketPrices(ctx, req.user!.id, addDays(today, -PREDICTION_LOOKBACK_DAYS), today);
+        const { assets, liabilities } = projectPortfolioAt(ctx, req.user!.id, today, target);
         const sum = (xs: { currentMinor: number; projectedMinor: number }[], k: 'currentMinor' | 'projectedMinor') =>
           xs.reduce((s, x) => s + x[k], 0);
         const baseA = sum(assets, 'currentMinor');
@@ -194,12 +204,14 @@ export function dashboardRoutes(ctx: AppContext): Router {
 
   // Prediction mode: a small slice of history plus on-the-fly projected
   // future values. ALL is unbounded and not offered (the UI hides it).
-  router.get('/prediction', (req, res) => {
+  router.get('/prediction', async (req, res) => {
     const range = String(req.query.range ?? '1Y').toUpperCase();
     if (!isHistoryRange(range)) {
       throw badRequest(`Invalid range; expected one of ${HISTORY_RANGES.join(', ')}`);
     }
     if (range === 'ALL') throw badRequest('Prediction is not available for the ALL range');
+    const today = todayISO(ctx.now);
+    await primeUserMarketPrices(ctx, req.user!.id, addDays(today, -PREDICTION_LOOKBACK_DAYS), today);
     res.json(buildPrediction(ctx, req.user!.id, range as HistoryRange));
   });
 

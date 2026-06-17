@@ -16,12 +16,14 @@ import { allUserIds, backfillSnapshots } from '../modules/snapshots/service.js';
  *    a backup is taken when one is due — which on the startup tick also covers
  *    the "back up now if stale on boot" catch-up. See BACKUP.md.
  *
- * Returns a stop function.
+ * Returns a stop function plus `firstTick`, a promise that resolves when the
+ * immediate startup tick (run to catch up after downtime) has finished — handy
+ * for deterministic tests and graceful startup ordering.
  */
-export function startScheduler(ctx: AppContext): () => void {
+export function startScheduler(ctx: AppContext): { stop: () => void; firstTick: Promise<void> } {
   let lastDailyRun: string | null = null;
 
-  const tick = () => {
+  const tick = async (): Promise<void> => {
     try {
       const applied = runDueRecurring(ctx);
       if (applied > 0) console.log(`[jobs] applied ${applied} recurring occurrence(s)`);
@@ -29,7 +31,10 @@ export function startScheduler(ctx: AppContext): () => void {
       const today = todayISO(ctx.now);
       if (lastDailyRun !== today) {
         for (const userId of allUserIds(ctx.db)) backfillSnapshots(ctx, userId);
-        const repriced = refreshMarketValuations(ctx);
+        // Re-pricing fetches live quotes (real provider), so it is async; it is
+        // idempotent (one valuation per asset per day) and isolated by the
+        // try/catch, so a flaky feed can never wedge the rest of housekeeping.
+        const repriced = await refreshMarketValuations(ctx);
         purgeExpiredSessions(ctx);
         lastDailyRun = today;
         console.log(`[jobs] daily housekeeping done for ${today} (${repriced} market valuation(s))`);
@@ -49,8 +54,8 @@ export function startScheduler(ctx: AppContext): () => void {
     }
   };
 
-  tick(); // run immediately on startup to catch up after downtime
-  const handle = setInterval(tick, ctx.config.jobTickMs);
+  const firstTick = tick(); // run immediately on startup to catch up after downtime
+  const handle = setInterval(() => void tick(), ctx.config.jobTickMs);
   handle.unref();
-  return () => clearInterval(handle);
+  return { stop: () => clearInterval(handle), firstTick };
 }

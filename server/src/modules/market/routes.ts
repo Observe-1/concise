@@ -25,16 +25,18 @@ export function marketRoutes(ctx: AppContext): Router {
 
   // Resolve a ticker to its instrument (asset-creation verification step),
   // including the current per-unit price in the instrument's own currency.
-  router.get('/lookup', (req, res) => {
+  router.get('/lookup', async (req, res) => {
     const symbol = String(req.query.symbol ?? '').trim();
     if (!symbol || symbol.length > 20) throw badRequest('symbol query parameter required');
     const result = ctx.prices.lookupSymbol(symbol);
     if (!result) throw notFound(`Unknown symbol: ${symbol.toUpperCase()}`);
-    res.json({ ...result, priceMinor: ctx.prices.getPriceMinor(result.symbol, todayISO(ctx.now)) });
+    const today = todayISO(ctx.now);
+    await ctx.prices.prime([result.symbol], today, today); // fetch the live price (no-op when simulated)
+    res.json({ ...result, priceMinor: ctx.prices.getPriceMinor(result.symbol, today) });
   });
 
-  router.post('/refresh', (req, res) => {
-    const updated = refreshMarketValuations(ctx, req.user!.id);
+  router.post('/refresh', async (req, res) => {
+    const updated = await refreshMarketValuations(ctx, req.user!.id);
     audit(ctx.db, {
       userId: req.user!.id, action: 'market.refresh', detail: { updated }, ip: req.ip,
     });

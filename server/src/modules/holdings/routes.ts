@@ -81,7 +81,7 @@ export function holdingsRoutes(ctx: AppContext, k: HoldingKind): Router {
     res.json(holdingChanges(ctx, k, req.user!.id, range, asOfParam(req)));
   });
 
-  router.post('/', (req, res) => {
+  router.post('/', async (req, res) => {
     const input = parseBody(schemas.create, req.body) as Record<string, unknown> & {
       valuationMode?: string; marketSymbol?: string; quantity?: number; valueMinor?: number;
       presentValueMinor?: number; interestRatePct?: number; asOf?: string; name?: string;
@@ -96,7 +96,7 @@ export function holdingsRoutes(ctx: AppContext, k: HoldingKind): Router {
       // the present-day figure).
       throw badRequest('valueMinor is required for manually valued entries');
     }
-    const dto = createHolding(ctx, k, req.user!.id, input as never);
+    const dto = await createHolding(ctx, k, req.user!.id, input as never);
     audit(ctx.db, {
       userId: req.user!.id, action: `${k.kind}.create`, entityType: k.kind, entityId: dto.id, ip: req.ip,
     });
@@ -123,9 +123,9 @@ export function holdingsRoutes(ctx: AppContext, k: HoldingKind): Router {
     res.json(getHolding(ctx, k, req.user!.id, idParam(req)));
   });
 
-  router.patch('/:id', (req, res) => {
+  router.patch('/:id', async (req, res) => {
     const patch = parseBody(schemas.update, req.body);
-    const dto = updateHolding(ctx, k, req.user!.id, idParam(req), patch as never);
+    const dto = await updateHolding(ctx, k, req.user!.id, idParam(req), patch as never);
     audit(ctx.db, {
       userId: req.user!.id, action: `${k.kind}.update`, entityType: k.kind, entityId: dto.id, ip: req.ip,
     });
