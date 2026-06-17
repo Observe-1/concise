@@ -4,6 +4,7 @@ import type { AppContext } from '../../context.js';
 import type { SettingsDto } from '../../types/api.js';
 import { withTransaction } from '../../db/connection.js';
 import { audit } from '../../lib/audit.js';
+import { convertMinor } from '../../lib/fx.js';
 import { badRequest, parseBody } from '../../lib/http.js';
 import { refreshTodaySnapshot } from '../snapshots/service.js';
 
@@ -15,6 +16,66 @@ const updateSchema = z.object({
   currency: z.string().trim().length(3).regex(/^[A-Za-z]{3}$/, 'Expected ISO 4217 code').optional(),
   birthYear: z.number().int().min(1900).max(2100).nullable().optional(),
 });
+
+/**
+ * Switch the user's display currency and re-denominate every stored figure at
+ * the latest rough rate, so the whole portfolio and its history read in the new
+ * currency. The conversion is a single constant factor, so the shape of the
+ * graph is preserved — only the units change. Runs in one transaction with the
+ * currency update so a failure can't leave values half-converted.
+ */
+function changeCurrency(ctx: AppContext, userId: number, next: string): void {
+  const prev = getSettings(ctx, userId).currency;
+  withTransaction(ctx.db, () => {
+    ctx.db
+      .prepare(
+        `INSERT INTO settings (user_id, currency) VALUES (?, ?)
+         ON CONFLICT (user_id) DO UPDATE SET currency = excluded.currency`,
+      )
+      .run(userId, next);
+    if (next === prev) return;
+    const convert = (v: number) => convertMinor(v, prev, next);
+
+    const assetVals = ctx.db
+      .prepare(
+        `SELECT v.id, v.value_minor FROM asset_valuations v
+         JOIN assets a ON a.id = v.asset_id WHERE a.user_id = ?`,
+      )
+      .all(userId) as { id: number; value_minor: number }[];
+    const updAssetVal = ctx.db.prepare('UPDATE asset_valuations SET value_minor = ? WHERE id = ?');
+    for (const r of assetVals) updAssetVal.run(convert(r.value_minor), r.id);
+
+    const liabVals = ctx.db
+      .prepare(
+        `SELECT v.id, v.value_minor FROM liability_valuations v
+         JOIN liabilities l ON l.id = v.liability_id WHERE l.user_id = ?`,
+      )
+      .all(userId) as { id: number; value_minor: number }[];
+    const updLiabVal = ctx.db.prepare('UPDATE liability_valuations SET value_minor = ? WHERE id = ?');
+    for (const r of liabVals) updLiabVal.run(convert(r.value_minor), r.id);
+
+    const snaps = ctx.db
+      .prepare('SELECT id, assets_minor, liabilities_minor, net_worth_minor FROM snapshots WHERE user_id = ?')
+      .all(userId) as { id: number; assets_minor: number; liabilities_minor: number; net_worth_minor: number }[];
+    const updSnap = ctx.db.prepare(
+      'UPDATE snapshots SET assets_minor = ?, liabilities_minor = ?, net_worth_minor = ? WHERE id = ?',
+    );
+    for (const s of snaps) {
+      updSnap.run(convert(s.assets_minor), convert(s.liabilities_minor), convert(s.net_worth_minor), s.id);
+    }
+
+    // Fixed recurring amounts are money; percent schedules are currency-agnostic.
+    const recs = ctx.db
+      .prepare("SELECT id, amount_minor FROM recurring_transactions WHERE user_id = ? AND amount_type = 'fixed'")
+      .all(userId) as { id: number; amount_minor: number }[];
+    const updRec = ctx.db.prepare('UPDATE recurring_transactions SET amount_minor = ? WHERE id = ?');
+    for (const r of recs) {
+      let v = convert(r.amount_minor);
+      if (v === 0) v = r.amount_minor < 0 ? -1 : 1; // keep the amount_minor != 0 CHECK
+      updRec.run(v, r.id);
+    }
+  });
+}
 
 function getSettings(ctx: AppContext, userId: number): SettingsDto {
   const row = ctx.db
@@ -45,12 +106,7 @@ export function settingsRoutes(ctx: AppContext): Router {
       ctx.db.prepare('UPDATE users SET display_name = ? WHERE id = ?').run(patch.displayName, userId);
     }
     if (patch.currency !== undefined) {
-      ctx.db
-        .prepare(
-          `INSERT INTO settings (user_id, currency) VALUES (?, ?)
-           ON CONFLICT (user_id) DO UPDATE SET currency = excluded.currency`,
-        )
-        .run(userId, patch.currency.toUpperCase());
+      changeCurrency(ctx, userId, patch.currency.toUpperCase());
     }
     if (patch.birthYear !== undefined) {
       ctx.db

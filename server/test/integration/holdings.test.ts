@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createUser, csrf, loginAgent, makeTestWorld, type TestWorld } from '../helpers.js';
 import { PROPERTY_COUNTRIES, propertyValueMinor, vehicleValueMinor } from '../../src/modules/market/models.js';
+import { holdingValueMinor } from '../../src/modules/market/provider.js';
+import { convertMinor } from '../../src/lib/fx.js';
 import { runDueRecurring } from '../../src/modules/recurring/service.js';
 
 describe('assets & liabilities API', () => {
@@ -305,6 +307,18 @@ describe('assets & liabilities API', () => {
       });
       expect(res.status).toBe(201);
       expect(res.body.marketSymbol).toBe('VUAG');
+    });
+
+    it('converts a foreign-currency instrument into the user currency', async () => {
+      // alice is USD; VUAG is priced in GBP, so its value is converted to USD.
+      const res = await csrf(agent.post('/api/assets')).send({
+        category: 'investments', name: 'S&P (Acc)', valuationMode: 'market',
+        marketSymbol: 'VUAG', quantity: 10,
+      });
+      const nativeGbp = holdingValueMinor(world.ctx.prices.getPriceMinor('VUAG', '2026-06-11')!, 10);
+      expect(res.body.currentValueMinor).toBe(convertMinor(nativeGbp, 'GBP', 'USD'));
+      // The converted USD figure exceeds the raw GBP number (GBP is worth more).
+      expect(res.body.currentValueMinor).toBeGreaterThan(nativeGbp);
     });
   });
 

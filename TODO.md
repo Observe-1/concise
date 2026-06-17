@@ -146,10 +146,11 @@ Implemented strictly in order; one commit per feature.
       (London VUAG/VWRP/VUKE/ISF/…, plus US/EU listings), each carrying its
       native currency and exchange; the lookup/verify step shows both, and a
       new `GET /api/market/instruments` powers symbol autocomplete.
-- [ ] 3. Currency that actually converts: a rough static FX table. Changing the
-      currency setting re-denominates all stored values at the latest rate, and
-      any value pulled from a market/valuation source in a foreign currency is
-      converted to the user's currency before it is stored or used.
+- [x] 3. Currency that actually converts: a rough static FX table (`lib/fx.ts`).
+      Changing the currency setting re-denominates all stored values (valuations,
+      snapshots, fixed schedules) at the latest rate, and any value pulled from a
+      market/valuation source in a foreign currency is converted to the user's
+      currency before it is stored or used.
 - [ ] 4. A total figure at the top of the Assets and Liabilities pages.
 
 ## Bug fixes (2026-06-13)

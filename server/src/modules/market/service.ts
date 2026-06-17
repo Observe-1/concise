@@ -1,6 +1,7 @@
 import type { AppContext } from '../../context.js';
 import { withTransaction } from '../../db/connection.js';
 import { todayISO } from '../../lib/dates.js';
+import { convertMinor } from '../../lib/fx.js';
 import { upsertSnapshot } from '../snapshots/service.js';
 import { PROPERTY_COUNTRIES, propertyValueMinor, vehicleValueMinor } from './models.js';
 import { holdingValueMinor } from './provider.js';
@@ -56,10 +57,30 @@ export function refreshMarketValuations(ctx: AppContext, userId?: number): numbe
       `INSERT INTO asset_valuations (asset_id, value_minor, source, recorded_at)
        VALUES (?, ?, 'market', ?)`,
     );
+    // Each user's display currency (cached) — market prices arrive in the
+    // instrument's currency and are converted into it before storage.
+    const ccyCache = new Map<number, string>();
+    const userCcy = (uid: number): string => {
+      let c = ccyCache.get(uid);
+      if (c === undefined) {
+        const row = ctx.db.prepare('SELECT currency FROM settings WHERE user_id = ?').get(uid) as
+          | { currency: string }
+          | undefined;
+        c = row?.currency ?? 'USD';
+        ccyCache.set(uid, c);
+      }
+      return c;
+    };
     const valueToday = (row: AutoValuedRow): number | null => {
       if (row.valuation_mode === 'market') {
         const price = ctx.prices.getPriceMinor(row.market_symbol!, today);
-        return price === null ? null : holdingValueMinor(price, row.quantity!);
+        return price === null
+          ? null
+          : convertMinor(
+              holdingValueMinor(price, row.quantity!),
+              ctx.prices.instrumentCurrency(row.market_symbol!),
+              userCcy(row.user_id),
+            );
       }
       const base = (latestManual.get(row.id) ?? earliest.get(row.id)) as
         | { value_minor: number; recorded_at: string }

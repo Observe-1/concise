@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createUser, csrf, loginAgent, makeTestWorld, type TestWorld } from '../helpers.js';
+import { convertMinor } from '../../src/lib/fx.js';
 
 describe('settings API', () => {
   let world: TestWorld;
@@ -48,6 +49,48 @@ describe('settings API', () => {
   it('validates currency codes', async () => {
     await csrf(agent.patch('/api/settings')).send({ currency: 'POUNDS' }).expect(400);
     await csrf(agent.patch('/api/settings')).send({ currency: '12$' }).expect(400);
+  });
+
+  it('re-denominates stored values when the currency changes', async () => {
+    // A $1,000.00 asset, a $400.00 liability and a fixed +$100.00 schedule.
+    const asset = await csrf(agent.post('/api/assets'))
+      .send({ category: 'cash', name: 'Savings', valueMinor: 1_000_00 });
+    await csrf(agent.post('/api/liabilities'))
+      .send({ category: 'loan', name: 'Loan', valueMinor: 400_00 });
+    await csrf(agent.post('/api/recurring')).send({
+      name: 'Top up', targetType: 'asset', targetId: asset.body.id,
+      amountMinor: 100_00, cadence: 'monthly', nextRunOn: '2026-07-11',
+    });
+
+    // Switch USD → GBP: every figure converts at the rough rate.
+    await csrf(agent.patch('/api/settings')).send({ currency: 'GBP' }).expect(200);
+
+    const assets = await agent.get('/api/assets');
+    expect(assets.body[0].currentValueMinor).toBe(convertMinor(1_000_00, 'USD', 'GBP'));
+    const liabilities = await agent.get('/api/liabilities');
+    expect(liabilities.body[0].currentValueMinor).toBe(convertMinor(400_00, 'USD', 'GBP'));
+
+    const summary = await agent.get('/api/dashboard/summary');
+    expect(summary.body.currency).toBe('GBP');
+    expect(summary.body.assetsMinor).toBe(convertMinor(1_000_00, 'USD', 'GBP'));
+    expect(summary.body.liabilitiesMinor).toBe(convertMinor(400_00, 'USD', 'GBP'));
+
+    const rec = await agent.get('/api/recurring');
+    expect(rec.body[0].amountMinor).toBe(convertMinor(100_00, 'USD', 'GBP'));
+
+    // Snapshots (the graph series) are re-denominated too.
+    const snap = world.ctx.db
+      .prepare("SELECT net_worth_minor FROM snapshots WHERE user_id = ? AND snapshot_date = '2026-06-11'")
+      .get(1) as { net_worth_minor: number };
+    expect(snap.net_worth_minor).toBe(convertMinor(600_00, 'USD', 'GBP'));
+  });
+
+  it('is a no-op when the currency is unchanged', async () => {
+    await csrf(agent.post('/api/assets'))
+      .send({ category: 'cash', name: 'Savings', valueMinor: 1_000_00 });
+    await csrf(agent.patch('/api/settings')).send({ currency: 'USD' }).expect(200);
+    const assets = await agent.get('/api/assets');
+    expect(assets.body[0].currentValueMinor).toBe(1_000_00);
   });
 
   it('deletes all financial data on confirmation, keeping the account', async () => {

@@ -284,7 +284,10 @@ describe('market symbol lookup', () => {
 
     const known = await agent.get('/api/market/lookup?symbol=vwrl');
     expect(known.status).toBe(200);
-    expect(known.body).toEqual({ symbol: 'VWRL', name: 'Vanguard FTSE All-World UCITS ETF' });
+    expect(known.body).toEqual({
+      symbol: 'VWRL', name: 'Vanguard FTSE All-World UCITS ETF',
+      currency: 'GBP', exchange: 'London Stock Exchange',
+    });
 
     await agent.get('/api/market/lookup?symbol=ZZZZZ').expect(404);
     await agent.get('/api/market/lookup').expect(400);

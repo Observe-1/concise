@@ -2,6 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { withTransaction } from './connection.js';
 import { hashPassword } from '../lib/passwords.js';
 import { addDays, toDateISO } from '../lib/dates.js';
+import { convertMinor } from '../lib/fx.js';
 import { hashString, mulberry32 } from '../lib/rng.js';
 import { SimulatedPriceProvider, holdingValueMinor } from '../modules/market/provider.js';
 
@@ -33,15 +34,18 @@ function genSeries(
   return points;
 }
 
+// The demo account is denominated in USD; instrument prices come in their own
+// currency and are converted, mirroring the live market valuation path.
 function marketSeries(symbol: string, quantity: number, todayIso: string): SeriesPoint[] {
   const prices = new SimulatedPriceProvider();
+  const ccy = prices.instrumentCurrency(symbol);
   const points: SeriesPoint[] = [];
   const steps = Math.floor(HISTORY_DAYS / POINT_EVERY_DAYS);
   for (let i = 0; i <= steps; i++) {
     const date = addDays(todayIso, -(steps - i) * POINT_EVERY_DAYS);
     const price = prices.getPriceMinor(symbol, date);
     if (price === null) continue; // before the provider's data begins
-    points.push({ date, valueMinor: holdingValueMinor(price, quantity) });
+    points.push({ date, valueMinor: convertMinor(holdingValueMinor(price, quantity), ccy, 'USD') });
   }
   return points;
 }

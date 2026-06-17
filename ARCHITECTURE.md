@@ -164,7 +164,8 @@ day.
 - `/settings/:section?` renders four sub pages selected by buttons at the
   top: **User account** (profile, sign out, **Danger zone** — the default),
   **History** (legacy wealth, historic-entry editor), **Calculation**
-  (currency, birth year), and **Backup** (how backups work, existing backups
+  (currency — switching re-denominates the whole portfolio at the latest rough
+  rate, §6.4 — and birth year), and **Backup** (how backups work, existing backups
   with age/size, a "Back up now" button, and the backup settings). The first
   three share `GET/PATCH /api/settings`; Backup uses `/api/backup` (see
   [BACKUP.md](BACKUP.md)).
@@ -328,6 +329,11 @@ day.
   (older = worth more) and the historic figure is not used.
 - Daily job + `POST /api/market/refresh` append valuations for every
   auto-valued asset (market price or model formula), at most one per day.
+- **Currency**: market prices come in the instrument's own currency and are
+  converted to the user's currency (rough static rates, `lib/fx.ts`) before
+  being stored — on create, on re-price, and across the backdated backfill.
+  Model/manual values are entered in the user's currency, so they need no
+  conversion. See §6.4.
 
 ## 5. Folder structure
 
@@ -364,8 +370,14 @@ concise/
    past.
 3. **Testability via injection** — the app factory takes `{ db, now() }` so
    integration tests run on `:memory:` SQLite with a controllable clock.
-4. **Single-currency per user** — values are stored in the user's currency;
-   no FX conversion (out of scope; currency setting controls formatting).
+4. **Single-currency storage with rough FX** — every stored figure is
+   denominated in the user's chosen currency. Foreign values are converted at a
+   small static table of rough rates (`lib/fx.ts`, units-per-USD, no live feed):
+   a market price arriving in the instrument's own currency is converted before
+   it is stored or used, and **changing the currency setting re-denominates the
+   whole portfolio and its history** at the latest rate (a single constant
+   factor, so the graph's shape is preserved — only the units change). Rates are
+   deliberately approximate, mirroring the static property-index table.
 5. **In-process scheduler over external cron** — one artifact to deploy; jobs
    are idempotent so missed ticks self-heal on next start.
 6. **Server runtime is compiled** — dev uses `tsx watch`; production runs

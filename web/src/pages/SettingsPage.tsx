@@ -8,7 +8,10 @@ import { HistoryEntries } from '../components/HistoryEntries.js';
 import { Button, Card, EmptyState, ErrorNote, Field, Input, Select, Spinner, SuccessNote } from '../components/ui.js';
 import { formatMinor, parseSignedToMinor } from '../lib/money.js';
 
-const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'NZD', 'SEK', 'NOK', 'DKK', 'SGD', 'HKD', 'INR'];
+const CURRENCIES = [
+  'USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'NZD',
+  'SEK', 'NOK', 'DKK', 'SGD', 'HKD', 'INR', 'CNY', 'ZAR',
+];
 
 const SECTIONS = [
   { key: 'account', label: 'User account' },
@@ -239,7 +242,10 @@ function CalculationSection() {
     <Card className="p-5">
       <h2 className="mb-4 text-xs font-medium uppercase tracking-widest text-ink-400">Calculation</h2>
       <form onSubmit={onSubmit} className="space-y-4">
-        <Field label="Currency" hint="Used for formatting all amounts.">
+        <Field
+          label="Currency"
+          hint="Switching converts every stored amount and your whole history at the latest rough exchange rate."
+        >
           {(id) => (
             <Select id={id} value={currency} onChange={(e) => setCurrency(e.target.value)}>
               {CURRENCIES.map((c) => (

@@ -7,6 +7,7 @@ import type { HoldingKind } from './kind.js';
 import { withTransaction } from '../../db/connection.js';
 import { badRequest, notFound } from '../../lib/http.js';
 import { addDays, rangeStart, todayISO, type HistoryRange } from '../../lib/dates.js';
+import { convertMinor } from '../../lib/fx.js';
 import { PROPERTY_COUNTRIES, propertyValueMinor, vehicleValueMinor } from '../market/models.js';
 import { holdingValueMinor } from '../market/provider.js';
 import { recomputeSnapshotRange, refreshTodaySnapshot } from '../snapshots/service.js';
@@ -211,6 +212,14 @@ function insertValuation(
     .run(holdingId, valueMinor, source, recordedAt ?? ctx.now().toISOString());
 }
 
+/** The user's display currency (everything stored is denominated in it). */
+function userCurrency(ctx: AppContext, userId: number): string {
+  const row = ctx.db
+    .prepare('SELECT currency FROM settings WHERE user_id = ?')
+    .get(userId) as { currency: string } | undefined;
+  return row?.currency ?? 'USD';
+}
+
 /** Some categories restrict how they may be valued (cash is manual-only). */
 function assertModeAllowed(category: string, mode: string): void {
   const allowed = ASSET_VALUATION_MODES[category as AssetCategory] ?? ['manual'];
@@ -279,15 +288,16 @@ function backfillModelValuations(
 }
 
 /**
- * Value of a market-mode holding from the price provider, as of a date.
+ * Value of a market-mode holding from the price provider, as of a date,
+ * converted from the instrument's quote currency into the user's `currency`.
  * Throws when the provider has no price for that date — callers that can
  * tolerate gaps (historical backfill) query the provider directly instead.
  */
-function marketValue(ctx: AppContext, symbol: string, quantity: number, dateISO?: string): number {
+function marketValue(ctx: AppContext, symbol: string, quantity: number, currency: string, dateISO?: string): number {
   const date = dateISO ?? todayISO(ctx.now);
   const price = ctx.prices.getPriceMinor(symbol, date);
   if (price === null) throw badRequest(`No price available for ${symbol.toUpperCase()} on ${date}`);
-  return holdingValueMinor(price, quantity);
+  return convertMinor(holdingValueMinor(price, quantity), ctx.prices.instrumentCurrency(symbol), currency);
 }
 
 /**
@@ -302,9 +312,12 @@ function backfillMarketValuations(
   holdingId: number,
   symbol: string,
   quantity: number,
+  currency: string,
   fromISO: string,
   toISO: string,
 ): { missing: boolean; inserted: number } {
+  // Prices come in the instrument's own currency — convert each to the user's.
+  const instrumentCcy = ctx.prices.instrumentCurrency(symbol);
   let missing = false;
   let inserted = 0;
   for (let d = fromISO; d <= toISO; d = addDays(d, 1)) {
@@ -313,7 +326,8 @@ function backfillMarketValuations(
       missing = true;
       continue;
     }
-    insertValuation(ctx, k, holdingId, holdingValueMinor(price, quantity), 'market', `${d}T12:00:00.000Z`);
+    const value = convertMinor(holdingValueMinor(price, quantity), instrumentCcy, currency);
+    insertValuation(ctx, k, holdingId, value, 'market', `${d}T12:00:00.000Z`);
     inserted++;
   }
   return { missing, inserted };
@@ -365,10 +379,11 @@ export function createHolding(
     // recorded as a second valuation today, in addition to the historic one.
     const start = input.asOf && input.asOf < today ? input.asOf : null;
     const present = !isMarket && start ? input.presentValueMinor : undefined;
+    const currency = userCurrency(ctx, userId);
     if (isMarket) {
       if (start) {
         const { missing, inserted } = backfillMarketValuations(
-          ctx, k, id, input.marketSymbol!.toUpperCase(), input.quantity!, start, today,
+          ctx, k, id, input.marketSymbol!.toUpperCase(), input.quantity!, currency, start, today,
         );
         if (inserted === 0) {
           throw badRequest(`No price history available for ${input.marketSymbol!.toUpperCase()}`);
@@ -377,7 +392,7 @@ export function createHolding(
           ctx.db.prepare('UPDATE assets SET history_price_missing = 1 WHERE id = ?').run(id);
         }
       } else {
-        insertValuation(ctx, k, id, marketValue(ctx, input.marketSymbol!, input.quantity!), 'market');
+        insertValuation(ctx, k, id, marketValue(ctx, input.marketSymbol!, input.quantity!, currency), 'market');
       }
     } else if (mode === 'depreciation' && start && present !== undefined) {
       // Special rule: when a present-day value is given, vehicle depreciation is
@@ -476,7 +491,7 @@ export function updateHolding(
           symbol !== (existing.market_symbol ?? null) ||
           quantity !== (existing.quantity ?? null));
       if (marketInputsChanged && symbol && quantity) {
-        insertValuation(ctx, k, id, marketValue(ctx, symbol, quantity), 'market');
+        insertValuation(ctx, k, id, marketValue(ctx, symbol, quantity, userCurrency(ctx, userId)), 'market');
         refreshTodaySnapshot(ctx, userId);
       }
       // Turning a model method on (or changing its inputs) revalues today
