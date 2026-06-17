@@ -142,9 +142,10 @@ Implemented strictly in order; one commit per feature.
       **depreciation**, when a present-day value is given the curve is anchored
       on it (today) and the historic value is ignored — depreciation is computed
       from the current value only; otherwise it operates normally.
-- [ ] 2. Many more market instruments across **multiple stock exchanges**
+- [x] 2. Many more market instruments across **multiple stock exchanges**
       (London VUAG/VWRP/VUKE/ISF/…, plus US/EU listings), each carrying its
-      native currency and exchange; the lookup/verify step shows both.
+      native currency and exchange; the lookup/verify step shows both, and a
+      new `GET /api/market/instruments` powers symbol autocomplete.
 - [ ] 3. Currency that actually converts: a rough static FX table. Changing the
       currency setting re-denominates all stored values at the latest rate, and
       any value pulled from a market/valuation source in a foreign currency is

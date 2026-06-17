@@ -207,7 +207,12 @@ describe('assets page', () => {
   it('requires symbol verification before saving a market asset', async () => {
     const calls = mockFetch([
       [/\/api\/auth\/me/, { user: demoUser }],
-      [/\/api\/market\/lookup\?symbol=VWRL/, { symbol: 'VWRL', name: 'Vanguard FTSE All-World UCITS ETF' }],
+      [/\/api\/market\/instruments/, [
+        { symbol: 'VWRL', name: 'Vanguard FTSE All-World UCITS ETF', currency: 'GBP', exchange: 'London Stock Exchange' },
+      ]],
+      [/\/api\/market\/lookup\?symbol=VWRL/, {
+        symbol: 'VWRL', name: 'Vanguard FTSE All-World UCITS ETF', currency: 'GBP', exchange: 'London Stock Exchange',
+      }],
       [/\/api\/assets$/, []],
     ]);
     renderWithProviders(<App />, { route: '/assets' });
@@ -225,9 +230,10 @@ describe('assets page', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/verify the symbol/i);
     expect(calls.some((c) => c.method === 'POST' && /\/api\/assets$/.test(c.url))).toBe(false);
 
-    // verify resolves and shows the instrument name with a confirmation
+    // verify resolves and shows the instrument name, exchange and currency
     await user.click(screen.getByRole('button', { name: /^verify$/i }));
     expect(await screen.findByRole('status')).toHaveTextContent(/VWRL — Vanguard FTSE All-World UCITS ETF/);
+    expect(screen.getByText(/London Stock Exchange · priced in GBP/)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /^add$/i }));
     await waitFor(() => {

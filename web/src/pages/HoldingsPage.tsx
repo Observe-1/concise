@@ -1,9 +1,9 @@
 import { useMemo, useState, type FormEvent } from 'react';
-import type { AssetCategory, HistoryRange, HoldingDto } from '@api';
+import type { AssetCategory, HistoryRange, HoldingDto, SymbolLookupDto } from '@api';
 import { ASSET_CATEGORIES, ASSET_VALUATION_MODES, LIABILITY_CATEGORIES, METALS } from '@api';
 import {
-  useCreateHolding, useDeleteHolding, useHoldingChanges, useHoldings, useMarketRefresh, useMe,
-  usePropertyCountries, useRevalueHolding, useSymbolLookup, useUpdateHolding, type HoldingKind,
+  useCreateHolding, useDeleteHolding, useHoldingChanges, useHoldings, useInstruments, useMarketRefresh,
+  useMe, usePropertyCountries, useRevalueHolding, useSymbolLookup, useUpdateHolding, type HoldingKind,
 } from '../api/queries.js';
 import { RangePicker } from '../components/NetWorthChart.js';
 import { Button, Card, ChangeBadge, EmptyState, ErrorNote, Field, Input, Modal, Select, Spinner } from '../components/ui.js';
@@ -232,12 +232,13 @@ function HoldingForm({
   const [formError, setFormError] = useState<string | null>(null);
   // Symbol the user has confirmed via lookup. Editing an existing market
   // asset without touching the symbol needs no re-verification.
-  const [verified, setVerified] = useState<{ symbol: string; name: string } | null>(null);
+  const [verified, setVerified] = useState<SymbolLookupDto | null>(null);
 
   const busy = create.isPending || update.isPending || remove.isPending || revalue.isPending;
   const allowedModes = modesFor(kind, category);
   const isMarket = mode === 'market';
   const countries = usePropertyCountries(kind === 'assets');
+  const instruments = useInstruments(kind === 'assets');
   const symbolUpper = symbol.trim().toUpperCase();
   const symbolUnchanged = existing?.marketSymbol === symbolUpper;
   const symbolVerified = verified?.symbol === symbolUpper;
@@ -459,11 +460,20 @@ function HoldingForm({
         {isMarket ? (
           <>
             <div className="grid grid-cols-[1fr_auto] items-end gap-2">
-              <Field label="Symbol">
+              <Field label="Symbol" hint="Search across London, US and EU exchanges, crypto and metals.">
                 {(id) => (
-                  <Input id={id} value={symbol}
-                    onChange={(e) => setSymbol(e.target.value.toUpperCase())}
-                    placeholder="VWRL" required />
+                  <>
+                    <Input id={id} value={symbol} list="market-instruments"
+                      onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+                      placeholder="VUAG" required />
+                    <datalist id="market-instruments">
+                      {(instruments.data ?? []).map((inst) => (
+                        <option key={inst.symbol} value={inst.symbol}>
+                          {inst.name} · {inst.exchange} ({inst.currency})
+                        </option>
+                      ))}
+                    </datalist>
+                  </>
                 )}
               </Field>
               <Button
@@ -475,13 +485,20 @@ function HoldingForm({
               </Button>
             </div>
             {symbolVerified && (
-              <p role="status" className="flex items-center gap-1.5 text-sm text-gain-400">
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-                  <path d="M2 7.5L5.5 11L12 3.5" stroke="currentColor" strokeWidth="1.8"
-                    strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                {verified!.symbol} — {verified!.name}
-              </p>
+              <div role="status" className="text-sm text-gain-400">
+                <p className="flex items-center gap-1.5">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                    <path d="M2 7.5L5.5 11L12 3.5" stroke="currentColor" strokeWidth="1.8"
+                      strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  {verified!.symbol} — {verified!.name}
+                </p>
+                {verified!.exchange && (
+                  <p className="ml-[20px] text-xs text-ink-400">
+                    {verified!.exchange} · priced in {verified!.currency}
+                  </p>
+                )}
+              </div>
             )}
             {!symbolVerified && symbolUnchanged && existing && (
               <p className="text-xs text-ink-400">Symbol unchanged — no re-verification needed.</p>

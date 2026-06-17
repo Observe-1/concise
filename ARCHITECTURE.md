@@ -297,13 +297,20 @@ day.
 
 ### Market valuations
 - Assets with `valuation_mode='market'` hold a `market_symbol` and `quantity`.
-- A `PriceProvider` interface supplies prices and symbol lookup;
-  `getPriceMinor` returns `null` for dates outside the provider's coverage.
-  The default `SimulatedPriceProvider` is a deterministic seeded random walk
-  with a fixed instrument list (no API keys, stable for tests) whose data
-  begins 2020-01-01. A real provider can be swapped in via one factory.
-- `GET /api/market/lookup?symbol=` resolves a ticker to its instrument name;
-  the asset form requires this verification before a market entry is saved.
+- A `PriceProvider` interface supplies prices, symbol lookup, an instrument's
+  quote currency (`instrumentCurrency`) and the full instrument list
+  (`listInstruments`); `getPriceMinor` returns `null` for dates outside the
+  provider's coverage and prices in the instrument's own currency. The default
+  `SimulatedPriceProvider` is a deterministic seeded random walk over a fixed
+  instrument list spanning several exchanges and currencies — London (GBP, e.g.
+  VUAG/VWRP/VUKE/ISF), US (USD, NASDAQ/NYSE), Europe (EUR, Xetra/Euronext),
+  crypto and spot metals (USD) — with no API keys, stable for tests, data from
+  2020-01-01. A real provider can be swapped in via one factory.
+- `GET /api/market/instruments` lists every known instrument (symbol, name,
+  exchange, currency) for the asset form's symbol autocomplete.
+  `GET /api/market/lookup?symbol=` resolves a ticker to its instrument (name,
+  exchange and quote currency); the asset form requires this verification
+  before a market entry is saved and shows the resolved exchange and currency.
 - **Model methods** (`modules/market/models.ts`): property assets may use
   `valuation_mode='property_index'` — the value grows from the entry's first
   (base) valuation by the chosen country's long-run yearly average property

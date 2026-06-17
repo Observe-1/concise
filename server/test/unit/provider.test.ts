@@ -32,9 +32,31 @@ describe('SimulatedPriceProvider', () => {
   it('resolves known symbols to instrument names, case-insensitively', () => {
     expect(provider.lookupSymbol('vwrl')).toEqual({
       symbol: 'VWRL', name: 'Vanguard FTSE All-World UCITS ETF',
+      currency: 'GBP', exchange: 'London Stock Exchange',
     });
     expect(provider.lookupSymbol('XAU')?.name).toMatch(/gold/i);
     expect(provider.lookupSymbol('NOT-A-TICKER')).toBeNull();
+  });
+
+  it('knows instruments across several exchanges, with their currencies', () => {
+    // The London-listed instrument the user wanted is available.
+    expect(provider.lookupSymbol('VUAG')).toMatchObject({
+      symbol: 'VUAG', currency: 'GBP', exchange: 'London Stock Exchange',
+    });
+    expect(provider.lookupSymbol('VOO')?.currency).toBe('USD');
+    expect(provider.lookupSymbol('SAP')?.currency).toBe('EUR');
+    // instrumentCurrency mirrors the lookup, defaulting unknown symbols to USD.
+    expect(provider.instrumentCurrency('vuag')).toBe('GBP');
+    expect(provider.instrumentCurrency('WHATEVER')).toBe('USD');
+  });
+
+  it('lists a varied instrument set for discovery', () => {
+    const list = provider.listInstruments();
+    expect(list.length).toBeGreaterThanOrEqual(30);
+    const exchanges = new Set(list.map((i) => i.exchange));
+    expect(exchanges.has('London Stock Exchange')).toBe(true);
+    expect(exchanges.has('NASDAQ')).toBe(true);
+    expect(list.some((i) => i.symbol === 'VUAG')).toBe(true);
   });
 });
 

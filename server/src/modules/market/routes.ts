@@ -17,6 +17,11 @@ export function marketRoutes(ctx: AppContext): Router {
     res.json(list);
   });
 
+  // Every instrument the provider knows (symbol autocomplete / discovery).
+  router.get('/instruments', (_req, res) => {
+    res.json(ctx.prices.listInstruments());
+  });
+
   // Resolve a ticker to its instrument name (asset-creation verification step).
   router.get('/lookup', (req, res) => {
     const symbol = String(req.query.symbol ?? '').trim();

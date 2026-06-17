@@ -410,6 +410,16 @@ export function usePropertyCountries(enabled = true) {
   });
 }
 
+/** Every market instrument the provider knows (symbol autocomplete / discovery). */
+export function useInstruments(enabled = true) {
+  return useQuery({
+    queryKey: ['market', 'instruments'],
+    queryFn: () => api<SymbolLookupDto[]>('/api/market/instruments'),
+    staleTime: Infinity,
+    enabled,
+  });
+}
+
 /** Resolve a ticker to its instrument name (asset-creation verification). */
 export function useSymbolLookup() {
   return useMutation({

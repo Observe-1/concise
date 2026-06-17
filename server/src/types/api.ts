@@ -69,6 +69,10 @@ export interface HoldingDto {
 export interface SymbolLookupDto {
   symbol: string;
   name: string;
+  /** ISO 4217 currency the instrument's prices are quoted in. */
+  currency: string;
+  /** Human-readable listing venue, e.g. "London Stock Exchange". */
+  exchange: string;
 }
 
 /** A country selectable for the property-index valuation method. */

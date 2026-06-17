@@ -283,6 +283,31 @@ describe('assets & liabilities API', () => {
     });
   });
 
+  describe('market instruments', () => {
+    it('lists instruments across exchanges and resolves symbols with currency', async () => {
+      const list = await agent.get('/api/market/instruments');
+      expect(list.status).toBe(200);
+      expect(list.body.length).toBeGreaterThanOrEqual(30);
+      const vuag = list.body.find((i: { symbol: string }) => i.symbol === 'VUAG');
+      expect(vuag).toMatchObject({ currency: 'GBP', exchange: 'London Stock Exchange' });
+
+      const lookup = await agent.get('/api/market/lookup?symbol=vuag');
+      expect(lookup.status).toBe(200);
+      expect(lookup.body).toMatchObject({ symbol: 'VUAG', currency: 'GBP' });
+
+      await agent.get('/api/market/lookup?symbol=NOPE123').expect(404);
+    });
+
+    it('lets a London-listed instrument be created (VUAG)', async () => {
+      const res = await csrf(agent.post('/api/assets')).send({
+        category: 'investments', name: 'S&P 500 (Acc)', valuationMode: 'market',
+        marketSymbol: 'VUAG', quantity: 50,
+      });
+      expect(res.status).toBe(201);
+      expect(res.body.marketSymbol).toBe('VUAG');
+    });
+  });
+
   describe('property index valuation', () => {
     it('lists selectable countries with their yearly rates', async () => {
       const res = await agent.get('/api/market/property-countries');
