@@ -24,8 +24,9 @@ all in a fast, private, self-hostable app.
   🥇 precious metals with gold/silver/platinum/palladium sub-selection, 📦
   other / 🏦 mortgage, 💸 loans, 💳 credit cards, 🎓 student loans, ⚖️
   other), full value history per entry, optional backdating on creation (with
-  an optional present-day value), and a running total of each side at the top
-  of the page.
+  an optional present-day value), a running total of each side beside the page
+  heading, a current per-unit price on each market holding, and a badge marking
+  any entry that an active recurring increase/decrease applies to.
 - **Valuation methods per category** — cash is always a manual figure;
   anything tradable can be market-priced (symbol × quantity with a
   verification step) across many instruments on several exchanges (London,

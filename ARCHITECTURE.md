@@ -152,7 +152,11 @@ day.
   exist yet) or the base was zero. `asOf` scopes it to the historical view.
   The holdings pages render this as a green/red/grey badge per holding under a
   range quick-select, and show a **running total** of the side (sum of every
-  entry's current value) at the top of the page — as-of in the historical view.
+  entry's current value) next to the page heading — as-of in the historical
+  view. Each market holding also shows its current per-unit price (derived from
+  value ÷ quantity) in its gold badge, and any holding with an active recurring
+  schedule gets a gold badge summarising the increase/decrease (signed
+  amount/percent + cadence, schedule name on hover).
 - "Update value" appends a `manual` valuation row (history preserved), then
   upserts today's snapshot. For model-valued holdings this **re-anchors** the
   automatic estimate: the property-index and depreciation formulas grow from
@@ -311,8 +315,9 @@ day.
 - `GET /api/market/instruments` lists every known instrument (symbol, name,
   exchange, currency) for the asset form's symbol autocomplete.
   `GET /api/market/lookup?symbol=` resolves a ticker to its instrument (name,
-  exchange and quote currency); the asset form requires this verification
-  before a market entry is saved and shows the resolved exchange and currency.
+  exchange, quote currency and current per-unit price); the asset form requires
+  this verification before a market entry is saved and shows the resolved
+  exchange, currency and current price.
 - **Model methods** (`modules/market/models.ts`): property assets may use
   `valuation_mode='property_index'` — the value grows from the entry's first
   (base) valuation by the chosen country's long-run yearly average property

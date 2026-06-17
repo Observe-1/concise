@@ -37,7 +37,7 @@ describe('assets page', () => {
     expect(screen.getByRole('region', { name: 'Cash' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Crypto' })).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Property' })).not.toBeInTheDocument();
-    expect(screen.getByText('BTC × 0.15')).toBeInTheDocument(); // market badge
+    expect(screen.getByText(/BTC × 0\.15 @ /)).toBeInTheDocument(); // market badge with price
     expect(screen.getByRole('button', { name: /refresh prices/i })).toBeInTheDocument();
     // precious metals class with metal sub-label
     expect(screen.getByRole('region', { name: 'Precious metals' })).toBeInTheDocument();
@@ -51,9 +51,28 @@ describe('assets page', () => {
     ]);
     renderWithProviders(<App />, { route: '/assets' });
 
-    // 4,250.00 + 20,990.97 + 9,200.00 = 34,440.97
-    expect(await screen.findByText(/total assets/i)).toBeInTheDocument();
-    expect(screen.getByText(/34,?440\.97/)).toBeInTheDocument();
+    // 4,250.00 + 20,990.97 + 9,200.00 = 34,440.97, shown next to the heading.
+    expect(await screen.findByLabelText(/total assets/i)).toHaveTextContent(/34,?440\.97/);
+  });
+
+  it('shows a recurring indicator badge with the schedule detail', async () => {
+    mockFetch([
+      [/\/api\/auth\/me/, { user: demoUser }],
+      [/\/api\/recurring/, [
+        {
+          id: 5, name: 'Monthly savings', targetType: 'asset', targetId: 1,
+          amountType: 'fixed', amountMinor: 50_000, percent: null, cadence: 'monthly',
+          nextRunOn: '2026-07-01', lastRunOn: null, active: true,
+        },
+      ]],
+      [/\/api\/assets$/, assets],
+    ]);
+    renderWithProviders(<App />, { route: '/assets' });
+
+    await screen.findByText('Checking');
+    // Checking (id 1) has a +500.00/mo schedule → a recurring badge with detail.
+    const badge = await screen.findByText(/\+.*500\.00\/mo/);
+    expect(badge.getAttribute('title')).toContain('Monthly savings');
   });
 
   it('shows a per-holding percent change for the selected range', async () => {
@@ -223,7 +242,8 @@ describe('assets page', () => {
         { symbol: 'VWRL', name: 'Vanguard FTSE All-World UCITS ETF', currency: 'GBP', exchange: 'London Stock Exchange' },
       ]],
       [/\/api\/market\/lookup\?symbol=VWRL/, {
-        symbol: 'VWRL', name: 'Vanguard FTSE All-World UCITS ETF', currency: 'GBP', exchange: 'London Stock Exchange',
+        symbol: 'VWRL', name: 'Vanguard FTSE All-World UCITS ETF', currency: 'GBP',
+        exchange: 'London Stock Exchange', priceMinor: 110_00,
       }],
       [/\/api\/assets$/, []],
     ]);
@@ -246,6 +266,7 @@ describe('assets page', () => {
     await user.click(screen.getByRole('button', { name: /^verify$/i }));
     expect(await screen.findByRole('status')).toHaveTextContent(/VWRL — Vanguard FTSE All-World UCITS ETF/);
     expect(screen.getByText(/London Stock Exchange · priced in GBP/)).toBeInTheDocument();
+    expect(screen.getByText(/current price/i)).toHaveTextContent(/110\.00/);
 
     await user.click(screen.getByRole('button', { name: /^add$/i }));
     await waitFor(() => {
@@ -403,9 +424,8 @@ describe('liabilities page', () => {
     expect(screen.getByRole('region', { name: 'Mortgage' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /add liability/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /refresh prices/i })).not.toBeInTheDocument();
-    // Total figure at the top (its value coincides with the lone entry here).
-    expect(screen.getByText(/total liabilities/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/248,?000\.00/).length).toBeGreaterThanOrEqual(1);
+    // Total figure next to the heading (its value coincides with the lone entry).
+    expect(screen.getByLabelText(/total liabilities/i)).toHaveTextContent(/248,?000\.00/);
 
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: /add liability/i }));

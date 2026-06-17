@@ -153,6 +153,17 @@ Implemented strictly in order; one commit per feature.
       currency before it is stored or used.
 - [x] 4. A total figure at the top of the Assets and Liabilities pages.
 
+## Feature batch (2026-06-17 #2)
+Implemented strictly in order; one commit per feature.
+- [x] 1. Move the Assets/Liabilities page total figure up next to the heading
+      (right of it), removing the separate card.
+- [x] 2. Investments: show the current market price on the add-asset form once
+      the symbol is verified, and a per-investment price indicator in the
+      existing gold badge on the holdings page.
+- [x] 3. A gold-accented badge next to an asset/liability when a recurring
+      increase/decrease applies to it, summarising the schedule (direction,
+      amount/percent, cadence, name).
+
 ## Bug fixes (2026-06-13)
 - [x] 1. View-as scrubber: the circle handle, though aligned along the chart's
       X axis, overlapped the date labels. The X-axis band now reserves a label

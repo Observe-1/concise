@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { AppContext } from '../../context.js';
 import type { PropertyCountryDto } from '../../types/api.js';
 import { audit } from '../../lib/audit.js';
+import { todayISO } from '../../lib/dates.js';
 import { badRequest, notFound } from '../../lib/http.js';
 import { PROPERTY_COUNTRIES } from './models.js';
 import { refreshMarketValuations } from './service.js';
@@ -22,13 +23,14 @@ export function marketRoutes(ctx: AppContext): Router {
     res.json(ctx.prices.listInstruments());
   });
 
-  // Resolve a ticker to its instrument name (asset-creation verification step).
+  // Resolve a ticker to its instrument (asset-creation verification step),
+  // including the current per-unit price in the instrument's own currency.
   router.get('/lookup', (req, res) => {
     const symbol = String(req.query.symbol ?? '').trim();
     if (!symbol || symbol.length > 20) throw badRequest('symbol query parameter required');
     const result = ctx.prices.lookupSymbol(symbol);
     if (!result) throw notFound(`Unknown symbol: ${symbol.toUpperCase()}`);
-    res.json(result);
+    res.json({ ...result, priceMinor: ctx.prices.getPriceMinor(result.symbol, todayISO(ctx.now)) });
   });
 
   router.post('/refresh', (req, res) => {

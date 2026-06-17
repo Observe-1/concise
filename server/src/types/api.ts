@@ -73,6 +73,12 @@ export interface SymbolLookupDto {
   currency: string;
   /** Human-readable listing venue, e.g. "London Stock Exchange". */
   exchange: string;
+  /**
+   * Current per-unit price in the instrument's own `currency` (minor units),
+   * as of today. Set by the lookup route; omitted by the instrument list and
+   * null when the provider has no current price.
+   */
+  priceMinor?: number | null;
 }
 
 /** A country selectable for the property-index valuation method. */

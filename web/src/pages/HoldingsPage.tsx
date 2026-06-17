@@ -1,9 +1,10 @@
 import { useMemo, useState, type FormEvent } from 'react';
-import type { AssetCategory, HistoryRange, HoldingDto, SymbolLookupDto } from '@api';
+import type { AssetCategory, HistoryRange, HoldingDto, RecurringDto, SymbolLookupDto } from '@api';
 import { ASSET_CATEGORIES, ASSET_VALUATION_MODES, LIABILITY_CATEGORIES, METALS } from '@api';
 import {
   useCreateHolding, useDeleteHolding, useHoldingChanges, useHoldings, useInstruments, useMarketRefresh,
-  useMe, usePropertyCountries, useRevalueHolding, useSymbolLookup, useUpdateHolding, type HoldingKind,
+  useMe, usePropertyCountries, useRecurring, useRevalueHolding, useSymbolLookup, useUpdateHolding,
+  type HoldingKind,
 } from '../api/queries.js';
 import { RangePicker } from '../components/NetWorthChart.js';
 import { Button, Card, ChangeBadge, EmptyState, ErrorNote, Field, Input, Modal, Select, Spinner } from '../components/ui.js';
@@ -27,6 +28,23 @@ const MODE_LABELS: Record<string, string> = {
   property_index: 'Country property index (yearly average price change)',
   depreciation: 'Automatic depreciation (average value loss by age)',
 };
+
+const CADENCE_SHORT: Record<string, string> = {
+  daily: 'day', weekly: 'wk', monthly: 'mo', quarterly: 'qtr', yearly: 'yr',
+};
+
+/**
+ * Compact summary of a recurring schedule for the holding badge: a direction
+ * arrow, the fixed amount or percent, and the cadence. The full schedule name
+ * and signed detail go in the hover title.
+ */
+function recurringBadge(r: RecurringDto, currency: string): { text: string; title: string } {
+  const cad = CADENCE_SHORT[r.cadence] ?? r.cadence;
+  const signed = r.amountType === 'percent'
+    ? `${(r.percent ?? 0) >= 0 ? '+' : '−'}${Math.abs(r.percent ?? 0)}%`
+    : `${(r.amountMinor ?? 0) >= 0 ? '+' : '−'}${formatMinor(Math.abs(r.amountMinor ?? 0), currency)}`;
+  return { text: `${signed}/${cad}`, title: `${r.name}: ${signed} ${r.cadence}` };
+}
 
 interface PageCopy {
   title: string;
@@ -88,14 +106,37 @@ export function HoldingsPage({ kind }: { kind: HoldingKind }) {
     [holdings.data],
   );
 
+  // Active recurring schedules grouped by the holding they target, so each
+  // entry can show an indicator of the increase/decrease applied to it.
+  const recurring = useRecurring();
+  const recurringByTarget = useMemo(() => {
+    const map = new Map<number, RecurringDto[]>();
+    for (const r of recurring.data ?? []) {
+      if (r.active && r.targetType === side) {
+        map.set(r.targetId, [...(map.get(r.targetId) ?? []), r]);
+      }
+    }
+    return map;
+  }, [recurring.data, side]);
+
   const hasMarketEntries = kind === 'assets' && (holdings.data ?? []).some((h) => h.valuationMode === 'market');
 
   if (holdings.isLoading) return <Spinner label={`Loading ${copy.title.toLowerCase()}`} />;
 
   return (
     <div className="space-y-5">
-      <header className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">{copy.title}</h1>
+      <header className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-2">
+        <div className="flex items-baseline gap-2.5">
+          <h1 className="text-xl font-semibold">{copy.title}</h1>
+          {groups.length > 0 && (
+            <span
+              aria-label={`Total ${copy.title.toLowerCase()}`}
+              className={`tabular text-base font-semibold ${copy.tone === 'gain' ? 'text-gain-400' : 'text-loss-400'}`}
+            >
+              {formatMinor(total, currency)}
+            </span>
+          )}
+        </div>
         <div className="flex gap-2">
           {hasMarketEntries && !historical && (
             <Button
@@ -109,17 +150,6 @@ export function HoldingsPage({ kind }: { kind: HoldingKind }) {
           {!historical && <Button onClick={() => setAdding(true)}>{copy.addLabel}</Button>}
         </div>
       </header>
-
-      {groups.length > 0 && (
-        <Card className="flex items-center justify-between px-4 py-3.5">
-          <span className="text-xs font-medium uppercase tracking-wider text-ink-400">
-            Total {copy.title.toLowerCase()}
-          </span>
-          <span className={`tabular text-xl font-semibold ${copy.tone === 'gain' ? 'text-gain-400' : 'text-loss-400'}`}>
-            {formatMinor(total, currency)}
-          </span>
-        </Card>
-      )}
 
       {historical && (
         <p className="tabular text-xs font-medium uppercase tracking-wider text-loss-400">
@@ -176,6 +206,9 @@ export function HoldingsPage({ kind }: { kind: HoldingKind }) {
                           {h.valuationMode === 'market' ? (
                             <span className="mt-0.5 inline-block rounded bg-gold-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-gold-400">
                               {h.marketSymbol} × {h.quantity}
+                              {h.quantity
+                                ? ` @ ${formatMinor(Math.round(h.currentValueMinor / h.quantity), currency)}`
+                                : ''}
                             </span>
                           ) : h.valuationMode === 'property_index' ? (
                             <span className="mt-0.5 inline-block rounded bg-gold-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-gold-400">
@@ -196,6 +229,18 @@ export function HoldingsPage({ kind }: { kind: HoldingKind }) {
                               ⚠ Incomplete history
                             </span>
                           )}
+                          {(recurringByTarget.get(h.id) ?? []).map((r) => {
+                            const b = recurringBadge(r, currency);
+                            return (
+                              <span
+                                key={r.id}
+                                title={b.title}
+                                className="mt-0.5 inline-block rounded bg-gold-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-gold-400"
+                              >
+                                ↻ {b.text}
+                              </span>
+                            );
+                          })}
                         </span>
                       </span>
                       <span className="flex shrink-0 flex-col items-end">
@@ -512,6 +557,11 @@ function HoldingForm({
                 {verified!.exchange && (
                   <p className="ml-[20px] text-xs text-ink-400">
                     {verified!.exchange} · priced in {verified!.currency}
+                  </p>
+                )}
+                {verified!.priceMinor != null && (
+                  <p className="ml-[20px] text-xs text-gold-400">
+                    Current price: {formatMinor(verified!.priceMinor, verified!.currency)} per unit
                   </p>
                 )}
               </div>
