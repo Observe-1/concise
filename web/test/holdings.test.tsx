@@ -326,6 +326,32 @@ describe('assets page', () => {
     expect(patch!.body).toMatchObject({ valuationMode: 'property_index', country: 'GB' });
   });
 
+  it('reveals a present-day value field once a backdate is set and sends it', async () => {
+    const calls = mockFetch([
+      [/\/api\/auth\/me/, { user: demoUser }],
+      [/\/api\/assets$/, []],
+    ]);
+    renderWithProviders(<App />, { route: '/assets' });
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /add asset/i }));
+    await user.type(screen.getByLabelText(/^name$/i), 'Painting');
+    await user.type(screen.getByLabelText(/^value$/i), '5000');
+
+    // The present-day field is hidden until a backdate is chosen.
+    expect(screen.queryByLabelText(/present-day value/i)).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/backdate/i), { target: { value: '2020-01-01' } });
+    await user.type(await screen.findByLabelText(/present-day value/i), '12000');
+    await user.click(screen.getByRole('button', { name: /^add$/i }));
+
+    await waitFor(() => {
+      const post = calls.find((c) => c.method === 'POST' && /\/api\/assets$/.test(c.url));
+      expect(post!.body).toMatchObject({
+        name: 'Painting', valueMinor: 500_000, asOf: '2020-01-01', presentValueMinor: 1_200_000,
+      });
+    });
+  });
+
   it('rejects invalid amounts before hitting the API', async () => {
     mockFetch([
       [/\/api\/auth\/me/, { user: demoUser }],

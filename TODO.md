@@ -1,6 +1,6 @@
 # TODO — single source of truth for progress
 
-**Status: complete (phases 1–6 + four feature batches). Deployment is out of scope.**
+**Status: phases 1–6 + feature batches complete. Batch 2026-06-17 in progress. Deployment is out of scope.**
 
 ## Phase 1: System architecture
 - [x] Tech stack decisions (Node 24 + node:sqlite + Express 5 / React 19 + Vite + Tailwind 4)
@@ -134,6 +134,22 @@ Implemented strictly in order; one commit per feature.
       exit button that shifts when both modes are active
 - [x] 10. Settings: delete all data for the account, gated by a confirmation
       tickbox and typing "delete all" exactly (error message otherwise)
+
+## Feature batch (2026-06-17)
+Implemented strictly in order; one commit per feature.
+- [x] 1. Backdated holdings: an optional **present-day value** field (in addition
+      to the historic value) recorded as a second valuation today. For vehicle
+      **depreciation**, when a present-day value is given the curve is anchored
+      on it (today) and the historic value is ignored — depreciation is computed
+      from the current value only; otherwise it operates normally.
+- [ ] 2. Many more market instruments across **multiple stock exchanges**
+      (London VUAG/VWRP/VUKE/ISF/…, plus US/EU listings), each carrying its
+      native currency and exchange; the lookup/verify step shows both.
+- [ ] 3. Currency that actually converts: a rough static FX table. Changing the
+      currency setting re-denominates all stored values at the latest rate, and
+      any value pulled from a market/valuation source in a foreign currency is
+      converted to the user's currency before it is stored or used.
+- [ ] 4. A total figure at the top of the Assets and Liabilities pages.
 
 ## Bug fixes (2026-06-13)
 - [x] 1. View-as scrubber: the circle handle, though aligned along the chart's

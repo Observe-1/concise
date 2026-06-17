@@ -232,6 +232,38 @@ describe('assets & liabilities API', () => {
       expect(snap.net_worth_minor).toBe(-2_000_00);
     });
 
+    it('records an optional present-day value alongside the historic one', async () => {
+      // Backdated to 1 Jun at 100.00, worth 200.00 today (11 Jun).
+      const res = await csrf(agent.post('/api/assets')).send({
+        category: 'cash', name: 'Painting', valueMinor: 100_00,
+        presentValueMinor: 200_00, asOf: '2026-06-01',
+      });
+      expect(res.status).toBe(201);
+      expect(res.body.currentValueMinor).toBe(200_00);
+
+      const detail = await agent.get(`/api/assets/${res.body.id}`);
+      expect(detail.body.valuations).toHaveLength(2); // historic + present
+
+      // Two manual entries with a gap ramp on the graph (1 Jun → 11 Jun).
+      const snap = (d: string) => (world.ctx.db
+        .prepare('SELECT assets_minor FROM snapshots WHERE snapshot_date = ?')
+        .get(d) as { assets_minor: number }).assets_minor;
+      expect(snap('2026-06-01')).toBe(100_00);
+      expect(snap('2026-06-06')).toBe(150_00);
+      expect(snap('2026-06-11')).toBe(200_00);
+    });
+
+    it('records a present-day value for backdated liabilities too', async () => {
+      const res = await csrf(agent.post('/api/liabilities')).send({
+        category: 'mortgage', name: 'Mortgage', valueMinor: 200_000_00,
+        presentValueMinor: 150_000_00, asOf: '2026-06-01',
+      });
+      expect(res.status).toBe(201);
+      expect(res.body.currentValueMinor).toBe(150_000_00);
+      const detail = await agent.get(`/api/liabilities/${res.body.id}`);
+      expect(detail.body.valuations).toHaveLength(2);
+    });
+
     it('rejects future or invalid backdates', async () => {
       await csrf(agent.post('/api/assets'))
         .send({ category: 'cash', name: 'X', valueMinor: 1, asOf: '2026-06-12' }).expect(400);
@@ -374,6 +406,44 @@ describe('assets & liabilities API', () => {
       expect(snap('2025-06-11')).toBe(2_000_000);
       expect(snap('2025-12-01')).toBeLessThan(snap('2025-06-11'));
       expect(snap('2026-06-01')).toBeLessThan(snap('2025-12-01'));
+    });
+
+    it('anchors depreciation on the present-day value, ignoring the historic one', async () => {
+      // Backdated a year, with an (absurd) historic value that must be ignored,
+      // and a present-day value of 15,000.00 that anchors the curve on today.
+      const res = await csrf(agent.post('/api/assets')).send({
+        category: 'vehicles', name: 'Old car', valuationMode: 'depreciation',
+        manufactureDate: '2024-06-11', valueMinor: 99_999_999,
+        presentValueMinor: 1_500_000, asOf: '2025-06-11',
+      });
+      expect(res.status).toBe(201);
+      expect(res.body.currentValueMinor).toBe(1_500_000);
+
+      // The ignored historic value never appears in the history.
+      const detail = await agent.get(`/api/assets/${res.body.id}`);
+      const values = (detail.body.valuations as { valueMinor: number }[]).map((v) => v.valueMinor);
+      expect(values).not.toContain(99_999_999);
+
+      // The past is reconstructed by reversing depreciation from today's value:
+      // a year ago the car was worth more than it is now.
+      const snap = (d: string) => (world.ctx.db
+        .prepare('SELECT assets_minor FROM snapshots WHERE snapshot_date = ?')
+        .get(d) as { assets_minor: number }).assets_minor;
+      expect(snap('2026-06-11')).toBe(1_500_000);
+      expect(snap('2025-06-11')).toBe(
+        vehicleValueMinor(1_500_000, '2026-06-11', '2024-06-11', '2025-06-11'),
+      );
+      expect(snap('2025-06-11')).toBeGreaterThan(snap('2026-06-11'));
+    });
+
+    it('depreciates normally from the historic value when no present value is given', async () => {
+      const res = await csrf(agent.post('/api/assets')).send({
+        category: 'vehicles', name: 'Old car', valuationMode: 'depreciation',
+        manufactureDate: '2024-06-11', valueMinor: 2_000_000, asOf: '2025-06-11',
+      });
+      expect(res.body.currentValueMinor).toBe(
+        vehicleValueMinor(2_000_000, '2025-06-11', '2024-06-11', '2026-06-11'),
+      );
     });
 
     it('the daily refresh re-prices depreciating vehicles downwards', async () => {

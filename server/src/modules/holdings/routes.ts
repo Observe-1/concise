@@ -38,6 +38,7 @@ function buildSchemas(k: HoldingKind) {
   const create = z.object({
     ...base, ...market, ...liabilityExtras,
     valueMinor: valueSchema.optional(),
+    presentValueMinor: valueSchema.optional(),
     asOf: dateStringSchema.optional(),
   })
     .refine((data) => {
@@ -83,13 +84,16 @@ export function holdingsRoutes(ctx: AppContext, k: HoldingKind): Router {
   router.post('/', (req, res) => {
     const input = parseBody(schemas.create, req.body) as Record<string, unknown> & {
       valuationMode?: string; marketSymbol?: string; quantity?: number; valueMinor?: number;
-      interestRatePct?: number; asOf?: string; name?: string;
+      presentValueMinor?: number; interestRatePct?: number; asOf?: string; name?: string;
     };
     if (input.valuationMode === 'market') {
       if (!input.marketSymbol || !input.quantity) {
         throw badRequest('marketSymbol and quantity are required for market-valued entries');
       }
-    } else if (input.valueMinor === undefined) {
+    } else if (input.valueMinor === undefined && !(input.asOf && input.presentValueMinor !== undefined)) {
+      // A backdated entry may supply only a present-day value (the historic
+      // value is then optional — used by vehicle depreciation, which anchors on
+      // the present-day figure).
       throw badRequest('valueMinor is required for manually valued entries');
     }
     const dto = createHolding(ctx, k, req.user!.id, input as never);

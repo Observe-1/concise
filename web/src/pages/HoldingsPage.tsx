@@ -224,6 +224,8 @@ function HoldingForm({
   const [manufactureDate, setManufactureDate] = useState(existing?.manufactureDate ?? '');
   const [value, setValue] = useState(existing ? minorToInput(existing.currentValueMinor) : '');
   const [asOf, setAsOf] = useState('');
+  // Optional present-day value recorded alongside a backdated historic value.
+  const [presentValue, setPresentValue] = useState('');
   // Liabilities only (on create): an interest rate that sets up a yearly
   // percent schedule growing the balance.
   const [interestRate, setInterestRate] = useState('');
@@ -240,6 +242,9 @@ function HoldingForm({
   const symbolUnchanged = existing?.marketSymbol === symbolUpper;
   const symbolVerified = verified?.symbol === symbolUpper;
   const needsVerification = isMarket && !symbolUnchanged && !symbolVerified;
+  // A present-day value can be added only when creating a backdated, non-market
+  // holding (market values are provider-derived).
+  const showPresentValue = !existing && asOf.trim() !== '' && !isMarket;
 
   const onVerifySymbol = () => {
     setFormError(null);
@@ -255,6 +260,14 @@ function HoldingForm({
     setFormError(null);
 
     const valueMinor = parseToMinor(value);
+    const presentMinor = showPresentValue && presentValue.trim() ? parseToMinor(presentValue) : null;
+    if (showPresentValue && presentValue.trim() && presentMinor === null) {
+      setFormError('Enter a valid present-day amount, e.g. 1500.00');
+      return;
+    }
+    // Vehicle depreciation can be anchored on the present-day value alone — the
+    // backdated historic value is then optional.
+    const depreciationFromPresent = mode === 'depreciation' && presentMinor !== null;
     if (isMarket) {
       if (!symbol.trim() || !quantity || Number(quantity) <= 0) {
         setFormError('Market entries need a symbol and a positive quantity.');
@@ -264,7 +277,7 @@ function HoldingForm({
         setFormError('Verify the symbol first so we can confirm the instrument.');
         return;
       }
-    } else if (valueMinor === null) {
+    } else if (valueMinor === null && !depreciationFromPresent) {
       setFormError('Enter a valid amount, e.g. 1250.00');
       return;
     }
@@ -291,8 +304,10 @@ function HoldingForm({
       : mode === 'property_index'
         ? { valuationMode: 'property_index' as const, country, valueMinor: valueMinor! }
         : mode === 'depreciation'
-          ? { valuationMode: 'depreciation' as const, manufactureDate, valueMinor: valueMinor! }
+          ? { valuationMode: 'depreciation' as const, manufactureDate,
+              ...(valueMinor !== null ? { valueMinor } : {}) }
           : { valuationMode: 'manual' as const, valueMinor: valueMinor! };
+    const presentField = presentMinor !== null ? { presentValueMinor: presentMinor } : {};
 
     if (!existing) {
       create.mutate(
@@ -302,6 +317,7 @@ function HoldingForm({
             ? { ...metalField, ...modeFields }
             : { valueMinor: valueMinor!, ...(interestRatePct ? { interestRatePct } : {}) }),
           ...(asOf ? { asOf } : {}),
+          ...presentField,
         },
         { onSuccess: onClose, onError },
       );
@@ -488,13 +504,16 @@ function HoldingForm({
                 : mode === 'property_index'
                   ? 'Value on the start date — the index applies the average change from there.'
                   : mode === 'depreciation'
-                    ? 'Value on the start date — depreciation is applied from there by vehicle age.'
+                    ? showPresentValue
+                      ? 'Value when acquired (optional) — a present-day value below takes over the depreciation if set.'
+                      : 'Value on the start date — depreciation is applied from there by vehicle age.'
                     : undefined
             }
           >
             {(id) => (
               <Input id={id} value={value} onChange={(e) => setValue(e.target.value)}
-                inputMode="decimal" placeholder="0.00" required />
+                inputMode="decimal" placeholder="0.00"
+                required={!(mode === 'depreciation' && showPresentValue)} />
             )}
           </Field>
         )}
@@ -534,6 +553,27 @@ function HoldingForm({
                 value={asOf}
                 max={new Date().toISOString().slice(0, 10)}
                 onChange={(e) => setAsOf(e.target.value)}
+              />
+            )}
+          </Field>
+        )}
+
+        {showPresentValue && (
+          <Field
+            label="Present-day value (optional)"
+            hint={
+              mode === 'depreciation'
+                ? "Today's value. Depreciation is calculated from this — the backdated figure above is ignored when this is set."
+                : 'What it is worth today, recorded in addition to the backdated value above.'
+            }
+          >
+            {(id) => (
+              <Input
+                id={id}
+                value={presentValue}
+                onChange={(e) => setPresentValue(e.target.value)}
+                inputMode="decimal"
+                placeholder="0.00"
               />
             )}
           </Field>

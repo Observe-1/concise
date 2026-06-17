@@ -173,6 +173,8 @@ export interface HoldingInput {
   country?: string | null;
   manufactureDate?: string | null;
   asOf?: string;
+  /** Optional present-day value recorded alongside a backdated historic value. */
+  presentValueMinor?: number;
   /** Liabilities only: auto-creates a yearly percent interest schedule. */
   interestRatePct?: number;
 }

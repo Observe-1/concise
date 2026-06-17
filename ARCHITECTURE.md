@@ -138,7 +138,13 @@ day.
   day priced as of each date (historically accurate, not flat at one old
   price); days the provider cannot price are skipped and flag the asset
   (`history_price_missing` → `historicalPriceMissing`), which the holdings
-  page shows as a hoverable "incomplete history" label.
+  page shows as a hoverable "incomplete history" label. A backdated,
+  non-market entry may also carry an optional **present-day value**, recorded as
+  a second valuation today in addition to the historic one (the graph ramps
+  between them). For vehicle **depreciation** a present-day value is special: it
+  anchors the curve on today and the historic value is ignored — the past is
+  reconstructed by reversing depreciation from the current value (see §4 Market
+  valuations).
 - `GET /api/assets|liabilities/changes?range=1M|…|ALL` returns each holding's
   percent change over the range (`{ id, changePct }`): the base is the latest
   valuation on or before the period start (ALL measures from the first
@@ -308,7 +314,11 @@ day.
   Both formulas grow from the holding's **latest `manual` valuation** (its
   re-anchorable base), so "Update value" re-bases them; backdated model
   entries backfill one valuation per day like market entries. (Property and
-  vehicles are never `market`-valued — they are not exchange-traded.)
+  vehicles are never `market`-valued — they are not exchange-traded.) When a
+  backdated depreciating vehicle is given a **present-day value**, depreciation
+  is anchored on *today's* value instead of the historic one: the backfill
+  reverses the depreciation curve from the present value back over the period
+  (older = worth more) and the historic figure is not used.
 - Daily job + `POST /api/market/refresh` append valuations for every
   auto-valued asset (market price or model formula), at most one per day.
 

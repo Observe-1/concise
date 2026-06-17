@@ -41,6 +41,13 @@ export interface CreateHoldingInput {
   manufactureDate?: string;
   /** Optional backdate (YYYY-MM-DD): records the first valuation on this past date. */
   asOf?: string;
+  /**
+   * Optional present-day value for a backdated, non-market holding: recorded as
+   * a second valuation today, in addition to the historic value at `asOf`. For
+   * vehicle depreciation it becomes the anchor (the historic value is then
+   * ignored — see createHolding).
+   */
+  presentValueMinor?: number;
 }
 
 export interface UpdateHoldingInput {
@@ -353,18 +360,35 @@ export function createHolding(
     // snapshot history is recomputed from there. Backdated market entries
     // are priced per day over the whole period (not flat at one old price);
     // days the provider has no data for flag the holding instead. Model
-    // methods (property index) likewise backfill one value per day.
+    // methods (property index / depreciation) likewise backfill one value per
+    // day. A backdated, non-market entry may also carry a present-day value —
+    // recorded as a second valuation today, in addition to the historic one.
     const start = input.asOf && input.asOf < today ? input.asOf : null;
-    if (isMarket && start) {
-      const { missing, inserted } = backfillMarketValuations(
-        ctx, k, id, input.marketSymbol!.toUpperCase(), input.quantity!, start, today,
+    const present = !isMarket && start ? input.presentValueMinor : undefined;
+    if (isMarket) {
+      if (start) {
+        const { missing, inserted } = backfillMarketValuations(
+          ctx, k, id, input.marketSymbol!.toUpperCase(), input.quantity!, start, today,
+        );
+        if (inserted === 0) {
+          throw badRequest(`No price history available for ${input.marketSymbol!.toUpperCase()}`);
+        }
+        if (missing) {
+          ctx.db.prepare('UPDATE assets SET history_price_missing = 1 WHERE id = ?').run(id);
+        }
+      } else {
+        insertValuation(ctx, k, id, marketValue(ctx, input.marketSymbol!, input.quantity!), 'market');
+      }
+    } else if (mode === 'depreciation' && start && present !== undefined) {
+      // Special rule: when a present-day value is given, vehicle depreciation is
+      // anchored on it (today) and the historic value is not used. The past is
+      // reconstructed by reversing the depreciation curve from today's value
+      // back to each day; today itself is the re-anchorable manual base.
+      backfillModelValuations(
+        ctx, k, id, start, addDays(today, -1),
+        (d) => vehicleValueMinor(present, today, manufactureDate!, d),
       );
-      if (inserted === 0) {
-        throw badRequest(`No price history available for ${input.marketSymbol!.toUpperCase()}`);
-      }
-      if (missing) {
-        ctx.db.prepare('UPDATE assets SET history_price_missing = 1 WHERE id = ?').run(id);
-      }
+      insertValuation(ctx, k, id, present, 'manual');
     } else if (mode === 'property_index' || mode === 'depreciation') {
       const base = input.valueMinor ?? 0;
       insertValuation(ctx, k, id, base, 'manual', start ? `${start}T12:00:00.000Z` : undefined);
@@ -372,16 +396,22 @@ export function createHolding(
         const valueOn = mode === 'property_index'
           ? (d: string) => propertyValueMinor(base, start, d, PROPERTY_COUNTRIES[country!]!.annualRatePct)
           : (d: string) => vehicleValueMinor(base, start, manufactureDate!, d);
-        backfillModelValuations(ctx, k, id, addDays(start, 1), today, valueOn);
+        // A present-day value re-anchors today, so the model backfill stops the
+        // day before and the present value is recorded as today's manual base.
+        backfillModelValuations(
+          ctx, k, id, addDays(start, 1), present !== undefined ? addDays(today, -1) : today, valueOn,
+        );
+        if (present !== undefined) insertValuation(ctx, k, id, present, 'manual');
       }
     } else {
-      const value = isMarket
-        ? marketValue(ctx, input.marketSymbol!, input.quantity!)
-        : input.valueMinor ?? 0;
+      // Manual asset, or any liability.
       insertValuation(
-        ctx, k, id, value, isMarket ? 'market' : 'manual',
+        ctx, k, id, input.valueMinor ?? 0, 'manual',
         start ? `${start}T12:00:00.000Z` : undefined,
       );
+      // A backdated manual entry with a present-day value records it today too,
+      // so the graph ramps from the historic figure to the current one.
+      if (start && present !== undefined) insertValuation(ctx, k, id, present, 'manual');
     }
     if (start) {
       recomputeSnapshotRange(ctx.db, userId, start, today);
