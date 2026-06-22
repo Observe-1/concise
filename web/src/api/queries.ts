@@ -92,12 +92,14 @@ export function useSummary(asOf?: string | null, predict?: { range: HistoryRange
  * With `predict`, the percentages become projected growth from today's live
  * totals to the projected (horizon or view-as) date.
  */
-export function useDashboardChanges(range: HistoryRange, asOf?: string | null, predict = false) {
+export function useDashboardChanges(
+  range: HistoryRange, asOf?: string | null, predict = false, real = false,
+) {
   return useQuery({
-    queryKey: ['dashboard', 'changes', range, asOf ?? null, predict],
+    queryKey: ['dashboard', 'changes', range, asOf ?? null, predict, real],
     queryFn: () =>
       api<DashboardChangesDto>(
-        `/api/dashboard/changes?range=${range}${asOf ? `&asOf=${asOf}` : ''}${predict ? '&predict=1' : ''}`,
+        `/api/dashboard/changes?range=${range}${asOf ? `&asOf=${asOf}` : ''}${predict ? '&predict=1' : ''}${real ? '&real=1' : ''}`,
       ),
     placeholderData: keepPreviousData,
   });
@@ -114,12 +116,12 @@ export function usePrediction(range: HistoryRange, enabled: boolean) {
   });
 }
 
-export function useHistory(range: HistoryRange, trendWindow?: number) {
+export function useHistory(range: HistoryRange, trendWindow?: number, real = false) {
   return useQuery({
-    queryKey: ['dashboard', 'history', range, trendWindow ?? null],
+    queryKey: ['dashboard', 'history', range, trendWindow ?? null, real],
     queryFn: () =>
       api<HistoryDto>(
-        `/api/dashboard/history?range=${range}${trendWindow ? `&trendWindow=${trendWindow}` : ''}`,
+        `/api/dashboard/history?range=${range}${trendWindow ? `&trendWindow=${trendWindow}` : ''}${real ? '&real=1' : ''}`,
       ),
     placeholderData: keepPreviousData,
   });

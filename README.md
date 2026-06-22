@@ -14,7 +14,9 @@ all in a fast, private, self-hostable app.
   (slider next to the graph; stable across range changes), graph smoothing
   that ramps sparse manual revaluations over the gap instead of one-day
   cliffs, and age markers on 5-year-plus ranges (set your birth year in
-  Settings → Calculation).
+  Settings → Calculation). A **Nominal / Real** toggle re-expresses the graph
+  and the percent-change badges in today's money (rough inflation adjustment),
+  so long-range growth reflects real progress rather than nominal drift.
 - **Historical view mode** — drag the red circle under the graph to pin the
   whole app to a past date: every page shows the portfolio exactly as it
   stood then (later entries vanish, values are as-of), survives navigation,

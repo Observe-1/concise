@@ -31,18 +31,22 @@ export function DashboardPage() {
   const [range, setRange] = useState<HistoryRange>('6M');
   const [fullscreen, setFullscreen] = useState(false);
   const [predicting, setPredicting] = useState(false);
+  const [real, setReal] = useState(false);
   const [trendWindow, setTrendWindow] = useState(TREND_WINDOW_DEFAULT);
   // In prediction mode every surrounding number reflects the projected
   // portfolio (the cards, breakdowns and percentages), not just the graph.
   // ALL has no bounded future, so it can't drive a projection.
   const predict = predicting && range !== 'ALL';
+  // "Real terms": deflate the graph and the percent changes to today's money.
+  // Prediction projects nominal future values, so the two modes are exclusive.
+  const showReal = real && !predicting;
   const summary = useSummary(asOf, predict ? { range } : undefined);
   // Debounced so dragging the slider doesn't fire a request per step.
-  const history = useHistory(range, useDebouncedValue(trendWindow));
+  const history = useHistory(range, useDebouncedValue(trendWindow), showReal);
   const prediction = usePrediction(range, predicting);
   // Portfolio % change shown on the cards: over the graph's selected range, or
-  // projected growth vs today while predicting.
-  const changes = useDashboardChanges(range, asOf, predict).data;
+  // projected growth vs today while predicting, in nominal or real terms.
+  const changes = useDashboardChanges(range, asOf, predict, showReal).data;
   // Individual holdings drive the two-level composition pie (as of the view-as
   // date when one is pinned).
   const pieAssets = useHoldings('assets', asOf);
@@ -80,6 +84,31 @@ export function DashboardPage() {
           ranges={predicting ? PREDICTION_RANGES : RANGES}
         />
         <div className="flex shrink-0 items-center gap-2">
+          {/* Nominal vs real (inflation-adjusted) terms. Meaningless over
+              projected values, so hidden in prediction mode like the trend. */}
+          {!predicting && (
+            <div role="group" aria-label="Value basis" className="flex shrink-0 rounded-lg bg-ink-800/60 p-0.5">
+              {([['nominal', 'Nominal'], ['real', 'Real']] as const).map(([key, label]) => {
+                const active = (key === 'real') === real;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setReal(key === 'real')}
+                    aria-pressed={active}
+                    title={key === 'real'
+                      ? 'Adjust for inflation — show values in today’s money'
+                      : 'Show the actual recorded amounts'}
+                    className={`rounded-md px-2 py-1 text-[10px] font-medium uppercase tracking-wider transition-colors ${
+                      active ? 'bg-gold-500 text-ink-950' : 'text-ink-400 hover:text-ink-100'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
           {/* The trend line is hidden in prediction mode, so its slider is too. */}
           {!predicting && (
             <label
@@ -152,7 +181,7 @@ export function DashboardPage() {
             <span className="flex items-baseline gap-1.5">
               <ChangeBadge pct={changes.netWorthChangePct} />
               <span className="text-[10px] uppercase tracking-wider text-ink-600">
-                {predict ? 'projected' : rangeLabel(range)}
+                {predict ? 'projected' : showReal ? `${rangeLabel(range)} · real` : rangeLabel(range)}
               </span>
             </span>
           )}
@@ -160,6 +189,11 @@ export function DashboardPage() {
         <p className="tabular mt-1 text-3xl font-semibold text-gold-400 sm:text-4xl">
           {formatMinor(s.netWorthMinor, currency)}
         </p>
+        {showReal && (
+          <p className="mt-0.5 text-[10px] uppercase tracking-wider text-ink-600">
+            Real terms · today’s money
+          </p>
+        )}
         <div className="mt-4 grid grid-cols-2 gap-3">
           <div className="rounded-xl bg-ink-800/60 px-3.5 py-3">
             <p className="text-[11px] font-medium uppercase tracking-wider text-ink-400">Assets</p>

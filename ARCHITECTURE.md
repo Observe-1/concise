@@ -237,7 +237,7 @@ also builds the per-holding detail line graph (§4) so it smooths identically.
   the future: projected to the range's forward horizon by default, or to the
   view-as date when one is pinned (a non-future date / the ALL range falls back
   to the live summary).
-- `GET /api/dashboard/changes?range=…[&asOf=…]` — percent change of the
+- `GET /api/dashboard/changes?range=…[&asOf=…][&real=1]` — percent change of the
   assets, liabilities and net-worth totals over the range, read from the
   snapshot series (so it matches the graph): base = latest snapshot on or
   before the period start (ALL from the earliest snapshot), each field `null`
@@ -245,14 +245,17 @@ also builds the per-holding detail line graph (§4) so it smooths identically.
   non-positive). The summary cards show these as green/red/grey badges keyed
   to the graph's selected range. With `?predict=1` the percentages become
   projected **growth from today's live totals** to the projected (horizon or
-  view-as) date.
-- `GET /api/dashboard/history?range=1M|3M|6M|YTD|1Y|5Y|10Y|20Y|ALL&trendWindow=N` —
+  view-as) date. With `?real=1` (see **Real terms** below) both ends of the
+  period are expressed in the reference date's money before the change is
+  measured, so the badge shows inflation-adjusted growth.
+- `GET /api/dashboard/history?range=1M|3M|6M|YTD|1Y|5Y|10Y|20Y|ALL&trendWindow=N[&real=1]` —
   snapshot series for the graph. Every point carries `trendMinor`: a centred
   moving average (window `trendWindow` days, 7–365, default 91 — the UI
   exposes it as a slider next to the graph's expand button) computed over the
   **full** history before the range is sliced, so a date's trend value is
   identical whatever range is requested (the trend never re-fits to the
-  visible window).
+  visible window). `?real=1` deflates the series to today's money (see **Real
+  terms**).
 - The chart shows a muted age marker (vertical line labelled "Age N") when
   the user has set a birth year and the visible series spans ≥ 5 years.
 - **Composition pie** (`components/PieCharts.tsx`, `NetWorthPie`): a two-level
@@ -263,6 +266,18 @@ also builds the per-holding detail line graph (§4) so it smooths identically.
   each individual aligns with its inner half (both rings share total + start
   angle). The inner ring has a colour key; the outer ring does not. Hovering any
   segment highlights it and shows a tooltip; clicking expands to full screen.
+- **Real (inflation-adjusted) terms:** a `Nominal | Real` toggle in the chart
+  controls (hidden in prediction mode — projections are nominal). When **Real**
+  is selected the dashboard graph and the summary-card percent changes are sent
+  `&real=1`: each snapshot is scaled by `realFactor(date → today)` from a rough
+  static annual-inflation table (`lib/inflation.ts`), so every figure is
+  expressed in *today's* money. Today's factor is 1, so the latest point and the
+  live net-worth value are unchanged — only the *shape* of the history and the
+  growth percentages change, revealing real progress rather than nominal drift
+  over long ranges. The trend is computed over the deflated series, and the
+  inflation table is deliberately approximate and generic, mirroring the rough
+  FX and property-index tables (§6.4). The toggle is exclusive with prediction
+  mode (which projects nominal future values).
 
 ### Prediction mode
 - `GET /api/dashboard/prediction?range=…` (`modules/dashboard/prediction.ts`)
@@ -399,7 +414,7 @@ concise/
 │       ├── app.ts        # express app factory (DI: db, clock, prices)
 │       ├── config.ts     # env-driven configuration
 │       ├── db/           # connection, migrate.ts, migrations/*.sql, seed.ts
-│       ├── lib/          # passwords, money, dates, http, series (trend/downsample) helpers
+│       ├── lib/          # passwords, money, dates, http, series (trend/downsample), fx, inflation helpers
 │       ├── middleware/   # auth, csrf, rate-limit, errors, audit
 │       ├── modules/      # auth/ assets/ liabilities/ recurring/ backup/
 │       │                 # dashboard/ market/ settings/  (routes + service)
@@ -430,7 +445,11 @@ concise/
    it is stored or used, and **changing the currency setting re-denominates the
    whole portfolio and its history** at the latest rate (a single constant
    factor, so the graph's shape is preserved — only the units change). Rates are
-   deliberately approximate, mirroring the static property-index table.
+   deliberately approximate, mirroring the static property-index table. The
+   dashboard's **real-terms** toggle (§4 Dashboard) takes the same rough-table
+   approach: a generic static annual-inflation series (`lib/inflation.ts`)
+   deflates the graph and percentages to today's money for display only — it
+   never touches stored values.
 5. **In-process scheduler over external cron** — one artifact to deploy; jobs
    are idempotent so missed ticks self-heal on next start.
 6. **Server runtime is compiled** — dev uses `tsx watch`; production runs

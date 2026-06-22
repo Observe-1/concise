@@ -6,6 +6,7 @@ import type {
 } from '../../types/api.js';
 import { addDays, HISTORY_RANGES, isHistoryRange, rangeStart, todayISO } from '../../lib/dates.js';
 import { asOfParam, badRequest } from '../../lib/http.js';
+import { realFactor } from '../../lib/inflation.js';
 import {
   computeTrend, downsample, MAX_GRAPH_POINTS,
   TREND_WINDOW_DEFAULT_DAYS, TREND_WINDOW_MAX_DAYS, TREND_WINDOW_MIN_DAYS,
@@ -126,31 +127,36 @@ export function dashboardRoutes(ctx: AppContext): Router {
 
     const ref = asOf ?? todayISO(ctx.now);
     const start = rangeStart(range, ref);
+    type Snap = { date: string; assets_minor: number; liabilities_minor: number; net_worth_minor: number };
     const snapAt = (cutoff: string) =>
       ctx.db
         .prepare(
-          `SELECT assets_minor, liabilities_minor, net_worth_minor FROM snapshots
+          `SELECT snapshot_date AS date, assets_minor, liabilities_minor, net_worth_minor FROM snapshots
            WHERE user_id = ? AND snapshot_date <= ? ORDER BY snapshot_date DESC LIMIT 1`,
         )
-        .get(req.user!.id, cutoff) as
-        | { assets_minor: number; liabilities_minor: number; net_worth_minor: number }
-        | undefined;
+        .get(req.user!.id, cutoff) as Snap | undefined;
     const end = snapAt(ref);
     const base = start
       ? snapAt(start)
       : (ctx.db
           .prepare(
-            `SELECT assets_minor, liabilities_minor, net_worth_minor FROM snapshots
+            `SELECT snapshot_date AS date, assets_minor, liabilities_minor, net_worth_minor FROM snapshots
              WHERE user_id = ? ORDER BY snapshot_date LIMIT 1`,
           )
-          .get(req.user!.id) as
-          | { assets_minor: number; liabilities_minor: number; net_worth_minor: number }
-          | undefined);
+          .get(req.user!.id) as Snap | undefined);
+
+    // "Real terms": express both ends of the period in the reference date's
+    // money before measuring growth, so inflation isn't counted as progress.
+    // The base (a past snapshot) is inflated up to `ref`; the end barely moves.
+    const realTerms = req.query.real === '1';
+    const valueOf = (snap: Snap, key: keyof Omit<Snap, 'date'>): number =>
+      realTerms ? Math.round(snap[key] * realFactor(snap.date, ref)) : snap[key];
     const dto: DashboardChangesDto = {
       range: range as HistoryRange,
-      assetsChangePct: end && base ? pct(end.assets_minor, base.assets_minor) : null,
-      liabilitiesChangePct: end && base ? pct(end.liabilities_minor, base.liabilities_minor) : null,
-      netWorthChangePct: end && base ? pct(end.net_worth_minor, base.net_worth_minor) : null,
+      assetsChangePct: end && base ? pct(valueOf(end, 'assets_minor'), valueOf(base, 'assets_minor')) : null,
+      liabilitiesChangePct:
+        end && base ? pct(valueOf(end, 'liabilities_minor'), valueOf(base, 'liabilities_minor')) : null,
+      netWorthChangePct: end && base ? pct(valueOf(end, 'net_worth_minor'), valueOf(base, 'net_worth_minor')) : null,
     };
     res.json(dto);
   });
@@ -181,7 +187,15 @@ export function dashboardRoutes(ctx: AppContext): Router {
         );
       }
     }
-    const start = rangeStart(range as HistoryRange, todayISO(ctx.now));
+    const today = todayISO(ctx.now);
+    const start = rangeStart(range as HistoryRange, today);
+
+    // "Real terms" (?real=1): express every snapshot in *today's* money so that
+    // over long ranges inflation isn't mistaken for net-worth growth. Each
+    // date's value is scaled by realFactor(date → today); today's factor is 1,
+    // so the latest point is unchanged. Nominal mode keeps factor = 1.
+    const realTerms = req.query.real === '1';
+    const factor = (date: string): number => (realTerms ? realFactor(date, today) : 1);
 
     // Always load the FULL history: the trend is derived from the whole
     // dataset, then the requested window is sliced out of it.
@@ -195,16 +209,19 @@ export function dashboardRoutes(ctx: AppContext): Router {
       .all(req.user!.id) as unknown as {
         date: string; assets_minor: number; liabilities_minor: number; net_worth_minor: number;
       }[];
-    const trend = computeTrend(rows.map((r) => r.net_worth_minor), trendWindow);
+    // Scale before smoothing so the trend is a trend of the real series.
+    const netWorth = rows.map((r) => Math.round(r.net_worth_minor * factor(r.date)));
+    const trend = computeTrend(netWorth, trendWindow);
 
     const points: HistoryPointDto[] = [];
     rows.forEach((r, i) => {
       if (start && r.date < start) return;
+      const f = factor(r.date);
       points.push({
         date: r.date,
-        assetsMinor: r.assets_minor,
-        liabilitiesMinor: r.liabilities_minor,
-        netWorthMinor: r.net_worth_minor,
+        assetsMinor: Math.round(r.assets_minor * f),
+        liabilitiesMinor: Math.round(r.liabilities_minor * f),
+        netWorthMinor: netWorth[i]!,
         trendMinor: trend[i]!,
       });
     });

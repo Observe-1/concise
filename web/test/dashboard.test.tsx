@@ -58,12 +58,29 @@ const projectedChanges = {
   range: '6M', assetsChangePct: 12.0, liabilitiesChangePct: -10.0, netWorthChangePct: 26.7,
 };
 
+// Real (inflation-adjusted) terms: the graph deflated to today's money, and a
+// smaller real growth than the nominal +11.1%.
+const realHistory = {
+  range: '6M',
+  trendWindow: 91,
+  points: [
+    { date: '2026-05-01', assetsMinor: 49_500_00, liabilitiesMinor: 21_700_00, netWorthMinor: 27_800_00, trendMinor: 28_300_00 },
+    { date: '2026-06-01', assetsMinor: 50_000_00, liabilitiesMinor: 20_000_00, netWorthMinor: 30_000_00, trendMinor: 28_900_00 },
+  ],
+};
+
+const realChanges = {
+  range: '6M', assetsChangePct: 1.0, liabilitiesChangePct: -8.0, netWorthChangePct: 7.9,
+};
+
 function mountDashboard() {
   const calls = mockFetch([
     [/\/api\/auth\/me/, { user: demoUser }],
-    // predict requests must be matched before the generic live routes
+    // predict + real variants must be matched before the generic live routes
     [/\/api\/dashboard\/summary\?.*predict=1/, projectedSummary],
     [/\/api\/dashboard\/changes\?.*predict=1/, projectedChanges],
+    [/\/api\/dashboard\/changes\?.*real=1/, realChanges],
+    [/\/api\/dashboard\/history\?.*real=1/, realHistory],
     [/\/api\/dashboard\/changes/, changes],
     [/\/api\/dashboard\/prediction/, prediction],
     [/\/api\/dashboard\/summary/, summary],
@@ -168,6 +185,30 @@ describe('dashboard', () => {
     // The projected data was fetched with predict=1 for the selected range.
     expect(calls.some((c) => /\/api\/dashboard\/summary\?.*predict=1&range=6M/.test(c.url))).toBe(true);
     expect(calls.some((c) => /\/api\/dashboard\/changes\?range=6M.*predict=1/.test(c.url))).toBe(true);
+  });
+
+  it('toggles real (inflation-adjusted) terms and requests deflated data', async () => {
+    const calls = mountDashboard();
+    const user = userEvent.setup();
+
+    // Nominal by default: the change caption reads "vs 6M ago", no real note.
+    expect(await screen.findByText(/vs 6M ago/i)).toBeInTheDocument();
+    expect(screen.queryByText(/today’s money/i)).not.toBeInTheDocument();
+
+    const basis = screen.getByRole('group', { name: /value basis/i });
+    await user.click(within(basis).getByRole('button', { name: /^real$/i }));
+
+    // The graph and the percent changes are refetched in real terms …
+    await waitFor(() => {
+      expect(calls.some((c) => /\/api\/dashboard\/history\?.*real=1/.test(c.url))).toBe(true);
+      expect(calls.some((c) => /\/api\/dashboard\/changes\?.*real=1/.test(c.url))).toBe(true);
+    });
+    // … the real growth (+7.9%) replaces the nominal (+11.1%) …
+    expect(await screen.findByText('+7.9%')).toBeInTheDocument();
+    expect(screen.queryByText('+11.1%')).not.toBeInTheDocument();
+    // … and the card is captioned as today's money.
+    expect(screen.getByText(/today’s money/i)).toBeInTheDocument();
+    expect(within(basis).getByRole('button', { name: /^real$/i })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('toggles full-screen graph mode', async () => {

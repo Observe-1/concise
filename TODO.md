@@ -185,7 +185,7 @@ Implemented strictly in order; one commit per feature.
 
 ## Feature batch (2026-06-22)
 Implemented strictly in order; one commit per feature.
-- [ ] 1. Inflation-adjusted "real" net worth toggle on the home page: over long
+- [x] 1. Inflation-adjusted "real" net worth toggle on the home page: over long
       ranges nominal growth overstates real progress, so a toggle expresses the
       net-worth graph and the dashboard percent changes in today's money
       (a rough static annual-inflation table, like the FX/property tables).

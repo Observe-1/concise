@@ -237,6 +237,41 @@ describe('dashboard API', () => {
     expect(tightPoints.map((p) => p.trendMinor)).not.toEqual(defPoints.map((p) => p.trendMinor));
   });
 
+  it('expresses history in real terms (today’s money) on ?real=1', async () => {
+    const nominal = await agent.get('/api/dashboard/history?range=ALL');
+    const real = await agent.get('/api/dashboard/history?range=ALL&real=1');
+    expect(real.status).toBe(200);
+
+    type Point = { date: string; netWorthMinor: number; assetsMinor: number };
+    const nPts = nominal.body.points as Point[];
+    const rPts = real.body.points as Point[];
+    // Same dates, same downsampling — only the values are deflated.
+    expect(rPts.map((p) => p.date)).toEqual(nPts.map((p) => p.date));
+
+    // Today's point is unchanged: the real factor at the reference date is 1.
+    const lastN = nPts[nPts.length - 1]!;
+    const lastR = rPts[rPts.length - 1]!;
+    expect(lastR.date).toBe('2026-06-11');
+    expect(lastR.netWorthMinor).toBe(lastN.netWorthMinor);
+    expect(lastR.assetsMinor).toBe(lastN.assetsMinor);
+
+    // An early point is scaled UP — past money is worth more in today's terms.
+    if (nPts[0]!.netWorthMinor > 0) {
+      expect(rPts[0]!.netWorthMinor).toBeGreaterThan(nPts[0]!.netWorthMinor);
+    }
+  });
+
+  it('reports inflation-adjusted (real) percent change, below nominal over a long range', async () => {
+    const nominal = await agent.get('/api/dashboard/changes?range=5Y');
+    const real = await agent.get('/api/dashboard/changes?range=5Y&real=1');
+    expect(real.status).toBe(200);
+    expect(real.body.range).toBe('5Y');
+    // Where nominal net worth grew, inflation eats into it, so real < nominal.
+    if (typeof nominal.body.netWorthChangePct === 'number' && nominal.body.netWorthChangePct > 0) {
+      expect(real.body.netWorthChangePct).toBeLessThan(nominal.body.netWorthChangePct);
+    }
+  });
+
   it('keeps a custom trend window stable across range changes', async () => {
     const all = await agent.get('/api/dashboard/history?range=ALL&trendWindow=30');
     const oneMonth = await agent.get('/api/dashboard/history?range=1M&trendWindow=30');
