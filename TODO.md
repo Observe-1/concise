@@ -1,6 +1,8 @@
 # TODO — single source of truth for progress
 
-**Status: complete (phases 1–6 + five feature batches). Deployment is out of scope.**
+**Status: phases 1–6 + feature batches complete. Deployment is out of scope.
+The 2026-06-22 batch (real net worth, structured logging, SECURITY.md, legal
+disclaimer) is in progress — see the bottom of this file.**
 
 ## Phase 1: System architecture
 - [x] Tech stack decisions (Node 24 + node:sqlite + Express 5 / React 19 + Vite + Tailwind 4)
@@ -180,6 +182,23 @@ Implemented strictly in order; one commit per feature.
       its inner half. Full-screen on click. The inner ring has a key; the outer
       ring does not.
 - [x] 3. All pie charts have hover capability (tooltip + slice highlight).
+
+## Feature batch (2026-06-22)
+Implemented strictly in order; one commit per feature.
+- [ ] 1. Inflation-adjusted "real" net worth toggle on the home page: over long
+      ranges nominal growth overstates real progress, so a toggle expresses the
+      net-worth graph and the dashboard percent changes in today's money
+      (a rough static annual-inflation table, like the FX/property tables).
+- [ ] 2. Structured logging + request IDs (pino): a real JSON logger replaces the
+      ad-hoc console output, every request carries an `x-request-id` (generated
+      or propagated) and a one-line completion log (method, path, status,
+      duration, user) that never includes financial data — so self-hosters can
+      actually diagnose issues alongside `/health/detailed`.
+- [ ] 3. Publish SECURITY.md: graduate the security posture already documented
+      across ARCHITECTURE/README into a single published security page
+      (reporting, posture, hardening guidance, known limitations).
+- [ ] 4. Legal/trust pages: a "not financial advice" disclaimer on the sign-up
+      page and in a new Settings → Legal section.
 
 ## Bug fixes (2026-06-13)
 - [x] 1. View-as scrubber: the circle handle, though aligned along the chart's
