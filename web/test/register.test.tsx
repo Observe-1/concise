@@ -17,6 +17,16 @@ describe('create account', () => {
     expect(screen.getByLabelText(/confirm password/i)).toBeInTheDocument();
   });
 
+  it('shows a "not financial advice" disclaimer on the sign-up page', async () => {
+    mockFetch([[/\/api\/auth\/me/, { error: 'Not authenticated' }, 401]]);
+    renderWithProviders(<App />, { route: '/register' });
+
+    expect(await screen.findByText(/not financial advice/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/not financial, investment, tax or legal advice/i),
+    ).toBeInTheDocument();
+  });
+
   it('submits the registration and posts to the register endpoint', async () => {
     const calls = mockFetch([
       [/\/api\/auth\/me/, { error: 'Not authenticated' }, 401],

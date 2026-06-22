@@ -49,7 +49,8 @@ all in a fast, private, self-hostable app.
   into savings, mortgage payments, compounding interest, …) on daily,
   weekly, monthly, quarterly or yearly cadences, applied automatically.
 - **Multi-user** — self-service account creation, session auth, rate
-  limiting, and audit logging.
+  limiting, and audit logging. A "not financial advice" disclaimer appears on
+  sign-up and in Settings → Legal.
 - **Database backups** — validated point-in-time copies of the SQLite file,
   taken automatically on a configurable interval (on by default), on startup
   when the last one is stale, or on demand from Settings → Backup. A bounded

@@ -1,8 +1,8 @@
 # TODO — single source of truth for progress
 
-**Status: phases 1–6 + feature batches complete. Deployment is out of scope.
-The 2026-06-22 batch (real net worth, structured logging, SECURITY.md, legal
-disclaimer) is in progress — see the bottom of this file.**
+**Status: complete (phases 1–6 + feature batches, incl. the 2026-06-22 batch:
+real net worth, structured logging, SECURITY.md, legal disclaimer).
+Deployment is out of scope.**
 
 ## Phase 1: System architecture
 - [x] Tech stack decisions (Node 24 + node:sqlite + Express 5 / React 19 + Vite + Tailwind 4)
@@ -197,7 +197,7 @@ Implemented strictly in order; one commit per feature.
 - [x] 3. Publish SECURITY.md: graduate the security posture already documented
       across ARCHITECTURE/README into a single published security page
       (reporting, posture, hardening guidance, known limitations).
-- [ ] 4. Legal/trust pages: a "not financial advice" disclaimer on the sign-up
+- [x] 4. Legal/trust pages: a "not financial advice" disclaimer on the sign-up
       page and in a new Settings → Legal section.
 
 ## Bug fixes (2026-06-13)

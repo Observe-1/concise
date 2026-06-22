@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { useMe, useRegister } from '../api/queries.js';
 import { ApiError } from '../api/client.js';
+import { FinancialDisclaimer } from '../components/Disclaimer.js';
 import { Button, ErrorNote, Field, Input } from '../components/ui.js';
 
 export function RegisterPage() {
@@ -109,6 +110,9 @@ export function RegisterPage() {
             <Link to="/login" className="text-gold-400 hover:text-gold-300">Sign in</Link>
           </p>
         </form>
+
+        {/* Trust/legal: Concise tracks finances, it doesn't advise on them. */}
+        <FinancialDisclaimer className="mt-4 px-1" />
       </div>
     </div>
   );

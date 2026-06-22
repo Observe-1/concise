@@ -193,14 +193,15 @@ also builds the per-holding detail line graph (§4) so it smooths identically.
   All three verify ownership (`assertHoldingOwned` → 404) and are read-only.
 
 ### Settings (web)
-- `/settings/:section?` renders four sub pages selected by buttons at the
+- `/settings/:section?` renders five sub pages selected by buttons at the
   top: **User account** (profile, sign out, **Danger zone** — the default),
   **History** (legacy wealth, historic-entry editor), **Calculation**
   (currency — switching re-denominates the whole portfolio at the latest rough
-  rate, §6.4 — and birth year), and **Backup** (how backups work, existing backups
-  with age/size, a "Back up now" button, and the backup settings). The first
-  three share `GET/PATCH /api/settings`; Backup uses `/api/backup` (see
-  [BACKUP.md](BACKUP.md)).
+  rate, §6.4 — and birth year), **Backup** (how backups work, existing backups
+  with age/size, a "Back up now" button, and the backup settings), and **Legal**
+  (the "not financial advice" disclaimer and an as-is/no-warranty notice; static,
+  no API call). The account/history/calculation pages share `GET/PATCH
+  /api/settings`; Backup uses `/api/backup` (see [BACKUP.md](BACKUP.md)).
 - **Delete all data:** `POST /api/settings/delete-all` wipes the user's
   assets, liabilities (and their valuations via cascade), recurring schedules
   and snapshots, leaving the account, session and preferences intact and a

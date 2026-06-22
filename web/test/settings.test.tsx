@@ -48,6 +48,11 @@ describe('settings sub pages', () => {
     expect(await screen.findByLabelText(/currency/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/birth year/i)).toBeInTheDocument();
     expect(screen.queryByText(/legacy wealth/i)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /^legal$/i }));
+    expect(await screen.findByRole('heading', { name: /not financial advice/i })).toBeInTheDocument();
+    expect(screen.getByText(/not financial, investment, tax or legal advice/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/currency/i)).not.toBeInTheDocument();
   });
 });
 

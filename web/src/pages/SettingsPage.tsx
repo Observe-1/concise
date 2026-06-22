@@ -5,6 +5,7 @@ import {
   useRunBackup, useSetLegacyWealth, useSettings, useUpdateBackupSettings, useUpdateSettings,
 } from '../api/queries.js';
 import { HistoryEntries } from '../components/HistoryEntries.js';
+import { FinancialDisclaimer } from '../components/Disclaimer.js';
 import { Button, Card, EmptyState, ErrorNote, Field, Input, Select, Spinner, SuccessNote } from '../components/ui.js';
 import { formatMinor, parseSignedToMinor } from '../lib/money.js';
 
@@ -18,6 +19,7 @@ const SECTIONS = [
   { key: 'history', label: 'History' },
   { key: 'calculation', label: 'Calculation' },
   { key: 'backup', label: 'Backup' },
+  { key: 'legal', label: 'Legal' },
 ] as const;
 type SectionKey = (typeof SECTIONS)[number]['key'];
 
@@ -52,6 +54,7 @@ export function SettingsPage() {
       {active === 'history' && <HistorySection />}
       {active === 'calculation' && <CalculationSection />}
       {active === 'backup' && <BackupSection />}
+      {active === 'legal' && <LegalSection />}
 
       <p className="px-1 text-center text-xs text-ink-600">Concise — private, self-hosted personal finance.</p>
     </div>
@@ -278,6 +281,24 @@ function CalculationSection() {
           {update.isPending ? 'Saving…' : 'Save'}
         </Button>
       </form>
+    </Card>
+  );
+}
+
+// ---------- legal ----------
+
+function LegalSection() {
+  return (
+    <Card className="p-5">
+      <h2 className="mb-3 text-xs font-medium uppercase tracking-widest text-ink-400">
+        Not financial advice
+      </h2>
+      <FinancialDisclaimer />
+      <p className="mt-4 text-xs leading-relaxed text-ink-500">
+        Concise is private, self-hosted software provided as is, without warranty
+        of any kind. You are responsible for your data and for any decisions you
+        make based on it.
+      </p>
     </Card>
   );
 }
