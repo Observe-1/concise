@@ -194,7 +194,7 @@ Implemented strictly in order; one commit per feature.
       or propagated) and a one-line completion log (method, path, status,
       duration, user) that never includes financial data — so self-hosters can
       actually diagnose issues alongside `/health/detailed`.
-- [ ] 3. Publish SECURITY.md: graduate the security posture already documented
+- [x] 3. Publish SECURITY.md: graduate the security posture already documented
       across ARCHITECTURE/README into a single published security page
       (reporting, posture, hardening guidance, known limitations).
 - [ ] 4. Legal/trust pages: a "not financial advice" disclaimer on the sign-up

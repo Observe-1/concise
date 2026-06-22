@@ -180,3 +180,12 @@ correlation id — sent back as the `x-request-id` header and included in a
 issue can be traced end to end. Logs report only operational facts, never
 financial data, passwords or session tokens. Set `LOG_LEVEL` to tune verbosity
 (`debug` to see liveness polls and per-request detail; `silent` to disable).
+
+## Security
+
+Concise hashes passwords with scrypt, uses revocable opaque sessions, scopes
+every query by user, validates all input with zod over parameterised SQL, and
+applies CSRF checks, rate limiting and a strict CSP. The full security posture,
+how to **report a vulnerability**, and a hardening checklist for self-hosters
+are in [SECURITY.md](SECURITY.md). Concise is a tracking tool, **not financial
+advice** — see the in-app disclaimer on sign-up and in Settings → Legal.

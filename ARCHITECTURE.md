@@ -124,6 +124,11 @@ also builds the per-holding detail line graph (§4) so it smooths identically.
    production (so the Vite dev proxy works). Cookie is also `SameSite=Lax`.
    Login attempts and all mutations are audit-logged.
 
+> The full security posture (auth, authorization, input validation, CSRF, rate
+> limiting, headers, auditing/logging, data-at-rest), how to **report a
+> vulnerability**, and a self-hoster hardening checklist are consolidated in
+> [SECURITY.md](SECURITY.md).
+
 ### Assets / liabilities
 - CRUD under `/api/assets` and `/api/liabilities` (identical shape).
 - Creating a **liability** accepts an optional `interestRatePct`: the route
