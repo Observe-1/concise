@@ -121,6 +121,7 @@ copy it off-host for disaster recovery. See [ARCHITECTURE.md](ARCHITECTURE.md).
 | `LOGIN_RATE_LIMIT` | `10`               | Login attempts per IP per 15 minutes      |
 | `SEED_ON_START`    | `0`                | `1` (re)seeds the demo account at startup |
 | `PRICE_PROVIDER`   | `real`             | Market price source: `real` (live Yahoo Finance quotes, no API key) or `simulated` (deterministic offline) |
+| `LOG_LEVEL`        | `info`             | Log verbosity: `fatal`/`error`/`warn`/`info`/`debug`/`trace`/`silent` |
 
 ## Run with Docker
 
@@ -169,3 +170,13 @@ Concise exposes a simple liveness probe (`GET /api/health` → `{ ok: true }`) a
 a detailed readiness probe (`GET /api/health/detailed`, checking UI, server and
 database) for unraid / Docker / Uptime Kuma. Neither ever reports financial
 data. See [HEALTHCHECK.md](HEALTHCHECK.md).
+
+## Logs
+
+Concise writes structured JSON logs to stdout (via pino), so `docker logs`,
+journald or a log shipper just work. Every `/api/*` request carries a
+correlation id — sent back as the `x-request-id` header and included in a
+`request completed` log line (method, path, status, duration, user id) — so an
+issue can be traced end to end. Logs report only operational facts, never
+financial data, passwords or session tokens. Set `LOG_LEVEL` to tune verbosity
+(`debug` to see liveness polls and per-request detail; `silent` to disable).

@@ -41,7 +41,15 @@ export interface Config {
    * (e.g. for an air-gapped deployment).
    */
   priceProvider: 'real' | 'simulated';
+  /**
+   * Logging verbosity (pino level): fatal | error | warn | info | debug | trace
+   * | silent. Defaults to `info`; an unrecognised LOG_LEVEL falls back to it.
+   */
+  logLevel: 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace' | 'silent';
 }
+
+const LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'] as const;
+type LogLevel = (typeof LOG_LEVELS)[number];
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const nodeEnv = env.NODE_ENV === 'production' ? 'production'
@@ -66,5 +74,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     apiRateLimit: Number(env.API_RATE_LIMIT ?? 300),
     seedOnStart: env.SEED_ON_START === '1',
     priceProvider: env.PRICE_PROVIDER === 'simulated' ? 'simulated' : 'real',
+    logLevel: (LOG_LEVELS as readonly string[]).includes(env.LOG_LEVEL ?? '')
+      ? (env.LOG_LEVEL as LogLevel)
+      : 'info',
   };
 }

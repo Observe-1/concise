@@ -189,7 +189,7 @@ Implemented strictly in order; one commit per feature.
       ranges nominal growth overstates real progress, so a toggle expresses the
       net-worth graph and the dashboard percent changes in today's money
       (a rough static annual-inflation table, like the FX/property tables).
-- [ ] 2. Structured logging + request IDs (pino): a real JSON logger replaces the
+- [x] 2. Structured logging + request IDs (pino): a real JSON logger replaces the
       ad-hoc console output, every request carries an `x-request-id` (generated
       or propagated) and a one-line completion log (method, path, status,
       duration, user) that never includes financial data — so self-hosters can

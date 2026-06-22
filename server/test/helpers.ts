@@ -7,6 +7,7 @@ import { loadConfig } from '../src/config.js';
 import type { AppContext } from '../src/context.js';
 import { openDatabase } from '../src/db/connection.js';
 import { migrate } from '../src/db/migrate.js';
+import { createLogger, type Logger } from '../src/lib/logger.js';
 import { hashPassword } from '../src/lib/passwords.js';
 import { SimulatedPriceProvider } from '../src/modules/market/provider.js';
 
@@ -22,27 +23,36 @@ export interface TestWorld {
 }
 
 export function makeTestWorld(
-  opts: { env?: 'test' | 'development' | 'production'; dbPath?: string; backupDir?: string } = {},
+  opts: {
+    env?: 'test' | 'development' | 'production';
+    dbPath?: string;
+    backupDir?: string;
+    /** Inject a capturing logger to assert on emitted log lines; defaults to a
+     *  silent one so normal test runs stay quiet. */
+    logger?: Logger;
+  } = {},
 ): TestWorld {
   let current = new Date(FIXED_NOW);
   const dbPath = opts.dbPath ?? ':memory:';
   const db = openDatabase(dbPath);
   migrate(db);
+  const config = {
+    ...loadConfig({}),
+    env: opts.env ?? 'test',
+    cookieSecure: false,
+    dbPath,
+    backupDir: opts.backupDir
+      ?? path.join(dbPath === ':memory:' ? '.' : path.dirname(dbPath), 'backups'),
+    webDistDir: '/nonexistent',
+    // 'development' worlds exercise real limits (rate-limit tests)
+    loginRateLimit: opts.env === 'development' ? 10 : 1000,
+  };
   const ctx: AppContext = {
     db,
-    config: {
-      ...loadConfig({}),
-      env: opts.env ?? 'test',
-      cookieSecure: false,
-      dbPath,
-      backupDir: opts.backupDir
-        ?? path.join(dbPath === ':memory:' ? '.' : path.dirname(dbPath), 'backups'),
-      webDistDir: '/nonexistent',
-      // 'development' worlds exercise real limits (rate-limit tests)
-      loginRateLimit: opts.env === 'development' ? 10 : 1000,
-    },
+    config,
     now: () => current,
     prices: new SimulatedPriceProvider(),
+    log: opts.logger ?? createLogger(config),
   };
   return {
     app: buildApp(ctx),

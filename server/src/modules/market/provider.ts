@@ -1,5 +1,6 @@
 import type { SymbolLookupDto } from '../../types/api.js';
 import { addDays } from '../../lib/dates.js';
+import type { Logger } from '../../lib/logger.js';
 import { hashString, mulberry32 } from '../../lib/rng.js';
 
 /**
@@ -268,11 +269,13 @@ export class RealPriceProvider implements PriceProvider {
   private readonly fetchFn: QuoteFetch;
   private readonly nowMs: () => number;
   private readonly ttlMs: number;
+  private readonly log?: Logger;
 
-  constructor(opts: { fetchFn?: QuoteFetch; nowMs?: () => number; ttlMs?: number } = {}) {
+  constructor(opts: { fetchFn?: QuoteFetch; nowMs?: () => number; ttlMs?: number; logger?: Logger } = {}) {
     this.fetchFn = opts.fetchFn ?? ((url) => fetch(url));
     this.nowMs = opts.nowMs ?? (() => Date.now());
     this.ttlMs = opts.ttlMs ?? 15 * 60_000; // re-fetch the live end at most every 15 min
+    this.log = opts.logger;
   }
 
   // Instrument metadata is static — reuse the simulated provider's table.
@@ -331,7 +334,10 @@ export class RealPriceProvider implements PriceProvider {
     } catch (err) {
       // Never throw from prime: a transient failure must not break the request.
       // The symbol stays unprimed, so getPriceMinor uses the simulated fallback.
-      console.warn(`[prices] ${sym} (${yahoo}) fetch failed: ${(err as Error).message}`);
+      this.log?.warn(
+        { symbol: sym, yahoo, reason: (err as Error).message },
+        'price fetch failed; falling back to simulation',
+      );
     }
   }
 

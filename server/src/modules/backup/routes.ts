@@ -32,7 +32,7 @@ export function backupRoutes(ctx: AppContext): Router {
     try {
       backup = createBackup(ctx);
     } catch (err) {
-      console.error('[backup] manual backup failed:', err);
+      (req.log ?? ctx.log).error({ err }, 'manual backup failed');
       throw new HttpError(500, 'Backup failed. Check the server logs and that the backup directory is writable.');
     }
     audit(ctx.db, { userId: req.user!.id, action: 'backup.create', detail: { name: backup.name }, ip: req.ip });

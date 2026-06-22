@@ -5,25 +5,28 @@ import { openDatabase } from './db/connection.js';
 import { migrate } from './db/migrate.js';
 import { seed } from './db/seed.js';
 import { startScheduler } from './jobs/scheduler.js';
+import { createLogger } from './lib/logger.js';
 import { checkBackupDir } from './modules/backup/service.js';
 import { RealPriceProvider, SimulatedPriceProvider } from './modules/market/provider.js';
 
 const config = loadConfig();
+const log = createLogger(config);
 const db = openDatabase(config.dbPath);
 const applied = migrate(db);
-if (applied.length > 0) console.log(`[db] applied migrations: ${applied.join(', ')}`);
+if (applied.length > 0) log.info({ migrations: applied }, 'applied database migrations');
 if (config.seedOnStart) {
   seed(db);
-  console.log('[db] demo account seeded (SEED_ON_START=1)');
+  log.info('demo account seeded (SEED_ON_START=1)');
 }
 
 const ctx: AppContext = {
   db,
   config,
   now: () => new Date(),
-  prices: config.priceProvider === 'real' ? new RealPriceProvider() : new SimulatedPriceProvider(),
+  prices: config.priceProvider === 'real' ? new RealPriceProvider({ logger: log }) : new SimulatedPriceProvider(),
+  log,
 };
-console.log(`[prices] using the ${config.priceProvider} price provider`);
+log.info({ priceProvider: config.priceProvider }, 'price provider selected');
 
 // Surface a misconfigured/unwritable backup directory loudly at startup rather
 // than letting every backup fail silently in the background (see BACKUP.md).
@@ -33,11 +36,11 @@ const app = buildApp(ctx);
 const { stop: stopScheduler } = startScheduler(ctx);
 
 const server = app.listen(config.port, () => {
-  console.log(`Concise API listening on http://localhost:${config.port} (${config.env})`);
+  log.info({ port: config.port, env: config.env }, `Concise API listening on http://localhost:${config.port}`);
 });
 
 function shutdown(signal: string) {
-  console.log(`${signal} received; shutting down`);
+  log.info({ signal }, 'shutting down');
   stopScheduler();
   server.close(() => {
     db.close();

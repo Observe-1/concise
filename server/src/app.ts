@@ -7,6 +7,7 @@ import type { AppContext } from './context.js';
 import { requireAuth, sessionLoader } from './middleware/auth.js';
 import { csrfProtection } from './middleware/csrf.js';
 import { errorHandler, notFoundHandler } from './middleware/errors.js';
+import { requestLogger } from './middleware/requestLogger.js';
 import { authRoutes } from './modules/auth/routes.js';
 import { backupRoutes } from './modules/backup/routes.js';
 import { dashboardRoutes } from './modules/dashboard/routes.js';
@@ -39,6 +40,9 @@ export function buildApp(ctx: AppContext): express.Express {
   );
 
   const api = express.Router();
+  // First on the API router: tag every request with a correlation id + child
+  // logger and emit one structured access log per request (see requestLogger).
+  api.use(requestLogger(ctx));
   api.use(
     rateLimit({
       windowMs: 60_000,

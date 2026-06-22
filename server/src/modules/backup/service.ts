@@ -232,10 +232,9 @@ export function checkBackupDir(ctx: AppContext): boolean {
     fs.accessSync(ctx.config.backupDir, fs.constants.W_OK);
     return true;
   } catch (err) {
-    console.error(
-      `[backup] backup directory is not writable: ${ctx.config.backupDir} — `
-      + `backups will fail until this is fixed (set BACKUP_DIR to a writable path). `
-      + `(${(err as Error).message})`,
+    ctx.log.error(
+      { backupDir: ctx.config.backupDir, reason: (err as Error).message },
+      'backup directory is not writable; backups will fail until BACKUP_DIR points at a writable path',
     );
     return false;
   }

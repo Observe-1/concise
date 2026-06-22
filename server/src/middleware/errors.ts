@@ -5,7 +5,7 @@ export const notFoundHandler: RequestHandler = (_req, res) => {
   res.status(404).json({ error: 'Not found' });
 };
 
-export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
+export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   if (err instanceof HttpError) {
     res.status(err.status).json({ error: err.message, ...(err.details ? { details: err.details } : {}) });
     return;
@@ -20,6 +20,8 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
     res.status(status).json({ error: status === 413 ? 'Payload too large' : 'Bad request' });
     return;
   }
-  console.error('Unhandled error:', err);
+  // Unhandled: log with the request logger (carries the request id) when present.
+  if (req.log) req.log.error({ err }, 'unhandled error');
+  else console.error('Unhandled error:', err);
   res.status(500).json({ error: 'Internal server error' });
 };

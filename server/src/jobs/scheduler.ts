@@ -26,7 +26,7 @@ export function startScheduler(ctx: AppContext): { stop: () => void; firstTick: 
   const tick = async (): Promise<void> => {
     try {
       const applied = runDueRecurring(ctx);
-      if (applied > 0) console.log(`[jobs] applied ${applied} recurring occurrence(s)`);
+      if (applied > 0) ctx.log.info({ applied }, 'applied recurring occurrences');
 
       const today = todayISO(ctx.now);
       if (lastDailyRun !== today) {
@@ -37,10 +37,10 @@ export function startScheduler(ctx: AppContext): { stop: () => void; firstTick: 
         const repriced = await refreshMarketValuations(ctx);
         purgeExpiredSessions(ctx);
         lastDailyRun = today;
-        console.log(`[jobs] daily housekeeping done for ${today} (${repriced} market valuation(s))`);
+        ctx.log.info({ date: today, marketValuations: repriced }, 'daily housekeeping complete');
       }
     } catch (err) {
-      console.error('[jobs] tick failed:', err);
+      ctx.log.error({ err }, 'job tick failed');
     }
 
     // Automatic backups run on their own interval (not daily), so check every
@@ -48,9 +48,9 @@ export function startScheduler(ctx: AppContext): { stop: () => void; firstTick: 
     // the recurring/snapshot engine, and vice versa.
     try {
       const backup = maybeAutoBackup(ctx);
-      if (backup) console.log(`[jobs] automatic backup created: ${backup.name}`);
+      if (backup) ctx.log.info({ backup: backup.name }, 'automatic backup created');
     } catch (err) {
-      console.error('[jobs] automatic backup failed:', err);
+      ctx.log.error({ err }, 'automatic backup failed');
     }
   };
 

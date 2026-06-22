@@ -414,8 +414,8 @@ concise/
 │       ├── app.ts        # express app factory (DI: db, clock, prices)
 │       ├── config.ts     # env-driven configuration
 │       ├── db/           # connection, migrate.ts, migrations/*.sql, seed.ts
-│       ├── lib/          # passwords, money, dates, http, series (trend/downsample), fx, inflation helpers
-│       ├── middleware/   # auth, csrf, rate-limit, errors, audit
+│       ├── lib/          # passwords, money, dates, http, series (trend/downsample), fx, inflation, logger helpers
+│       ├── middleware/   # auth, csrf, rate-limit, errors, request logging (ids)
 │       ├── modules/      # auth/ assets/ liabilities/ recurring/ backup/
 │       │                 # dashboard/ market/ settings/  (routes + service)
 │       ├── jobs/         # scheduler + recurring/snapshots/market/backup jobs
@@ -488,3 +488,17 @@ image, one port, one volume.
   database (returning `503` when the database is unreachable). Both are
   unauthenticated and report only operational status — never any financial data.
   See [HEALTHCHECK.md](HEALTHCHECK.md).
+- **Logging & request IDs** — the app logs structured JSON to stdout via
+  [pino](server/src/lib/logger.ts) (level `LOG_LEVEL`, default `info`), so a
+  self-hoster ships and searches logs with the usual tooling (Docker logs,
+  journald, Loki) instead of grepping ad-hoc prints. The first middleware on the
+  API router ([requestLogger](server/src/middleware/requestLogger.ts)) gives
+  every `/api/*` request a correlation id — taken from an inbound `x-request-id`
+  header (so a reverse proxy's id is preserved) or freshly generated, and echoed
+  back on the response — attaches a child logger (`req.log`, used by the error
+  handler and routes), and emits one `request completed` line per request with
+  method, path (no query string), status, duration and the authenticated user
+  id. Like the health endpoints, the logs carry only operational facts — never
+  request bodies, financial figures, passwords or session tokens. This
+  complements the persisted **audit log** (security events, §3) and the
+  point-in-time **health** endpoints.
