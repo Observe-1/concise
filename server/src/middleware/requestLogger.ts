@@ -5,8 +5,13 @@ import type { Logger } from '../lib/logger.js';
 
 export const REQUEST_ID_HEADER = 'x-request-id';
 
-/** Reject an absurdly long client-supplied id; otherwise generate a fresh one. */
-const MAX_REQUEST_ID_LEN = 200;
+/**
+ * Accept an inbound request id only if it is a short, safe token. This both
+ * keeps logs/headers clean and avoids reflecting attacker-controlled bytes
+ * (newlines, control chars) into the response header — anything else is
+ * replaced with a freshly generated id.
+ */
+const SAFE_REQUEST_ID = /^[A-Za-z0-9._-]{1,200}$/;
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -38,9 +43,7 @@ export function requestLogger(ctx: AppContext): RequestHandler {
   return (req, res, next) => {
     const inbound = req.headers[REQUEST_ID_HEADER];
     const provided = Array.isArray(inbound) ? inbound[0] : inbound;
-    const requestId = provided && provided.length > 0 && provided.length <= MAX_REQUEST_ID_LEN
-      ? provided
-      : randomUUID();
+    const requestId = provided && SAFE_REQUEST_ID.test(provided) ? provided : randomUUID();
     req.id = requestId;
     req.log = ctx.log.child({ requestId });
     res.setHeader(REQUEST_ID_HEADER, requestId);

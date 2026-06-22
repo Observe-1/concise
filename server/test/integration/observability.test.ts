@@ -30,6 +30,15 @@ describe('observability: request ids + structured logs', () => {
     expect(res.headers['x-request-id']).toBe('trace-123');
   });
 
+  it('rejects an unsafe inbound x-request-id and generates a clean one', async () => {
+    const world = makeTestWorld();
+    // A value with spaces/control-ish chars must not be reflected verbatim.
+    const res = await request(world.app).get('/api/health').set('x-request-id', 'bad id with spaces');
+    expect(res.status).toBe(200);
+    expect(res.headers['x-request-id']).not.toBe('bad id with spaces');
+    expect(res.headers['x-request-id']).toMatch(/^[0-9a-f-]{36}$/i);
+  });
+
   it('emits one structured completion log per request, with no financial data', async () => {
     const { world, lines } = capturingWorld();
     const res = await request(world.app).get('/api/health/detailed').set('x-request-id', 'trace-xyz');
