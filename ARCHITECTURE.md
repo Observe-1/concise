@@ -56,7 +56,7 @@ In development the Vite dev server proxies `/api` to the backend.
 | Styling    | Tailwind CSS v4                                   | Utility-first, design tokens for black/gold theme |
 | Data fetch | TanStack Query v5                                 | Server-state caching, mutation invalidation |
 | Routing    | React Router v7 (library mode)                    | Standard SPA routing |
-| Charts     | Recharts                                          | Interactive area/line charts |
+| Charts     | Recharts                                          | Interactive area/line charts + composition pies |
 | Tests      | Vitest + supertest (API), Vitest + Testing Library (web), Playwright (e2e) | |
 | Run (prod) | `npm run build` → `npm start` (one Node process serves API + static SPA) | Single artifact, minimal manual steps |
 
@@ -103,7 +103,8 @@ period, not on the day it was typed in), so the graph ramps instead of
 showing a one-day cliff. Recurring, market and seed valuations are discrete
 events and keep step semantics. Because smoothing looks one entry ahead,
 mutations recompute from the holding's previous anchor, not just the changed
-day.
+day. The same anchor/interpolation walk, factored out as `holdingDailySeries`,
+also builds the per-holding detail line graph (§4) so it smooths identically.
 
 ## 4. Core flows
 
@@ -164,6 +165,27 @@ day.
   not the original base, so an update re-bases all future automatic
   calculations on the new number while the old entries stay intact. The web
   edit form exposes a value field for model holdings so they can be re-anchored.
+- **Per-holding detail charts** power the edit popup (pie on the left, edit form
+  in the middle, line graph on the right; mode buttons below the form):
+  - `GET /api/assets|liabilities/:id/history?range=…[&trendWindow=N]` — a daily
+    value series for one holding, built from its valuations with the same
+    gap-interpolation as the dashboard snapshots (`holdingDailySeries`,
+    §3) and shaped as the dashboard `HistoryDto` so the same `NetWorthChart`
+    renders it. The value rides on `netWorthMinor` (and on the matching
+    `assetsMinor`/`liabilitiesMinor` side); the centred-MA trend is over the
+    holding's full history, so it is stable across range changes.
+  - `GET /api/assets|liabilities/:id/prediction?range=…` — the holding projected
+    forward on the fly (a slice of its real history + future values), reusing the
+    prediction engine's per-holding projection (`buildHoldingPrediction` →
+    `projectHoldingAt`). ALL is rejected (unbounded), as on the dashboard.
+  - `GET /api/assets|liabilities/:id/composition[?asOf=…][&predict=1&range=…]` —
+    the holding's place in the net-worth pie: its value plus the totals of every
+    *other* asset and liability (`HoldingCompositionDto`, `modules/dashboard/
+    composition.ts`). It mirrors the dashboard summary's modes — current,
+    as-of (view-as) or projected (prediction, via the shared `predictionTarget`)
+    — so the detail pie always agrees with the detail line graph. The selected
+    holding is excluded from its own side's "other" total.
+  All three verify ownership (`assertHoldingOwned` → 404) and are read-only.
 
 ### Settings (web)
 - `/settings/:section?` renders four sub pages selected by buttons at the
@@ -233,6 +255,14 @@ day.
   visible window).
 - The chart shows a muted age marker (vertical line labelled "Age N") when
   the user has set a birth year and the visible series spans ≥ 5 years.
+- **Composition pie** (`components/PieCharts.tsx`, `NetWorthPie`): a two-level
+  pie computed client-side from the individual holdings (`GET /api/assets` +
+  `/api/liabilities`, scoped to the view-as date). The inner ring is Assets
+  (green) vs Liabilities (red); the outer ring breaks each side into its
+  individual holdings in unique pastel hues, ordered assets-then-liabilities so
+  each individual aligns with its inner half (both rings share total + start
+  angle). The inner ring has a colour key; the outer ring does not. Hovering any
+  segment highlights it and shows a tooltip; clicking expands to full screen.
 
 ### Prediction mode
 - `GET /api/dashboard/prediction?range=…` (`modules/dashboard/prediction.ts`)
@@ -369,7 +399,7 @@ concise/
 │       ├── app.ts        # express app factory (DI: db, clock, prices)
 │       ├── config.ts     # env-driven configuration
 │       ├── db/           # connection, migrate.ts, migrations/*.sql, seed.ts
-│       ├── lib/          # passwords, money, dates, http helpers
+│       ├── lib/          # passwords, money, dates, http, series (trend/downsample) helpers
 │       ├── middleware/   # auth, csrf, rate-limit, errors, audit
 │       ├── modules/      # auth/ assets/ liabilities/ recurring/ backup/
 │       │                 # dashboard/ market/ settings/  (routes + service)
@@ -378,7 +408,7 @@ concise/
 ├── web/
 │   └── src/
 │       ├── api/          # fetch client + typed endpoints
-│       ├── components/   # UI building blocks (theme: black/gold)
+│       ├── components/   # UI building blocks (theme: black/gold); NetWorthChart, PieCharts
 │       ├── pages/        # Dashboard, Assets, Liabilities, Settings, Login
 │       └── hooks/
 ├── e2e/                  # Playwright tests

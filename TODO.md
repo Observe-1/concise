@@ -164,6 +164,23 @@ Implemented strictly in order; one commit per feature.
       increase/decrease applies to it, summarising the schedule (direction,
       amount/percent, cadence, name).
 
+## Feature batch (2026-06-17 #3)
+Implemented strictly in order; one commit per feature.
+- [x] 1. Holding detail charts: clicking an existing asset/liability generates,
+      on the fly, a **line graph** of that holding's value over time (right of the
+      edit section) and a **pie graph** (left) showing it as a highlighted slice
+      of net worth — the selected holding in gold, other assets in green, other
+      liabilities in red. The line graph mirrors the dashboard graph (look +
+      range quick-buttons) and gains a **prediction mode** and a **"view as"**
+      mode; the pie re-computes for the view-as date (and prediction). Mode
+      buttons sit under the middle (edit) section, and the pie has a colour key.
+      New endpoints: `GET /api/:kind/:id/{history,prediction,composition}`.
+- [x] 2. Home two-level pie: inner ring = Assets (green) vs Liabilities (red);
+      outer ring = each individual asset/liability in a unique pastel, aligned to
+      its inner half. Full-screen on click. The inner ring has a key; the outer
+      ring does not.
+- [x] 3. All pie charts have hover capability (tooltip + slice highlight).
+
 ## Bug fixes (2026-06-13)
 - [x] 1. View-as scrubber: the circle handle, though aligned along the chart's
       X axis, overlapped the date labels. The X-axis band now reserves a label

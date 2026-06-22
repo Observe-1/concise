@@ -207,6 +207,40 @@ describe('dashboard', () => {
     expect(screen.queryByText(/no history yet/i)).not.toBeInTheDocument();
   });
 
+  it('renders the two-level composition pie with an inner key and full-screen toggle', async () => {
+    const holding = (over: Record<string, unknown>) => ({
+      id: 1, category: 'cash', name: 'Checking', notes: null, metal: null, valuationMode: 'manual',
+      marketSymbol: null, quantity: null, country: null, manufactureDate: null,
+      historicalPriceMissing: false, currentValueMinor: 0,
+      lastValuedAt: '2026-06-01T12:00:00.000Z', createdAt: '2024-06-01T12:00:00.000Z', ...over,
+    });
+    mockFetch([
+      [/\/api\/auth\/me/, { user: demoUser }],
+      [/\/api\/dashboard\/summary/, summary],
+      [/\/api\/dashboard\/history/, history],
+      [/\/api\/dashboard\/changes/, changes],
+      [/\/api\/assets$/, [
+        holding({ id: 1, name: 'Checking', currentValueMinor: 30_000_00 }),
+        holding({ id: 2, name: 'Bitcoin', category: 'crypto', currentValueMinor: 20_000_00 }),
+      ]],
+      [/\/api\/liabilities$/, [
+        holding({ id: 9, name: 'Car loan', category: 'loan', currentValueMinor: 20_000_00 }),
+      ]],
+    ]);
+    renderWithProviders(<App />, { route: '/' });
+
+    // The pie has an accessible image role and an inner key naming both halves.
+    expect(await screen.findByRole('img', { name: /net worth composition/i })).toBeInTheDocument();
+    const key = screen.getByLabelText('Composition key');
+    expect(within(key).getByText('Assets')).toBeInTheDocument();
+    expect(within(key).getByText('Liabilities')).toBeInTheDocument();
+
+    // Clicking the expand control enters full-screen.
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /view composition full screen/i }));
+    expect(screen.getByRole('button', { name: /exit full screen/i })).toBeInTheDocument();
+  });
+
   it('renders the primary navigation', async () => {
     mountDashboard();
     await screen.findAllByText(/30,000\.00/);

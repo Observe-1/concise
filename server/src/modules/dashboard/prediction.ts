@@ -1,10 +1,13 @@
 import type { AppContext } from '../../context.js';
 import type { Cadence, HistoryPointDto, HistoryRange, PredictionDto } from '../../types/api.js';
-import { addDays, advanceCadence, daysBetween, rangeForwardEnd, todayISO } from '../../lib/dates.js';
+import {
+  addDays, advanceCadence, daysBetween, isHistoryRange, rangeForwardEnd, todayISO,
+} from '../../lib/dates.js';
+import { downsample, MAX_GRAPH_POINTS } from '../../lib/series.js';
+import type { HoldingKind } from '../holdings/kind.js';
+import { holdingDailySeries } from '../snapshots/service.js';
 import { PROPERTY_COUNTRIES, propertyValueMinor, vehicleValueMinor } from '../market/models.js';
-import { downsample } from './routes.js';
 
-const MAX_GRAPH_POINTS = 400;
 // The simulated provider's data begins here; clamp the return lookback to it.
 const PRICE_ORIGIN = '2020-01-01';
 // Guard rails on the annualised stock return so a noisy estimate can't make
@@ -292,4 +295,110 @@ export function projectPortfolioAt(
       projectedMinor: last(proj.projectLiabilitySeries(st, dates), st.current),
     })),
   };
+}
+
+/**
+ * The target date a projection reports the portfolio as of: the view-as date
+ * when one is pinned, otherwise the range's forward horizon (clamped to it).
+ * Returns null when the range has no bounded future (ALL) or is invalid, or
+ * when the target is not actually in the future — callers then fall back to the
+ * live (real) data path. Shared by the dashboard summary/changes routes and the
+ * per-holding composition endpoint so every projected figure agrees.
+ */
+export function predictionTarget(range: string, asOf: string | undefined, today: string): string | null {
+  if (!isHistoryRange(range) || range === 'ALL') return null;
+  const horizon = rangeForwardEnd(range as HistoryRange, today);
+  if (!horizon) return null;
+  let target = asOf ?? horizon;
+  if (target > horizon) target = horizon;
+  return target > today ? target : null;
+}
+
+/**
+ * Project a single holding's value to a future `target` date, using the same
+ * per-holding maths as the prediction graph and the projected summary. Returns
+ * the holding's current value when `target` is not in the future, or 0 when the
+ * holding no longer exists.
+ */
+export function projectHoldingAt(
+  ctx: AppContext,
+  userId: number,
+  k: HoldingKind,
+  id: number,
+  today: string,
+  target: string,
+): number {
+  const proj = buildProjector(ctx, userId, today);
+  const dates = futureDates(today, target);
+  const last = (series: number[], current: number) =>
+    (dates.length ? series[series.length - 1]! : current);
+  if (k.kind === 'asset') {
+    const st = proj.assets.find((a) => a.row.id === id);
+    if (!st) return 0;
+    return last(proj.projectAssetSeries(st, dates), st.current);
+  }
+  const st = proj.liabilities.find((l) => l.id === id);
+  if (!st) return 0;
+  return last(proj.projectLiabilitySeries(st, dates), st.current);
+}
+
+/**
+ * Per-holding prediction series: a small slice of the holding's real daily
+ * history (≈ range/10) followed by on-the-fly projected future values to the
+ * range's forward horizon. Mirrors `buildPrediction` but for one holding, so
+ * the detail popup's line graph matches the dashboard's. Nothing is persisted.
+ */
+export function buildHoldingPrediction(
+  ctx: AppContext,
+  userId: number,
+  k: HoldingKind,
+  id: number,
+  range: HistoryRange,
+): PredictionDto {
+  const today = todayISO(ctx.now);
+  const futureEnd = rangeForwardEnd(range, today);
+  if (!futureEnd) return { range, today, points: [] }; // ALL has no bounded future
+  const isAsset = k.kind === 'asset';
+
+  const futureDayCount = daysBetween(today, futureEnd);
+  const historyStart = addDays(today, -Math.max(1, Math.round(futureDayCount / 10)));
+
+  // --- history slice (real daily values up to and including today) ---
+  const histValues = holdingDailySeries(ctx.db, k, id, historyStart, today);
+  const points: HistoryPointDto[] = [];
+  let i = 0;
+  for (let d = historyStart; d <= today; d = addDays(d, 1), i++) {
+    const v = histValues[i] ?? 0;
+    points.push({
+      date: d,
+      assetsMinor: isAsset ? v : 0,
+      liabilitiesMinor: isAsset ? 0 : v,
+      netWorthMinor: v,
+      trendMinor: v,
+    });
+  }
+
+  // --- projected future (today+1 .. futureEnd) ---
+  const proj = buildProjector(ctx, userId, today);
+  const dates = futureDates(today, futureEnd);
+  const st = isAsset
+    ? proj.assets.find((a) => a.row.id === id)
+    : proj.liabilities.find((l) => l.id === id);
+  const series = st
+    ? (isAsset
+        ? proj.projectAssetSeries(st as AssetState, dates)
+        : proj.projectLiabilitySeries(st as LiabilityState, dates))
+    : dates.map(() => 0);
+  dates.forEach((date, j) => {
+    const v = series[j] ?? 0;
+    points.push({
+      date,
+      assetsMinor: isAsset ? v : 0,
+      liabilitiesMinor: isAsset ? 0 : v,
+      netWorthMinor: v,
+      trendMinor: v,
+    });
+  });
+
+  return { range, today, points: downsample(points, MAX_GRAPH_POINTS) };
 }

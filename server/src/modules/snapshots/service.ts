@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { AppContext } from '../../context.js';
 import { addDays, toDateISO, todayISO } from '../../lib/dates.js';
+import type { HoldingKind } from '../holdings/kind.js';
 
 export interface Totals {
   assetsMinor: number;
@@ -171,6 +172,41 @@ export function recomputeSnapshotRange(
     });
     upsert.run(userId, d, assets, liabilities, assets - liabilities);
   }
+}
+
+/**
+ * One value per calendar day in [fromISO, toISO] for a single holding, using
+ * the same anchor + gap-interpolation rules as `recomputeSnapshotRange` (a
+ * manual revaluation after a gap ramps; recurring/market/seed are step events).
+ * Powers the per-holding line graph and its prediction history slice so they
+ * smooth exactly like the dashboard graph. Days before the first valuation
+ * read as 0.
+ */
+export function holdingDailySeries(
+  db: DatabaseSync,
+  k: HoldingKind,
+  holdingId: number,
+  fromISO: string,
+  toISO: string,
+): number[] {
+  const out: number[] = [];
+  if (fromISO > toISO) return out;
+  const cutoff = `${toISO}T23:59:59.999Z`;
+  const rows = db
+    .prepare(
+      `SELECT ${holdingId} AS hid, value_minor, recorded_at, source
+       FROM ${k.valuationTable} WHERE ${k.fk} = ? AND recorded_at <= ?
+       ORDER BY recorded_at, id`,
+    )
+    .all(holdingId, cutoff) as unknown as ValuationRow[];
+  const anchors = toAnchors(rows);
+  let cursor = -1;
+  let dNum = dayNum(fromISO);
+  for (let d = fromISO; d <= toISO; d = addDays(d, 1), dNum++) {
+    while (cursor + 1 < anchors.length && anchors[cursor + 1]!.day <= dNum) cursor++;
+    out.push(valueAt(anchors, cursor, dNum));
+  }
+  return out;
 }
 
 export function refreshTodaySnapshot(ctx: AppContext, userId: number): void {

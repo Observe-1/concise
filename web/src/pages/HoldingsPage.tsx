@@ -1,12 +1,14 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import type { AssetCategory, HistoryRange, HoldingDto, RecurringDto, SymbolLookupDto } from '@api';
 import { ASSET_CATEGORIES, ASSET_VALUATION_MODES, LIABILITY_CATEGORIES, METALS } from '@api';
 import {
-  useCreateHolding, useDeleteHolding, useHoldingChanges, useHoldings, useInstruments, useMarketRefresh,
+  useCreateHolding, useDeleteHolding, useHoldingChanges, useHoldingComposition, useHoldingHistory,
+  useHoldingPrediction, useHoldings, useInstruments, useMarketRefresh,
   useMe, usePropertyCountries, useRecurring, useRevalueHolding, useSymbolLookup, useUpdateHolding,
   type HoldingKind,
 } from '../api/queries.js';
-import { RangePicker } from '../components/NetWorthChart.js';
+import { NetWorthChart, RANGES, RangePicker } from '../components/NetWorthChart.js';
+import { CompositionPie } from '../components/PieCharts.js';
 import { Button, Card, ChangeBadge, EmptyState, ErrorNote, Field, Input, Modal, Select, Spinner } from '../components/ui.js';
 import { useHistoricalView } from '../contexts/HistoricalView.js';
 import { categoryDisplay, categoryLabel, type HoldingSide } from '../lib/categories.js';
@@ -258,15 +260,21 @@ export function HoldingsPage({ kind }: { kind: HoldingKind }) {
         ))
       )}
 
-      {adding && <HoldingForm kind={kind} onClose={() => setAdding(false)} />}
-      {editing && <HoldingForm kind={kind} existing={editing} onClose={() => setEditing(null)} />}
+      {adding && <HoldingForm kind={kind} currency={currency} onClose={() => setAdding(false)} />}
+      {editing && (
+        <HoldingForm kind={kind} currency={currency} existing={editing} onClose={() => setEditing(null)} />
+      )}
     </div>
   );
 }
 
+// Prediction can't project an unbounded future, so MAX (ALL) is hidden — mirrors
+// the dashboard's prediction range set.
+const PREDICTION_RANGES = RANGES.filter((r) => r !== 'ALL');
+
 function HoldingForm({
-  kind, existing, onClose,
-}: { kind: HoldingKind; existing?: HoldingDto; onClose: () => void }) {
+  kind, existing, currency, onClose,
+}: { kind: HoldingKind; existing?: HoldingDto; currency: string; onClose: () => void }) {
   const categories = kind === 'assets' ? ASSET_CATEGORIES : LIABILITY_CATEGORIES;
   const create = useCreateHolding(kind);
   const update = useUpdateHolding(kind);
@@ -294,6 +302,34 @@ function HoldingForm({
   // Symbol the user has confirmed via lookup. Editing an existing market
   // asset without touching the symbol needs no re-verification.
   const [verified, setVerified] = useState<SymbolLookupDto | null>(null);
+
+  // ---- detail charts (editing an existing holding only) ----
+  // Self-contained modes, independent of the global "view as": the line graph
+  // can project (prediction) and scrub to a past date (view-as), and the pie
+  // re-computes to match.
+  const [detailRange, setDetailRange] = useState<HistoryRange>('1Y');
+  const [predicting, setPredicting] = useState(false);
+  const [viewAs, setViewAs] = useState(false);
+  const [detailAsOf, setDetailAsOf] = useState<string | null>(null);
+  // MAX has no bounded future — fall back to 1Y when entering prediction on it.
+  useEffect(() => {
+    if (predicting && detailRange === 'ALL') setDetailRange('1Y');
+  }, [predicting, detailRange]);
+  const detailId = existing?.id ?? null;
+  const detailHistory = useHoldingHistory(kind, detailId, detailRange, !predicting);
+  // ALL has no bounded future — gate the query so entering prediction on Max
+  // never fires a transient prediction?range=ALL request before the reset above.
+  const detailPrediction = useHoldingPrediction(
+    kind, detailId, detailRange, predicting && detailRange !== 'ALL',
+  );
+  const detailComposition = useHoldingComposition(kind, detailId, {
+    asOf: viewAs ? detailAsOf : null,
+    predict: predicting,
+    range: detailRange,
+  });
+  const chartPoints = predicting
+    ? detailPrediction.data?.points ?? []
+    : detailHistory.data?.points ?? [];
 
   const busy = create.isPending || update.isPending || remove.isPending || revalue.isPending;
   const allowedModes = modesFor(kind, category);
@@ -428,9 +464,8 @@ function HoldingForm({
     });
   };
 
-  return (
-    <Modal title={existing ? `Edit ${existing.name}` : COPY[kind].addLabel} onClose={onClose}>
-      <form onSubmit={onSubmit} className="space-y-4">
+  const formEl = (
+    <form onSubmit={onSubmit} className="space-y-4">
         <Field label="Category">
           {(id) => (
             <Select
@@ -673,6 +708,99 @@ function HoldingForm({
           </Button>
         </div>
       </form>
+  );
+
+  if (!existing) {
+    return (
+      <Modal title={COPY[kind].addLabel} onClose={onClose}>{formEl}</Modal>
+    );
+  }
+
+  // Editing: pie (left) · edit form + mode buttons (middle) · line graph (right).
+  // On small screens the columns stack with the form first so it stays reachable.
+  const modeButtons = (
+    <div className="flex flex-wrap justify-center gap-2 border-t border-ink-800 pt-4">
+      <button
+        type="button"
+        onClick={() => setPredicting((p) => !p)}
+        aria-pressed={predicting}
+        className={`rounded-xl px-3.5 py-2 text-sm font-semibold transition-colors ${
+          predicting
+            ? 'bg-gold-500 text-ink-950 hover:bg-gold-400'
+            : 'border border-gold-500/40 text-gold-400 hover:bg-gold-500/10'
+        }`}
+      >
+        ✨ {predicting ? 'Exit prediction' : 'Prediction'}
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          setViewAs((v) => {
+            if (v) setDetailAsOf(null); // leaving view-as resets the scrubbed date
+            return !v;
+          });
+        }}
+        aria-pressed={viewAs}
+        className={`rounded-xl px-3.5 py-2 text-sm font-semibold transition-colors ${
+          viewAs
+            ? 'bg-loss-500 text-ink-950 hover:bg-loss-400'
+            : 'border border-loss-500/40 text-loss-400 hover:bg-loss-500/10'
+        }`}
+      >
+        {viewAs ? 'Exit view as' : 'View as'}
+      </button>
+    </div>
+  );
+
+  return (
+    <Modal title={`Edit ${existing.name}`} onClose={onClose} size="xl">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)_minmax(0,1fr)]">
+        <section aria-label="Share of net worth" className="order-2 lg:order-1">
+          <h3 className="mb-2 text-xs font-medium uppercase tracking-widest text-ink-400">
+            Share of net worth
+          </h3>
+          {detailComposition.data ? (
+            <CompositionPie
+              composition={detailComposition.data}
+              currency={currency}
+              selectedName={existing.name}
+            />
+          ) : (
+            <div className="flex h-48 items-center justify-center text-xs text-ink-500">
+              Loading…
+            </div>
+          )}
+        </section>
+
+        <div className="order-1 space-y-4 lg:order-2">
+          {formEl}
+          {modeButtons}
+        </div>
+
+        <section aria-label="Value over time" className="order-3 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-xs font-medium uppercase tracking-widest text-ink-400">
+              Value over time
+            </h3>
+          </div>
+          <RangePicker
+            value={detailRange}
+            onChange={setDetailRange}
+            ranges={predicting ? PREDICTION_RANGES : RANGES}
+            allLabel="Max"
+          />
+          <NetWorthChart
+            points={chartPoints}
+            currency={currency}
+            range={detailRange}
+            valueLabel={existing.name}
+            asOf={viewAs ? detailAsOf : null}
+            scrubber={viewAs ? { asOf: detailAsOf, setAsOf: setDetailAsOf } : undefined}
+            nowLine={predicting ? detailPrediction.data?.today ?? null : null}
+            showTrend={!predicting}
+          />
+        </section>
+      </div>
     </Modal>
   );
 }

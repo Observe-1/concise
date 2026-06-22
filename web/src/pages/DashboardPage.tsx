@@ -1,7 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { HistoryRange } from '@api';
-import { useDashboardChanges, useHistory, useMe, usePrediction, useSummary } from '../api/queries.js';
+import {
+  useDashboardChanges, useHistory, useHoldings, useMe, usePrediction, useSummary,
+} from '../api/queries.js';
 import { NetWorthChart, RANGES, RangePicker } from '../components/NetWorthChart.js';
+import { NetWorthPie } from '../components/PieCharts.js';
 import { Card, ChangeBadge, Spinner } from '../components/ui.js';
 import { useHistoricalView } from '../contexts/HistoricalView.js';
 import { useDebouncedValue } from '../hooks/useDebouncedValue.js';
@@ -40,6 +43,18 @@ export function DashboardPage() {
   // Portfolio % change shown on the cards: over the graph's selected range, or
   // projected growth vs today while predicting.
   const changes = useDashboardChanges(range, asOf, predict).data;
+  // Individual holdings drive the two-level composition pie (as of the view-as
+  // date when one is pinned).
+  const pieAssets = useHoldings('assets', asOf);
+  const pieLiabilities = useHoldings('liabilities', asOf);
+  const pieAssetData = useMemo(
+    () => (pieAssets.data ?? []).map((h) => ({ id: h.id, name: h.name, value: h.currentValueMinor })),
+    [pieAssets.data],
+  );
+  const pieLiabilityData = useMemo(
+    () => (pieLiabilities.data ?? []).map((h) => ({ id: h.id, name: h.name, value: h.currentValueMinor })),
+    [pieLiabilities.data],
+  );
 
   // MAX has no bounded future — leaving it selected on entering prediction
   // mode would have nothing to project, so fall back to 1Y.
@@ -170,6 +185,15 @@ export function DashboardPage() {
           <BreakdownCard title="Assets" tone="gain" side="asset" items={s.assetsByCategory} currency={currency} />
           <BreakdownCard title="Liabilities" tone="loss" side="liability" items={s.liabilitiesByCategory} currency={currency} />
         </div>
+      )}
+
+      {(pieAssetData.length > 0 || pieLiabilityData.length > 0) && (
+        <Card className="p-4 sm:p-5">
+          <h2 className="mb-3 text-xs font-medium uppercase tracking-widest text-ink-400">
+            Composition
+          </h2>
+          <NetWorthPie assets={pieAssetData} liabilities={pieLiabilityData} currency={currency} />
+        </Card>
       )}
 
       {/* Prediction mode: a golden button at the bottom projects the graph into

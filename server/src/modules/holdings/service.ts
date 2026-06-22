@@ -1,16 +1,18 @@
 import type { AppContext } from '../../context.js';
 import type {
-  AssetCategory, HoldingChangeDto, HoldingDto, HoldingDetailDto, Metal, ValuationDto, ValuationMode, ValuationSource,
+  AssetCategory, HistoryDto, HistoryPointDto, HoldingChangeDto, HoldingDto, HoldingDetailDto,
+  Metal, ValuationDto, ValuationMode, ValuationSource,
 } from '../../types/api.js';
 import { ASSET_VALUATION_MODES } from '../../types/api.js';
 import type { HoldingKind } from './kind.js';
 import { withTransaction } from '../../db/connection.js';
 import { badRequest, notFound } from '../../lib/http.js';
 import { addDays, rangeStart, todayISO, type HistoryRange } from '../../lib/dates.js';
+import { computeTrend, downsample, MAX_GRAPH_POINTS } from '../../lib/series.js';
 import { convertMinor } from '../../lib/fx.js';
 import { PROPERTY_COUNTRIES, propertyValueMinor, vehicleValueMinor } from '../market/models.js';
 import { holdingValueMinor } from '../market/provider.js';
-import { recomputeSnapshotRange, refreshTodaySnapshot } from '../snapshots/service.js';
+import { holdingDailySeries, recomputeSnapshotRange, refreshTodaySnapshot } from '../snapshots/service.js';
 
 interface HoldingRow {
   id: number;
@@ -168,6 +170,59 @@ export function holdingChanges(
     const pct = ((end.value_minor - base.value_minor) / base.value_minor) * 100;
     return { id, changePct: Math.round(pct * 100) / 100 };
   });
+}
+
+/** Throw 404 unless the holding exists and belongs to the user. Cheap check
+ *  for the per-holding chart endpoints (no valuation rows loaded). */
+export function assertHoldingOwned(ctx: AppContext, k: HoldingKind, userId: number, id: number): void {
+  const row = ctx.db
+    .prepare(`SELECT 1 FROM ${k.table} WHERE id = ? AND user_id = ?`)
+    .get(id, userId);
+  if (!row) throw notFound(`${k.kind} not found`);
+}
+
+/**
+ * Daily value series for one holding, shaped like the dashboard history so the
+ * detail-popup line graph can reuse the same chart. The trend is a centred
+ * moving average over the holding's FULL history (so it is stable across range
+ * changes); the requested range is then sliced out and the result downsampled.
+ * `netWorthMinor` carries the holding's value; `assetsMinor`/`liabilitiesMinor`
+ * carry it on the matching side (0 on the other) so existing point typing holds.
+ */
+export function holdingHistory(
+  ctx: AppContext,
+  k: HoldingKind,
+  userId: number,
+  id: number,
+  range: HistoryRange,
+  trendWindow: number,
+): HistoryDto {
+  assertHoldingOwned(ctx, k, userId, id);
+  const today = todayISO(ctx.now);
+  const first = ctx.db
+    .prepare(`SELECT recorded_at FROM ${k.valuationTable} WHERE ${k.fk} = ? ORDER BY recorded_at, id LIMIT 1`)
+    .get(id) as { recorded_at: string } | undefined;
+  if (!first) return { range, trendWindow, points: [] };
+  const firstDate = first.recorded_at.slice(0, 10);
+  // Full daily series so the trend never re-fits to the visible window.
+  const values = holdingDailySeries(ctx.db, k, id, firstDate, today);
+  const trend = computeTrend(values, trendWindow);
+  const start = rangeStart(range, today);
+  const isAsset = k.kind === 'asset';
+  const points: HistoryPointDto[] = [];
+  let i = 0;
+  for (let d = firstDate; d <= today; d = addDays(d, 1), i++) {
+    if (start && d < start) continue;
+    const v = values[i] ?? 0;
+    points.push({
+      date: d,
+      assetsMinor: isAsset ? v : 0,
+      liabilitiesMinor: isAsset ? 0 : v,
+      netWorthMinor: v,
+      trendMinor: trend[i] ?? v,
+    });
+  }
+  return { range, trendWindow, points: downsample(points, MAX_GRAPH_POINTS) };
 }
 
 function getRow(ctx: AppContext, k: HoldingKind, userId: number, id: number): HoldingRow {

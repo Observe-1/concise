@@ -86,10 +86,16 @@ interface ChartProps {
   nowLine?: string | null;
   /** Hide the trend line (meaningless over projected values). */
   showTrend?: boolean;
+  /**
+   * Single-series mode (per-holding detail chart): the tooltip shows only this
+   * label + the value, instead of the net-worth / assets / debts breakdown.
+   */
+  valueLabel?: string;
 }
 
 export function NetWorthChart({
   points, currency, range, birthYear, height = 240, asOf, scrubber, nowLine, showTrend = true,
+  valueLabel,
 }: ChartProps) {
   // A single point in the window is duplicated into a flat full-width series
   // so it draws as the normal gold line rather than a lone dot.
@@ -186,7 +192,7 @@ export function NetWorthChart({
             width={Y_AXIS_WIDTH}
             domain={yDomain}
           />
-          <Tooltip content={<ChartTooltip currency={currency} />} />
+          <Tooltip content={<ChartTooltip currency={currency} valueLabel={valueLabel} />} />
           {ages.map((marker) => (
             <ReferenceLine
               key={marker.age}
@@ -292,19 +298,28 @@ interface TooltipProps {
   active?: boolean;
   payload?: { payload: HistoryPointDto }[];
   currency: string;
+  valueLabel?: string;
 }
 
-function ChartTooltip({ active, payload, currency }: TooltipProps) {
+function ChartTooltip({ active, payload, currency, valueLabel }: TooltipProps) {
   if (!active || !payload?.length) return null;
   const p = payload[0]!.payload;
   return (
     <div className="rounded-xl border border-ink-700 bg-ink-950/95 px-3 py-2 text-xs shadow-xl">
       <p className="mb-1 font-medium text-ink-300">{dateLabel(p.date, true)}</p>
-      <p className="tabular font-semibold text-gold-400">{formatMinor(p.netWorthMinor, currency)}</p>
-      <p className="tabular mt-1 text-gain-400">Assets {formatMinor(p.assetsMinor, currency)}</p>
-      <p className="tabular text-loss-400">Debts {formatMinor(p.liabilitiesMinor, currency)}</p>
-      {typeof p.trendMinor === 'number' && (
-        <p className="tabular mt-1 text-ink-400">Trend {formatMinor(p.trendMinor, currency)}</p>
+      {valueLabel ? (
+        <p className="tabular font-semibold text-gold-400">
+          {valueLabel} {formatMinor(p.netWorthMinor, currency)}
+        </p>
+      ) : (
+        <>
+          <p className="tabular font-semibold text-gold-400">{formatMinor(p.netWorthMinor, currency)}</p>
+          <p className="tabular mt-1 text-gain-400">Assets {formatMinor(p.assetsMinor, currency)}</p>
+          <p className="tabular text-loss-400">Debts {formatMinor(p.liabilitiesMinor, currency)}</p>
+          {typeof p.trendMinor === 'number' && (
+            <p className="tabular mt-1 text-ink-400">Trend {formatMinor(p.trendMinor, currency)}</p>
+          )}
+        </>
       )}
     </div>
   );

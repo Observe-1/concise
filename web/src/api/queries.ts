@@ -4,7 +4,8 @@ import {
 import type {
   BackupOverviewDto, BackupRunResultDto, BackupSettingsDto,
   DashboardChangesDto, DashboardSummaryDto, HistoryDto, HistoryEntryDto, HistoryRange,
-  HoldingChangeDto, HoldingDetailDto, HoldingDto, LegacySnapshotDto, PredictionDto, PropertyCountryDto,
+  HoldingChangeDto, HoldingCompositionDto, HoldingDetailDto, HoldingDto, LegacySnapshotDto,
+  PredictionDto, PropertyCountryDto,
   RecurringDto, SessionUser, SettingsDto, SymbolLookupDto, ValuationMode,
 } from '@api';
 import { api, ApiError } from './client.js';
@@ -149,6 +150,57 @@ export function useHoldingDetail(kind: HoldingKind, id: number | null) {
     queryKey: ['holdings', kind, id],
     queryFn: () => api<HoldingDetailDto>(`/api/${kind}/${id}`),
     enabled: id !== null,
+  });
+}
+
+/** Daily value series for one holding (detail-popup line graph). Disabled
+ *  while the detail popup is in prediction mode (the prediction series is fetched
+ *  instead). */
+export function useHoldingHistory(
+  kind: HoldingKind, id: number | null, range: HistoryRange, enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ['holdings', kind, id, 'history', range],
+    queryFn: () => api<HistoryDto>(`/api/${kind}/${id}/history?range=${range}`),
+    enabled: enabled && id !== null,
+    placeholderData: keepPreviousData,
+  });
+}
+
+/** Per-holding prediction series (detail-popup line graph in prediction mode). */
+export function useHoldingPrediction(
+  kind: HoldingKind, id: number | null, range: HistoryRange, enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ['holdings', kind, id, 'prediction', range],
+    queryFn: () => api<PredictionDto>(`/api/${kind}/${id}/prediction?range=${range}`),
+    enabled: enabled && id !== null,
+    placeholderData: keepPreviousData,
+  });
+}
+
+/**
+ * The selected holding's share of net worth for the detail-popup pie. Tracks
+ * the popup's modes: a view-as date (`asOf`) and/or prediction (`predict` with
+ * the chart's `range`), so the pie matches the line graph.
+ */
+export function useHoldingComposition(
+  kind: HoldingKind,
+  id: number | null,
+  opts: { asOf?: string | null; predict?: boolean; range?: HistoryRange } = {},
+) {
+  const { asOf = null, predict = false, range } = opts;
+  return useQuery({
+    queryKey: ['holdings', kind, id, 'composition', asOf, predict, range ?? null],
+    queryFn: () => {
+      const params: string[] = [];
+      if (asOf) params.push(`asOf=${asOf}`);
+      if (predict && range) params.push('predict=1', `range=${range}`);
+      const qs = params.length ? `?${params.join('&')}` : '';
+      return api<HoldingCompositionDto>(`/api/${kind}/${id}/composition${qs}`);
+    },
+    enabled: id !== null,
+    placeholderData: keepPreviousData,
   });
 }
 

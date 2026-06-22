@@ -4,43 +4,27 @@ import type {
   CategoryTotalDto, DashboardChangesDto, DashboardSummaryDto, HistoryDto, HistoryPointDto,
   HistoryRange, HoldingDto,
 } from '../../types/api.js';
-import { addDays, HISTORY_RANGES, isHistoryRange, rangeForwardEnd, rangeStart, todayISO } from '../../lib/dates.js';
+import { addDays, HISTORY_RANGES, isHistoryRange, rangeStart, todayISO } from '../../lib/dates.js';
 import { asOfParam, badRequest } from '../../lib/http.js';
+import {
+  computeTrend, downsample, MAX_GRAPH_POINTS,
+  TREND_WINDOW_DEFAULT_DAYS, TREND_WINDOW_MAX_DAYS, TREND_WINDOW_MIN_DAYS,
+} from '../../lib/series.js';
 import { ASSET_KIND, LIABILITY_KIND } from '../holdings/kind.js';
 import { listHoldings } from '../holdings/service.js';
 import { primeUserMarketPrices } from '../market/service.js';
-import { buildPrediction, projectPortfolioAt } from './prediction.js';
+import { buildPrediction, predictionTarget, projectPortfolioAt } from './prediction.js';
 
-const MAX_GRAPH_POINTS = 400;
+// Re-exported so existing importers (and the unit tests) keep their paths.
+export { computeTrend, downsample } from '../../lib/series.js';
+export {
+  TREND_WINDOW_DEFAULT_DAYS, TREND_WINDOW_MAX_DAYS, TREND_WINDOW_MIN_DAYS,
+} from '../../lib/series.js';
 
 // Projections estimate a market holding's growth from ~10 years of its own
 // price history, so the price cache is warmed over this window before any
 // projection runs (a no-op for the simulated provider).
 const PREDICTION_LOOKBACK_DAYS = 3660;
-
-// Trend smoothing window in days. The client may override per request via
-// ?trendWindow= within these bounds; whatever the window, it is applied to
-// the FULL history so a date's trend value is identical whatever range the
-// client requests — the trend must never re-fit to the visible window.
-export const TREND_WINDOW_DEFAULT_DAYS = 91;
-export const TREND_WINDOW_MIN_DAYS = 7;
-export const TREND_WINDOW_MAX_DAYS = 365;
-
-/**
- * Centred moving average over the full daily series. Returns one trend value
- * per input row (edges use the partial window). O(n) via prefix sums.
- */
-export function computeTrend(values: number[], windowDays = TREND_WINDOW_DEFAULT_DAYS): number[] {
-  const half = Math.floor(windowDays / 2);
-  const prefix = new Array<number>(values.length + 1);
-  prefix[0] = 0;
-  for (let i = 0; i < values.length; i++) prefix[i + 1] = prefix[i]! + values[i]!;
-  return values.map((_, i) => {
-    const lo = Math.max(0, i - half);
-    const hi = Math.min(values.length - 1, i + half);
-    return Math.round((prefix[hi + 1]! - prefix[lo]!) / (hi - lo + 1));
-  });
-}
 
 function byCategory(items: { category: string; valueMinor: number }[]): CategoryTotalDto[] {
   const map = new Map<string, CategoryTotalDto>();
@@ -55,37 +39,6 @@ function byCategory(items: { category: string; valueMinor: number }[]): Category
 
 const catItems = (holdings: HoldingDto[]) =>
   holdings.map((h) => ({ category: h.category, valueMinor: h.currentValueMinor }));
-
-/**
- * Prediction mode reports the portfolio as projected forward. The target is
- * the view-as date when one is pinned, otherwise the range's forward horizon
- * (clamped to it). Returns null when the range has no bounded future (ALL) or
- * is invalid, or when the target is not actually in the future — in those
- * cases the routes fall back to the live (real) data path.
- */
-function predictionTarget(range: string, asOf: string | undefined, today: string): string | null {
-  if (!isHistoryRange(range) || range === 'ALL') return null;
-  const horizon = rangeForwardEnd(range as HistoryRange, today);
-  if (!horizon) return null;
-  let target = asOf ?? horizon;
-  if (target > horizon) target = horizon;
-  return target > today ? target : null;
-}
-
-/** Thin the series to at most `max` points, always keeping both endpoints
- *  (isolated early points, e.g. legacy wealth, must survive). */
-export function downsample<T>(points: T[], max: number): T[] {
-  if (points.length <= max) return points;
-  const stride = Math.ceil(points.length / max);
-  const out: T[] = [];
-  for (let i = points.length - 1; i >= 0; i -= stride) out.push(points[i]!);
-  out.reverse();
-  if (out[0] !== points[0]) {
-    out.unshift(points[0]!);
-    if (out.length > max) out.splice(1, 1);
-  }
-  return out;
-}
 
 export function dashboardRoutes(ctx: AppContext): Router {
   const router = Router();

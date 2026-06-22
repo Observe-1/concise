@@ -5,12 +5,23 @@ import { METALS } from '../../types/api.js';
 import type { HoldingKind } from './kind.js';
 import { audit } from '../../lib/audit.js';
 import { asOfParam, badRequest, idParam, parseBody } from '../../lib/http.js';
-import { advanceCadence, isHistoryRange, todayISO, HISTORY_RANGES } from '../../lib/dates.js';
+import { addDays, advanceCadence, isHistoryRange, todayISO, HISTORY_RANGES } from '../../lib/dates.js';
+import {
+  TREND_WINDOW_DEFAULT_DAYS, TREND_WINDOW_MAX_DAYS, TREND_WINDOW_MIN_DAYS,
+} from '../../lib/series.js';
 import { dateStringSchema, valueMinorSchema as valueSchema } from '../../lib/schemas.js';
 import {
-  addValuation, createHolding, deleteHolding, getHolding, holdingChanges, listHoldings, updateHolding,
+  addValuation, assertHoldingOwned, createHolding, deleteHolding, getHolding,
+  holdingChanges, holdingHistory, listHoldings, updateHolding,
 } from './service.js';
 import { createRecurring } from '../recurring/service.js';
+import { buildHoldingPrediction } from '../dashboard/prediction.js';
+import { holdingComposition } from '../dashboard/composition.js';
+import { primeUserMarketPrices } from '../market/service.js';
+
+// Market-return estimates look back ~10 years; warm that window before any
+// per-holding projection (a no-op for the simulated provider).
+const PREDICTION_LOOKBACK_DAYS = 3660;
 
 function buildSchemas(k: HoldingKind) {
   const base = {
@@ -154,6 +165,54 @@ export function holdingsRoutes(ctx: AppContext, k: HoldingKind): Router {
       detail: { valueMinor }, ip: req.ip,
     });
     res.status(201).json(dto);
+  });
+
+  // ---- per-holding charts (detail popup): value-over-time line + pie ----
+
+  // Daily value series for one holding, shaped like the dashboard history so
+  // the detail line graph reuses the same chart and range presets.
+  router.get('/:id/history', (req, res) => {
+    const range = String(req.query.range ?? '1Y').toUpperCase();
+    if (!isHistoryRange(range)) throw badRequest(`Invalid range; expected one of ${HISTORY_RANGES.join(', ')}`);
+    let trendWindow = TREND_WINDOW_DEFAULT_DAYS;
+    if (req.query.trendWindow !== undefined) {
+      trendWindow = Number(req.query.trendWindow);
+      if (!Number.isInteger(trendWindow)
+        || trendWindow < TREND_WINDOW_MIN_DAYS || trendWindow > TREND_WINDOW_MAX_DAYS) {
+        throw badRequest(
+          `Invalid trendWindow; expected an integer between ${TREND_WINDOW_MIN_DAYS} and ${TREND_WINDOW_MAX_DAYS}`,
+        );
+      }
+    }
+    res.json(holdingHistory(ctx, k, req.user!.id, idParam(req), range, trendWindow));
+  });
+
+  // On-the-fly projection of one holding into the future (mirrors the dashboard
+  // prediction graph). ALL is unbounded and rejected, as on the dashboard.
+  router.get('/:id/prediction', async (req, res) => {
+    const id = idParam(req);
+    assertHoldingOwned(ctx, k, req.user!.id, id);
+    const range = String(req.query.range ?? '1Y').toUpperCase();
+    if (!isHistoryRange(range)) throw badRequest(`Invalid range; expected one of ${HISTORY_RANGES.join(', ')}`);
+    if (range === 'ALL') throw badRequest('Prediction is not available for the ALL range');
+    const today = todayISO(ctx.now);
+    await primeUserMarketPrices(ctx, req.user!.id, addDays(today, -PREDICTION_LOOKBACK_DAYS), today);
+    res.json(buildHoldingPrediction(ctx, req.user!.id, k, id, range));
+  });
+
+  // The holding's share of net worth for the pie: its value plus the totals of
+  // every other asset/liability — current, as-of (view-as) or projected.
+  router.get('/:id/composition', async (req, res) => {
+    const id = idParam(req);
+    assertHoldingOwned(ctx, k, req.user!.id, id);
+    const range = req.query.range !== undefined ? String(req.query.range).toUpperCase() : undefined;
+    res.json(
+      await holdingComposition(ctx, k, req.user!.id, id, {
+        asOf: asOfParam(req),
+        predict: req.query.predict === '1',
+        range,
+      }),
+    );
   });
 
   return router;

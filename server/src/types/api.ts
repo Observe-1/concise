@@ -99,6 +99,21 @@ export interface HoldingDetailDto extends HoldingDto {
   valuations: ValuationDto[];
 }
 
+/**
+ * A single holding's place in the overall portfolio, for the detail-popup pie:
+ * the selected holding's value plus the totals of every *other* asset and
+ * liability. Computed for the current portfolio, as of a past date (view-as) or
+ * projected forward (prediction) so the pie matches the detail line graph's
+ * mode. `side` says which slice the selected holding belongs to (it is excluded
+ * from its own "other" total).
+ */
+export interface HoldingCompositionDto {
+  side: 'asset' | 'liability';
+  selectedMinor: number;
+  otherAssetsMinor: number;
+  otherLiabilitiesMinor: number;
+}
+
 /** Percent change of a holding's value over a requested range. */
 export interface HoldingChangeDto {
   id: number;

@@ -116,9 +116,15 @@ export function SuccessNote({ message }: { message: string }) {
 
 // ---------- modal (mobile bottom sheet, centered on desktop) ----------
 
+const modalWidths = {
+  md: 'sm:max-w-md',
+  lg: 'sm:max-w-2xl',
+  xl: 'sm:max-w-5xl',
+} as const;
+
 export function Modal({
-  title, onClose, children,
-}: { title: string; onClose: () => void; children: ReactNode }) {
+  title, onClose, children, size = 'md',
+}: { title: string; onClose: () => void; children: ReactNode; size?: keyof typeof modalWidths }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -141,7 +147,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="max-h-[90vh] w-full overflow-y-auto rounded-t-3xl border border-ink-800 bg-ink-900 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:max-w-md sm:rounded-3xl"
+        className={`max-h-[90vh] w-full overflow-y-auto rounded-t-3xl border border-ink-800 bg-ink-900 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:rounded-3xl ${modalWidths[size]}`}
       >
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-base font-semibold text-ink-100">{title}</h2>

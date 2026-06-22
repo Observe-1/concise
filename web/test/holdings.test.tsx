@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from '../src/App.js';
 import { mockFetch, renderWithProviders } from './helpers.js';
@@ -389,6 +389,85 @@ describe('assets page', () => {
         name: 'Painting', valueMinor: 500_000, asOf: '2020-01-01', presentValueMinor: 1_200_000,
       });
     });
+  });
+
+  it('opens a detail popup with a line graph, composition pie and mode toggles', async () => {
+    const calls = mockFetch([
+      [/\/api\/auth\/me/, { user: demoUser }],
+      [/\/api\/assets\/1\/history/, {
+        range: '1Y', trendWindow: 91, points: [
+          { date: '2026-05-01', assetsMinor: 4_000_00, liabilitiesMinor: 0, netWorthMinor: 4_000_00, trendMinor: 4_000_00 },
+          { date: '2026-06-01', assetsMinor: 4_250_00, liabilitiesMinor: 0, netWorthMinor: 4_250_00, trendMinor: 4_200_00 },
+        ],
+      }],
+      [/\/api\/assets\/1\/prediction/, {
+        range: '1Y', today: '2026-06-01', points: [
+          { date: '2026-06-01', assetsMinor: 4_250_00, liabilitiesMinor: 0, netWorthMinor: 4_250_00, trendMinor: 4_250_00 },
+          { date: '2026-12-01', assetsMinor: 5_000_00, liabilitiesMinor: 0, netWorthMinor: 5_000_00, trendMinor: 5_000_00 },
+        ],
+      }],
+      [/\/api\/assets\/1\/composition/, {
+        side: 'asset', selectedMinor: 4_250_00, otherAssetsMinor: 20_000_00, otherLiabilitiesMinor: 8_000_00,
+      }],
+      [/\/api\/assets$/, [assets[0]]],
+    ]);
+    renderWithProviders(<App />, { route: '/assets' });
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByText('Checking'));
+
+    // The wide edit popup shows both chart sections, the pie key and the modes.
+    const dialog = await screen.findByRole('dialog', { name: /edit checking/i });
+    expect(within(dialog).getByText(/share of net worth/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/value over time/i)).toBeInTheDocument();
+    expect(within(dialog).getByText('Other assets')).toBeInTheDocument();
+    expect(within(dialog).getByText('Other liabilities')).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: /prediction/i })).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: /view as/i })).toBeInTheDocument();
+
+    // The history and composition were fetched on open.
+    await waitFor(() => {
+      expect(calls.some((c) => /\/api\/assets\/1\/history/.test(c.url))).toBe(true);
+      expect(calls.some((c) => /\/api\/assets\/1\/composition/.test(c.url))).toBe(true);
+    });
+
+    // Max is offered until prediction mode, which then fetches the projection.
+    const ranges = within(dialog).getByRole('group', { name: /history range/i });
+    expect(within(ranges).getByRole('button', { name: 'Max' })).toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: /prediction/i }));
+    await waitFor(() => {
+      expect(calls.some((c) => /\/api\/assets\/1\/prediction\?range=/.test(c.url))).toBe(true);
+    });
+    expect(within(ranges).queryByRole('button', { name: 'Max' })).not.toBeInTheDocument();
+  });
+
+  it('never requests a prediction for the unbounded Max range', async () => {
+    const calls = mockFetch([
+      [/\/api\/auth\/me/, { user: demoUser }],
+      [/\/api\/assets\/1\/history/, { range: 'ALL', trendWindow: 91, points: [
+        { date: '2026-05-01', assetsMinor: 4_000_00, liabilitiesMinor: 0, netWorthMinor: 4_000_00, trendMinor: 4_000_00 },
+        { date: '2026-06-01', assetsMinor: 4_250_00, liabilitiesMinor: 0, netWorthMinor: 4_250_00, trendMinor: 4_200_00 },
+      ] }],
+      [/\/api\/assets\/1\/prediction/, { range: '1Y', today: '2026-06-01', points: [] }],
+      [/\/api\/assets\/1\/composition/, {
+        side: 'asset', selectedMinor: 4_250_00, otherAssetsMinor: 20_000_00, otherLiabilitiesMinor: 8_000_00,
+      }],
+      [/\/api\/assets$/, [assets[0]]],
+    ]);
+    renderWithProviders(<App />, { route: '/assets' });
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByText('Checking'));
+    const dialog = await screen.findByRole('dialog', { name: /edit checking/i });
+
+    // Select Max, then enter prediction: the ALL range must never be requested.
+    await user.click(within(dialog).getByRole('button', { name: 'Max' }));
+    await user.click(within(dialog).getByRole('button', { name: /prediction/i }));
+
+    await waitFor(() => {
+      expect(calls.some((c) => /\/api\/assets\/1\/prediction\?range=/.test(c.url))).toBe(true);
+    });
+    expect(calls.some((c) => /\/api\/assets\/1\/prediction\?range=ALL/.test(c.url))).toBe(false);
   });
 
   it('rejects invalid amounts before hitting the API', async () => {
