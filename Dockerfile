@@ -37,12 +37,25 @@ RUN npm ci --omit=dev
 FROM node:24-slim AS runtime
 WORKDIR /app
 
-# gosu lets the entrypoint drop from root to the requested PUID/PGID cleanly
-# (exec, no extra process) on NAS platforms. ~2 MB; nothing else is added.
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends gosu \
-  && rm -rf /var/lib/apt/lists/* \
-  && gosu nobody true
+# The entrypoint drops from root to the requested PUID/PGID with setpriv, which
+# ships in util-linux (already present in the base image). Like gosu it is an
+# exec-based privilege drop — no extra process — so the app becomes PID 1 and
+# receives SIGTERM directly for the graceful shutdown handler in index.ts.
+#
+# setpriv replaces gosu, whose statically-linked Go binary dragged dozens of Go
+# stdlib CVEs into the image (not reachable through gosu's narrow use, but the
+# scanner flags every one). setpriv is C and adds nothing to the image.
+#
+# npm/npx/corepack are build-time tooling and are never invoked at runtime — the
+# entrypoint, CMD, and HEALTHCHECK all call node directly. Removing them strips
+# npm's bundled dependency tree (undici, tar, ip-address, brace-expansion, …)
+# and the steady stream of CVEs it carries, with no effect on the running app.
+RUN rm -rf \
+      /usr/local/lib/node_modules/npm \
+      /usr/local/lib/node_modules/corepack \
+      /usr/local/bin/npm \
+      /usr/local/bin/npx \
+      /usr/local/bin/corepack
 
 # BACKUP_DIR sits under the same /data volume as the database, so automatic and
 # manual backups persist across container rebuilds (see BACKUP.md). For disaster
@@ -85,7 +98,7 @@ RUN mkdir -p /data && chown -R node:node /data
 VOLUME ["/data"]
 
 # NOTE: the image starts as root so the entrypoint can chown /data and drop to
-# PUID/PGID via gosu. It never runs the app as root — see docker-entrypoint.sh.
+# PUID/PGID via setpriv. It never runs the app as root — see docker-entrypoint.sh.
 # The hardened docker-compose stack pins `user:` so the entrypoint skips the
 # drop and runs unprivileged from the start.
 EXPOSE 3000

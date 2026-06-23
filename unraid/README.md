@@ -31,7 +31,7 @@ level, demo seed) are hidden under **Show more settings…**; defaults are safe.
 ## How it works (PUID/PGID)
 
 The image starts as root, the entrypoint `chown`s `/data` to `PUID:PGID`, then
-drops to that user via `gosu` and `exec`s Node (so the app is PID 1 / gets a
+drops to that user via `setpriv` and `exec`s Node (so the app is PID 1 / gets a
 clean SIGTERM). It never runs the app as root. If the container is instead
 started as a non-root user (the project's hardened `docker-compose.yml` pins
 `user: 1000:1000`), the entrypoint detects that and runs directly without the
