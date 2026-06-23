@@ -32,9 +32,12 @@ if [ "$(id -u)" = "0" ]; then
   if [ "$(stat -c '%u:%g' /data)" != "${PUID}:${PGID}" ]; then
     chown -R "${PUID}:${PGID}" /data
   fi
-  # `exec` so the app replaces gosu and becomes PID 1, receiving SIGTERM for the
-  # graceful shutdown handler in index.ts.
-  exec gosu "${PUID}:${PGID}" "$@"
+  # `exec` so the app replaces setpriv and becomes PID 1, receiving SIGTERM for
+  # the graceful shutdown handler in index.ts. setpriv (util-linux) is an
+  # exec-based privilege drop, like gosu, and handles numeric IDs with no
+  # /etc/passwd entry (e.g. Unraid's 99:100). --clear-groups drops root's
+  # supplementary groups so only the requested PGID remains.
+  exec setpriv --reuid "${PUID}" --regid "${PGID}" --clear-groups "$@"
 fi
 
 exec "$@"
