@@ -37,14 +37,30 @@ RUN npm ci --omit=dev
 FROM node:24-slim AS runtime
 WORKDIR /app
 
+# gosu lets the entrypoint drop from root to the requested PUID/PGID cleanly
+# (exec, no extra process) on NAS platforms. ~2 MB; nothing else is added.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends gosu \
+  && rm -rf /var/lib/apt/lists/* \
+  && gosu nobody true
+
 # BACKUP_DIR sits under the same /data volume as the database, so automatic and
 # manual backups persist across container rebuilds (see BACKUP.md). For disaster
 # recovery still copy the volume off-host periodically.
+#
+# PUID/PGID/UMASK make the container NAS-friendly (Unraid, Synology, TrueNAS):
+# the entrypoint runs the app as that host user so files on a bind-mounted /data
+# are owned correctly. Defaults match the image's built-in `node` user (1000);
+# on Unraid set PUID=99 / PGID=100. TZ only affects log readability — all of
+# Concise's own date logic is UTC (see lib/dates.ts).
 ENV NODE_ENV=production \
     PORT=3000 \
     DB_PATH=/data/concise.db \
     BACKUP_DIR=/data/backups \
-    WEB_DIST_DIR=/app/web/dist
+    WEB_DIST_DIR=/app/web/dist \
+    PUID=1000 \
+    PGID=1000 \
+    TZ=Etc/UTC
 
 # Production node_modules, the compiled server, and the static web app.
 # server/package.json carries "type": "module" so Node loads the ESM bundle.
@@ -57,16 +73,26 @@ COPY server/package.json ./server/package.json
 # but esbuild does not copy them — bring the .sql files alongside the bundle.
 COPY --from=build /app/server/src/db/migrations ./server/dist/migrations
 
-# Persist the SQLite database on a volume owned by the non-root runtime user so
-# the app can create and write the DB file.
+# Privilege-dropping entrypoint (PUID/PGID). Strip any CRLF in case the script
+# was checked out on Windows, then make it executable.
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN sed -i 's/\r$//' /usr/local/bin/docker-entrypoint.sh \
+  && chmod +x /usr/local/bin/docker-entrypoint.sh
+
+# Seed /data owned by the default runtime user; the entrypoint re-chowns it to
+# PUID/PGID at startup when those differ (e.g. Unraid's 99:100).
 RUN mkdir -p /data && chown -R node:node /data
 VOLUME ["/data"]
 
-USER node
+# NOTE: the image starts as root so the entrypoint can chown /data and drop to
+# PUID/PGID via gosu. It never runs the app as root — see docker-entrypoint.sh.
+# The hardened docker-compose stack pins `user:` so the entrypoint skips the
+# drop and runs unprivileged from the start.
 EXPOSE 3000
 
 # The API exposes GET /api/health; use Node's global fetch (no curl in slim).
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["node", "server/dist/index.js"]

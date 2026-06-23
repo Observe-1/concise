@@ -1,0 +1,77 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>concise</Name>
+  <Repository>observe1234/concise-wealth-tracker:latest</Repository>
+  <Registry>https://hub.docker.com/r/observe1234/concise-wealth-tracker</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support/>
+  <Project/>
+  <Overview>Concise is a minimalist, self-hosted personal finance / net-worth tracker. One small Node.js process serves the API and web UI; all state is a single SQLite file plus validated backups, stored on the mapped /data volume. Set PUID/PGID to the user that owns your appdata share (Unraid: 99 / 100). Access over plain HTTP on your LAN requires COOKIE_SECURE=false (the template default); set it to true only when serving Concise behind an HTTPS reverse proxy.</Overview>
+  <Category>Productivity:</Category>
+  <WebUI>http://[IP]:[PORT:3000]/</WebUI>
+  <TemplateURL/>
+  <Icon/>
+  <ExtraParams>--init</ExtraParams>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Description>Minimalist self-hosted personal finance / net-worth tracker (SQLite, no external database). Data and automatic backups live on /data — map it to your appdata share and set PUID/PGID to that share's owner.</Description>
+  <Networking>
+    <Mode>bridge</Mode>
+    <Publish>
+      <Port>
+        <HostPort>3000</HostPort>
+        <ContainerPort>3000</ContainerPort>
+        <Protocol>tcp</Protocol>
+      </Port>
+    </Publish>
+  </Networking>
+  <Data>
+    <Volume>
+      <HostDir>/mnt/user/appdata/concise-wealth-tracker</HostDir>
+      <ContainerDir>/data</ContainerDir>
+      <Mode>rw</Mode>
+    </Volume>
+  </Data>
+  <Environment>
+    <Variable>
+      <Value>99</Value>
+      <Name>PUID</Name>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>100</Value>
+      <Name>PGID</Name>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>false</Value>
+      <Name>COOKIE_SECURE</Name>
+      <Mode/>
+    </Variable>
+  </Environment>
+
+  <!-- Visible (basic) settings -->
+  <Config Name="WebUI Port" Target="3000" Default="3000" Mode="tcp" Description="Host port for the Concise web UI and API. The container always listens on 3000 internally." Type="Port" Display="always" Required="true" Mask="false">3000</Config>
+  <Config Name="Appdata" Target="/data" Default="/mnt/user/appdata/concise-wealth-tracker" Mode="rw" Description="Persistent storage: the SQLite database (concise.db) and the backups/ folder. Must be writable by PUID:PGID." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/concise-wealth-tracker</Config>
+  <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="User ID that owns the appdata share. Unraid default is 99 (nobody). Files in /data are created as this user." Type="Variable" Display="always" Required="true" Mask="false">99</Config>
+  <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="Group ID that owns the appdata share. Unraid default is 100 (users)." Type="Variable" Display="always" Required="true" Mask="false">100</Config>
+  <Config Name="COOKIE_SECURE" Target="COOKIE_SECURE" Default="false" Mode="" Description="Send session cookies only over HTTPS. Leave 'false' for plain-HTTP LAN access (e.g. http://tower:3000) or login will silently fail. Set 'true' ONLY when Concise is behind an HTTPS reverse proxy." Type="Variable" Display="always" Required="true" Mask="false">false</Config>
+
+  <!-- Advanced settings -->
+  <Config Name="TZ" Target="TZ" Default="Etc/UTC" Mode="" Description="Timezone for log timestamps. Concise's own date calculations are always UTC, so this is cosmetic." Type="Variable" Display="advanced" Required="false" Mask="false">Etc/UTC</Config>
+  <Config Name="UMASK" Target="UMASK" Default="022" Mode="" Description="File-creation mask for the database and backups." Type="Variable" Display="advanced" Required="false" Mask="false">022</Config>
+  <Config Name="TRUST_PROXY" Target="TRUST_PROXY" Default="0" Mode="" Description="Number of reverse-proxy hops to trust for client IPs (rate limiting, audit log). Set to 1 behind a single proxy; 0 when exposed directly." Type="Variable" Display="advanced" Required="false" Mask="false">0</Config>
+  <Config Name="TRUSTED_ORIGINS" Target="TRUSTED_ORIGINS" Default="" Mode="" Description="Comma-separated extra origins the CSRF check should trust (e.g. https://money.example.com). Only needed if the UI is served from a different origin than the API." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+  <Config Name="SESSION_TTL_HOURS" Target="SESSION_TTL_HOURS" Default="336" Mode="" Description="Session lifetime in hours (default 336 = 14 days)." Type="Variable" Display="advanced" Required="false" Mask="false">336</Config>
+  <Config Name="API_RATE_LIMIT" Target="API_RATE_LIMIT" Default="300" Mode="" Description="Max API requests per client IP per minute." Type="Variable" Display="advanced" Required="false" Mask="false">300</Config>
+  <Config Name="LOGIN_RATE_LIMIT" Target="LOGIN_RATE_LIMIT" Default="10" Mode="" Description="Max login attempts per client IP per 15 minutes." Type="Variable" Display="advanced" Required="false" Mask="false">10</Config>
+  <Config Name="PRICE_PROVIDER" Target="PRICE_PROVIDER" Default="real" Mode="" Description="'real' fetches live quotes from Yahoo Finance (no API key). 'simulated' uses a deterministic offline simulation (for air-gapped use; prices will not match the market)." Type="Variable" Display="advanced" Required="false" Mask="false">real</Config>
+  <Config Name="LOG_LEVEL" Target="LOG_LEVEL" Default="info" Mode="" Description="Log verbosity (structured JSON to the container log): fatal, error, warn, info, debug, trace, silent." Type="Variable" Display="advanced" Required="false" Mask="false">info</Config>
+  <Config Name="SEED_ON_START" Target="SEED_ON_START" Default="0" Mode="" Description="Set to 1 to (re)create the demo account (demo / demo) on every start. Leave 0 for real use." Type="Variable" Display="advanced" Required="false" Mask="false">0</Config>
+</Container>
