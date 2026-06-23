@@ -1,0 +1,4 @@
+# Shell scripts must stay LF so they run inside Linux containers regardless of
+# the host they were checked out on (the Dockerfile also strips CRLF defensively).
+*.sh text eol=lf
+docker-entrypoint.sh text eol=lf

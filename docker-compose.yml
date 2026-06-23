@@ -19,6 +19,14 @@ services:
     container_name: concise
     restart: unless-stopped
     init: true                       # reap zombies, forward signals cleanly
+    # Run unprivileged from the start (UID:GID 1000, the image's `node` user).
+    # The entrypoint's PUID/PGID chown step is for NAS platforms (Unraid) that
+    # start the container as root; here we pin a non-root user instead, so the
+    # entrypoint skips it — required because cap_drop/no-new-privileges below
+    # would block the root→user drop anyway. The named volume is created owned
+    # by 1000 (see the Dockerfile), so /data is writable. To use a different
+    # user, change this AND pre-create the volume/bind dir owned by that UID.
+    user: "1000:1000"
     # Defense-in-depth: the app only needs to write to /data, so the rest of
     # the filesystem is read-only and the process can gain no extra privileges.
     read_only: true
