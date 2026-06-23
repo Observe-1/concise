@@ -52,7 +52,10 @@ export function requestLogger(ctx: AppContext): RequestHandler {
     res.on('finish', () => {
       const durationMs = Math.round(Number(process.hrtime.bigint() - startNs) / 1e4) / 100;
       const path = req.originalUrl.split('?')[0]; // drop the query string
-      const level = path === '/api/health' ? 'debug' : 'info';
+      // Liveness is polled constantly by health checks — log it at debug.
+      // Tolerate a trailing slash (a probe may be configured either way).
+      const isLiveness = path === '/api/health' || path === '/api/health/';
+      const level = isLiveness ? 'debug' : 'info';
       req.log![level](
         {
           method: req.method,

@@ -72,9 +72,9 @@ export function priceLevel(dateISO: string): number {
  * flattens apparent growth into the honest, inflation-adjusted picture.
  */
 export function realFactor(fromISO: string, toISO: string): number {
-  const from = priceLevel(fromISO);
-  if (from === 0) return 1;
-  return priceLevel(toISO) / from;
+  // priceLevel is always >= 1 (anchored at 1, compounding non-negative rates),
+  // so the division is always safe.
+  return priceLevel(toISO) / priceLevel(fromISO);
 }
 
 /** Convert an integer minor-unit amount nominal at `fromISO` into `toISO` money. */

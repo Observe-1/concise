@@ -503,8 +503,9 @@ image, one port, one volume.
   header (so a reverse proxy's id is preserved) or freshly generated, and echoed
   back on the response — attaches a child logger (`req.log`, used by the error
   handler and routes), and emits one `request completed` line per request with
-  method, path (no query string), status, duration and the authenticated user
-  id. Like the health endpoints, the logs carry only operational facts — never
-  request bodies, financial figures, passwords or session tokens. This
+  method, path (no query string), status, duration, the client IP (as in the
+  audit log) and the authenticated user id. Like the health endpoints, the logs
+  carry only operational facts — never request bodies, financial figures,
+  passwords or session tokens. This
   complements the persisted **audit log** (security events, §3) and the
   point-in-time **health** endpoints.

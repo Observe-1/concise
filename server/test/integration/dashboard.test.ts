@@ -255,21 +255,26 @@ describe('dashboard API', () => {
     expect(lastR.netWorthMinor).toBe(lastN.netWorthMinor);
     expect(lastR.assetsMinor).toBe(lastN.assetsMinor);
 
-    // An early point is scaled UP — past money is worth more in today's terms.
-    if (nPts[0]!.netWorthMinor > 0) {
-      expect(rPts[0]!.netWorthMinor).toBeGreaterThan(nPts[0]!.netWorthMinor);
-    }
+    // A past point with positive net worth is deflated UP — past money is worth
+    // more in today's terms — so its real value exceeds nominal. Such a point
+    // exists (net worth has been positive for years in the seed); the very first
+    // snapshot can be negative (early mortgage), where the sign would flip.
+    const i = nPts.findIndex((p) => p.netWorthMinor > 0 && p.date < '2026-06-11');
+    expect(i).toBeGreaterThanOrEqual(0);
+    expect(rPts[i]!.netWorthMinor).toBeGreaterThan(nPts[i]!.netWorthMinor);
   });
 
-  it('reports inflation-adjusted (real) percent change, below nominal over a long range', async () => {
-    const nominal = await agent.get('/api/dashboard/changes?range=5Y');
-    const real = await agent.get('/api/dashboard/changes?range=5Y&real=1');
+  it('reports inflation-adjusted (real) percent change, below nominal', async () => {
+    const nominal = await agent.get('/api/dashboard/changes?range=1Y');
+    const real = await agent.get('/api/dashboard/changes?range=1Y&real=1');
     expect(real.status).toBe(200);
-    expect(real.body.range).toBe('5Y');
-    // Where nominal net worth grew, inflation eats into it, so real < nominal.
-    if (typeof nominal.body.netWorthChangePct === 'number' && nominal.body.netWorthChangePct > 0) {
-      expect(real.body.netWorthChangePct).toBeLessThan(nominal.body.netWorthChangePct);
-    }
+    expect(real.body.range).toBe('1Y');
+    // The 1Y base snapshot exists and is positive, so both percentages are
+    // numbers; deflating the base up to today (factor > 1) strictly reduces the
+    // measured growth, so real < nominal regardless of the growth direction.
+    expect(typeof nominal.body.netWorthChangePct).toBe('number');
+    expect(typeof real.body.netWorthChangePct).toBe('number');
+    expect(real.body.netWorthChangePct).toBeLessThan(nominal.body.netWorthChangePct);
   });
 
   it('keeps a custom trend window stable across range changes', async () => {

@@ -177,10 +177,11 @@ data. See [HEALTHCHECK.md](HEALTHCHECK.md).
 Concise writes structured JSON logs to stdout (via pino), so `docker logs`,
 journald or a log shipper just work. Every `/api/*` request carries a
 correlation id — sent back as the `x-request-id` header and included in a
-`request completed` log line (method, path, status, duration, user id) — so an
-issue can be traced end to end. Logs report only operational facts, never
-financial data, passwords or session tokens. Set `LOG_LEVEL` to tune verbosity
-(`debug` to see liveness polls and per-request detail; `silent` to disable).
+`request completed` log line (method, path, status, duration, client IP, user
+id) — so an issue can be traced end to end. Logs report only operational facts,
+never financial data, passwords or session tokens. Per-request lines are emitted
+at `info`; set `LOG_LEVEL` to `debug` to additionally log liveness health-check
+polls, or `silent` to disable.
 
 ## Security
 

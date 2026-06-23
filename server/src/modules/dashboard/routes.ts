@@ -209,19 +209,23 @@ export function dashboardRoutes(ctx: AppContext): Router {
       .all(req.user!.id) as unknown as {
         date: string; assets_minor: number; liabilities_minor: number; net_worth_minor: number;
       }[];
-    // Scale before smoothing so the trend is a trend of the real series.
-    const netWorth = rows.map((r) => Math.round(r.net_worth_minor * factor(r.date)));
-    const trend = computeTrend(netWorth, trendWindow);
+    // Scale each side, then derive net worth as their difference, so the three
+    // displayed figures always reconcile (rounding each independently could
+    // otherwise drift by a minor unit). In nominal mode factor = 1, so these are
+    // the stored values unchanged. The trend is over this (real) net-worth series.
+    const assetsReal = rows.map((r) => Math.round(r.assets_minor * factor(r.date)));
+    const liabilitiesReal = rows.map((r) => Math.round(r.liabilities_minor * factor(r.date)));
+    const netWorthReal = rows.map((_, i) => assetsReal[i]! - liabilitiesReal[i]!);
+    const trend = computeTrend(netWorthReal, trendWindow);
 
     const points: HistoryPointDto[] = [];
     rows.forEach((r, i) => {
       if (start && r.date < start) return;
-      const f = factor(r.date);
       points.push({
         date: r.date,
-        assetsMinor: Math.round(r.assets_minor * f),
-        liabilitiesMinor: Math.round(r.liabilities_minor * f),
-        netWorthMinor: netWorth[i]!,
+        assetsMinor: assetsReal[i]!,
+        liabilitiesMinor: liabilitiesReal[i]!,
+        netWorthMinor: netWorthReal[i]!,
         trendMinor: trend[i]!,
       });
     });

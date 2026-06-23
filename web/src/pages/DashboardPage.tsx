@@ -38,8 +38,10 @@ export function DashboardPage() {
   // ALL has no bounded future, so it can't drive a projection.
   const predict = predicting && range !== 'ALL';
   // "Real terms": deflate the graph and the percent changes to today's money.
-  // Prediction projects nominal future values, so the two modes are exclusive.
-  const showReal = real && !predicting;
+  // It's a live-view lens, so it's not offered in prediction mode (projections
+  // are nominal) or while a past "view as" date is pinned (the cards would still
+  // show that date's nominal totals, mislabelled as today's money).
+  const showReal = real && !predicting && !asOf;
   const summary = useSummary(asOf, predict ? { range } : undefined);
   // Debounced so dragging the slider doesn't fire a request per step.
   const history = useHistory(range, useDebouncedValue(trendWindow), showReal);
@@ -84,9 +86,10 @@ export function DashboardPage() {
           ranges={predicting ? PREDICTION_RANGES : RANGES}
         />
         <div className="flex shrink-0 items-center gap-2">
-          {/* Nominal vs real (inflation-adjusted) terms. Meaningless over
-              projected values, so hidden in prediction mode like the trend. */}
-          {!predicting && (
+          {/* Nominal vs real (inflation-adjusted) terms. A live-view lens, so
+              hidden in prediction mode (projections are nominal) and while a
+              past "view as" date is pinned. */}
+          {!predicting && !asOf && (
             <div role="group" aria-label="Value basis" className="flex shrink-0 rounded-lg bg-ink-800/60 p-0.5">
               {([['nominal', 'Nominal'], ['real', 'Real']] as const).map(([key, label]) => {
                 const active = (key === 'real') === real;

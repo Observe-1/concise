@@ -86,9 +86,10 @@ exercised by the security test suite, `server/test/integration/security.test.ts`
 - An **audit log** persists authentication events and every mutation with the
   client IP (`audit_log` table).
 - **Operational logs** are structured JSON with a per-request correlation id
-  (`x-request-id`); they record method, path, status, timing and the user id —
-  and **never** request bodies, financial figures, passwords or session tokens
-  (cookie/authorization headers are redacted defensively). See ARCHITECTURE §7.
+  (`x-request-id`); they record method, path, status, timing, the client IP (as
+  in the audit log) and the user id — and **never** request bodies, financial
+  figures, passwords or session tokens (cookie/authorization headers are redacted
+  defensively). See ARCHITECTURE §7.
 - The **health endpoints** (`/api/health`, `/api/health/detailed`) are
   unauthenticated by design and report only operational status — never any
   financial or account data ([HEALTHCHECK.md](HEALTHCHECK.md)).
