@@ -115,6 +115,10 @@ export function NetWorthChart({
   // side keeps it on-screen, which needs the rendered chart width.
   const containerRef = useRef<HTMLDivElement>(null);
   const [chartWidth, setChartWidth] = useState(0);
+  // While a marker flag is hovered its own panel is the focus, so the general
+  // net-worth/assets/debts tooltip is suppressed to avoid two overlapping
+  // overlays fighting for the same spot.
+  const [flagHovered, setFlagHovered] = useState(false);
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return undefined;
@@ -212,7 +216,7 @@ export function NetWorthChart({
             width={Y_AXIS_WIDTH}
             domain={yDomain}
           />
-          <Tooltip content={<ChartTooltip currency={currency} valueLabel={valueLabel} />} />
+          <Tooltip content={<ChartTooltip currency={currency} valueLabel={valueLabel} suppressed={flagHovered} />} />
           {ages.map((marker) => (
             <ReferenceLine
               key={marker.age}
@@ -254,6 +258,7 @@ export function NetWorthChart({
                   tone="now"
                   slot={0}
                   chartWidth={chartWidth}
+                  onHoverChange={setFlagHovered}
                 />
               )}
             />
@@ -277,6 +282,7 @@ export function NetWorthChart({
                   tone="goal"
                   slot={i % 3}
                   chartWidth={chartWidth}
+                  onHoverChange={setFlagHovered}
                 />
               )}
             />
@@ -362,6 +368,9 @@ interface MarkerFlagProps {
   slot: number;
   /** Rendered chart width, used to flip the panel to the on-screen side. */
   chartWidth: number;
+  /** Notifies the chart when this flag is hovered, so the general tooltip can
+   *  be suppressed while the flag's own panel is shown. */
+  onHoverChange?: (hovered: boolean) => void;
 }
 
 // Geometry for the marker flags. They sit in a band BELOW the age-marker
@@ -384,8 +393,9 @@ const FLAG_TONES = {
  * grows toward whichever side keeps it inside the plot, and carries a
  * full-height transparent hit area so hovering anywhere on the line opens it.
  */
-function MarkerFlag({ viewBox, label, detail, tone, slot, chartWidth }: MarkerFlagProps) {
+function MarkerFlag({ viewBox, label, detail, tone, slot, chartWidth, onHoverChange }: MarkerFlagProps) {
   const [hover, setHover] = useState(false);
+  const setH = (v: boolean) => { setHover(v); onHoverChange?.(v); };
   const x = viewBox?.x;
   const top = viewBox?.y ?? 0;
   const lineHeight = viewBox?.height ?? 0;
@@ -406,7 +416,7 @@ function MarkerFlag({ viewBox, label, detail, tone, slot, chartWidth }: MarkerFl
   const boxX = leftSide ? x - boxW : x;
 
   return (
-    <g onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+    <g onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)}>
       {/* Transparent (not 'none') so the whole line height is hoverable. */}
       <rect x={x - 7} y={top} width={14} height={lineHeight} fill="transparent" />
       <rect
@@ -443,10 +453,12 @@ interface TooltipProps {
   payload?: { payload: HistoryPointDto }[];
   currency: string;
   valueLabel?: string;
+  /** When a marker flag is hovered, the general tooltip stands down. */
+  suppressed?: boolean;
 }
 
-function ChartTooltip({ active, payload, currency, valueLabel }: TooltipProps) {
-  if (!active || !payload?.length) return null;
+function ChartTooltip({ active, payload, currency, valueLabel, suppressed }: TooltipProps) {
+  if (suppressed || !active || !payload?.length) return null;
   const p = payload[0]!.payload;
   return (
     <div className="rounded-xl border border-ink-700 bg-ink-950/95 px-3 py-2 text-xs shadow-xl">
