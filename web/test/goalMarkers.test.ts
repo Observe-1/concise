@@ -16,7 +16,7 @@ function goal(over: Partial<GoalDto>): GoalDto {
   return {
     id: 1, name: 'Goal', goalType: 'net_worth', targetMinor: 100, liabilityId: null, liabilityName: null,
     baselineMinor: null, targetDate: null, notes: null, showOnPrediction: true, currentMinor: 50,
-    progressPct: 50, etaISO: '2026-09-01', suggestedMonthlyMinor: null, createdAt: '2026-06-01T00:00:00.000Z',
+    progressPct: 50, etaISO: null, suggestedMonthlyMinor: null, createdAt: '2026-06-01T00:00:00.000Z',
     ...over,
   };
 }
@@ -24,30 +24,56 @@ function goal(over: Partial<GoalDto>): GoalDto {
 const window = series('2026-06-01', '2026-12-01');
 
 describe('goalMarkers', () => {
-  it('snaps an ETA to the first chart point on or after it', () => {
+  it('draws a green achieved line at the ETA, snapped to the first point on or after it', () => {
     const markers = goalMarkers(window, [goal({ etaISO: '2026-09-01' })]);
-    expect(markers).toHaveLength(1);
-    expect(markers[0]!.x).toBe('2026-09-01');
+    expect(markers).toEqual([
+      expect.objectContaining({ kind: 'achieved', x: '2026-09-01' }),
+    ]);
   });
 
-  it('skips goals toggled off, with no ETA, or beyond the horizon', () => {
-    expect(goalMarkers(window, [goal({ showOnPrediction: false })])).toEqual([]);
-    expect(goalMarkers(window, [goal({ etaISO: null })])).toEqual([]);
-    expect(goalMarkers(window, [goal({ etaISO: '2030-01-01' })])).toEqual([]); // past the window
+  it('draws a gold deadline line at the target date', () => {
+    const markers = goalMarkers(window, [goal({ targetDate: '2026-08-15' })]);
+    expect(markers).toEqual([
+      expect.objectContaining({ kind: 'deadline', x: '2026-08-15' }),
+    ]);
+  });
+
+  it('emits both a deadline and an achieved line for one goal (deadline first)', () => {
+    const markers = goalMarkers(window, [goal({ targetDate: '2026-08-01', etaISO: '2026-10-01' })]);
+    expect(markers.map((m) => [m.kind, m.x])).toEqual([
+      ['deadline', '2026-08-01'],
+      ['achieved', '2026-10-01'],
+    ]);
+  });
+
+  it('skips goals toggled off or with neither a deadline nor an ETA', () => {
+    expect(goalMarkers(window, [goal({ showOnPrediction: false, etaISO: '2026-09-01', targetDate: '2026-08-01' })])).toEqual([]);
+    expect(goalMarkers(window, [goal({ etaISO: null, targetDate: null })])).toEqual([]);
+  });
+
+  it('skips a deadline or ETA beyond the visible horizon', () => {
+    expect(goalMarkers(window, [goal({ etaISO: '2030-01-01' })])).toEqual([]);
+    expect(goalMarkers(window, [goal({ targetDate: '2030-01-01' })])).toEqual([]);
+    // The in-window date still draws, even when the other is off-screen.
+    const markers = goalMarkers(window, [goal({ targetDate: '2026-07-01', etaISO: '2030-01-01' })]);
+    expect(markers).toEqual([expect.objectContaining({ kind: 'deadline', x: '2026-07-01' })]);
   });
 
   it('returns nothing without goals or points', () => {
     expect(goalMarkers(window, undefined)).toEqual([]);
     expect(goalMarkers(window, [])).toEqual([]);
-    expect(goalMarkers([], [goal({})])).toEqual([]);
+    expect(goalMarkers([], [goal({ etaISO: '2026-09-01' })])).toEqual([]);
   });
 
-  it('places a marker per enabled goal', () => {
+  it('places lines for several goals', () => {
     const markers = goalMarkers(window, [
       goal({ id: 1, name: 'A', etaISO: '2026-07-01' }),
-      goal({ id: 2, name: 'B', etaISO: '2026-10-01' }),
+      goal({ id: 2, name: 'B', targetDate: '2026-10-01' }),
     ]);
-    expect(markers.map((m) => m.x)).toEqual(['2026-07-01', '2026-10-01']);
+    expect(markers.map((m) => [m.goal.id, m.kind, m.x])).toEqual([
+      [1, 'achieved', '2026-07-01'],
+      [2, 'deadline', '2026-10-01'],
+    ]);
   });
 });
 
