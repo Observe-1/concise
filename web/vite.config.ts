@@ -52,7 +52,7 @@ export default defineConfig({
     proxy: {
       // No changeOrigin: the backend's CSRF check compares Origin to Host,
       // so the original Host header must be preserved.
-      '/api': 'http://localhost:3002',
+      '/api': 'http://localhost:3000',
     },
   },
   test: {

@@ -137,11 +137,6 @@ currently provide:
 - **Hardened multi-tenant isolation guarantees** beyond per-`user_id` scoping —
   it suits a small, trusted set of users (e.g. a household), not an untrusted
   public sign-up service at scale.
-- **Authoritative financial data.** Exchange rates, market prices, property and
-  vehicle valuation models, and the inflation series used by the "real terms"
-  toggle are **rough, approximate static tables**, not a market data feed. Figures
-  are for personal record-keeping and are **not financial advice** (see the
-  in-app disclaimer on sign-up and in Settings → Legal).
 
 If a feature here matters for your threat model, run Concise behind
 infrastructure that provides it (e.g. an authenticating proxy for MFA, an
