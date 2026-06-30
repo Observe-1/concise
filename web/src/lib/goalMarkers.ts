@@ -1,8 +1,9 @@
 import type { GoalDto, HistoryPointDto } from '@api';
 
 /** Longest goal name rendered in full beside a marker line; longer names are
- *  trimmed to 8 chars + an ellipsis so the label stays under 10 characters. */
-const MAX_LABEL = 9;
+ *  trimmed to (MAX_LABEL - 1) chars + an ellipsis so the label stays at most
+ *  MAX_LABEL characters. */
+const MAX_LABEL = 18;
 
 export interface GoalMarker {
   /** ISO date of the chart point the line sits on (an existing x-axis
@@ -13,7 +14,8 @@ export interface GoalMarker {
   goal: GoalDto;
 }
 
-/** Trim a goal name to fit beside a marker: names ≥ 10 chars become 8 chars + "…". */
+/** Trim a goal name to fit beside a marker: names longer than MAX_LABEL chars
+ *  become (MAX_LABEL - 1) chars + "…". */
 export function shortGoalLabel(name: string): string {
   return name.length > MAX_LABEL ? `${name.slice(0, MAX_LABEL - 1)}…` : name;
 }

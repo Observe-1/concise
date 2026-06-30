@@ -52,13 +52,14 @@ describe('goalMarkers', () => {
 });
 
 describe('shortGoalLabel', () => {
-  it('keeps names under 10 characters as-is', () => {
+  it('keeps names up to 18 characters as-is', () => {
     expect(shortGoalLabel('House')).toBe('House');
-    expect(shortGoalLabel('Emergency')).toBe('Emergency'); // exactly 9 chars
+    expect(shortGoalLabel('Emergency fund')).toBe('Emergency fund'); // 14 chars
+    expect(shortGoalLabel('Emergency fund x2')).toBe('Emergency fund x2'); // 17 chars
   });
 
-  it('trims longer names to 8 chars + ellipsis (under 10 chars total)', () => {
-    expect(shortGoalLabel('Emergency fund')).toBe('Emergenc…');
-    expect(shortGoalLabel('Emergency fund').length).toBeLessThan(10);
+  it('trims names longer than 18 chars to 17 chars + ellipsis', () => {
+    expect(shortGoalLabel('Pay off the mortgage')).toBe('Pay off the mortg…');
+    expect(shortGoalLabel('Pay off the mortgage').length).toBe(18);
   });
 });

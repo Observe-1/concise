@@ -164,6 +164,35 @@ export function NetWorthChart({
     return panels;
   }, [data, goalLines, nowMarker, currency]);
   const hoveredPanel = hoveredFlag ? flagPanels.get(hoveredFlag.id) : undefined;
+  // Goal labels that would overlap a neighbour (or the Now flag) collapse to a
+  // small icon until hovered. Pixel positions are estimated from each marker's
+  // index across the plot — enough to detect crowding without measuring SVG.
+  const collapsedGoals = useMemo(() => {
+    const collapsed = new Set<number>();
+    if (chartWidth <= 0 || data.length < 2 || goalLines.length === 0) return collapsed;
+    const plotLeft = Y_AXIS_WIDTH + CHART_MARGIN.left;
+    const span = chartWidth - CHART_MARGIN.right - plotLeft;
+    if (span <= 0) return collapsed;
+    const lastIdx = data.length - 1;
+    const pxOf = (date: string) => {
+      const i = data.findIndex((p) => p.date === date);
+      return i < 0 ? plotLeft : plotLeft + (i / lastIdx) * span;
+    };
+    const widthOf = (label: string) => label.length * FLAG_CHAR_W + FLAG_PAD_X * 2;
+    // Seed with the Now flag's footprint so a near-today goal collapses too.
+    let lastRight = nowMarker ? pxOf(nowMarker) + widthOf('Now') : -Infinity;
+    const sorted = [...goalLines].sort((a, b) => pxOf(a.x) - pxOf(b.x));
+    for (const m of sorted) {
+      const px = pxOf(m.x);
+      if (px < lastRight + 4) {
+        collapsed.add(m.goal.id);
+        lastRight = Math.max(lastRight, px + FLAG_ICON_W);
+      } else {
+        lastRight = px + widthOf(m.label);
+      }
+    }
+    return collapsed;
+  }, [goalLines, data, chartWidth, nowMarker]);
   // A constant series needs an explicit padded domain — 'auto' would collapse
   // the Y range to a single value and pin the flat line to the plot edge.
   const yDomain = useMemo((): [number | 'auto', number | 'auto'] => {
@@ -280,10 +309,9 @@ export function NetWorthChart({
           )}
           {/* Goal markers (prediction mode): a solid gold line at each enabled
               goal's projected ETA — distinct from the dashed "Now"/age lines.
-              Each carries a labelled flag that expands on hover with the goal's
-              progress and ETA. Flags sit below the age labels and stagger so
-              goals landing on nearby dates don't overlap. */}
-          {goalLines.map((marker, i) => (
+              Each carries a labelled flag below the age labels; flags that would
+              overlap a neighbour collapse to a small icon until hovered. */}
+          {goalLines.map((marker) => (
             <ReferenceLine
               key={`goal-${marker.goal.id}`}
               x={marker.x}
@@ -295,7 +323,8 @@ export function NetWorthChart({
                   id={`goal-${marker.goal.id}`}
                   label={marker.label}
                   tone="goal"
-                  slot={i % 3}
+                  slot={0}
+                  collapsed={collapsedGoals.has(marker.goal.id)}
                   chartWidth={chartWidth}
                   onHover={setHoveredFlag}
                 />
@@ -435,6 +464,9 @@ interface MarkerFlagProps {
   tone: 'now' | 'goal';
   /** Vertical stagger slot, so flags on nearby dates don't overlap. */
   slot: number;
+  /** When set, the label is hidden behind a small icon (it would overlap a
+   *  neighbour) until the line is hovered. */
+  collapsed?: boolean;
   /** Rendered chart width, used to flip the pill to the on-screen side. */
   chartWidth: number;
   /** Reports hover (with the pill's pixel position) so the chart can show the
@@ -449,6 +481,7 @@ const FLAG_ROW_H = 17;
 const FLAG_H = 16;
 const FLAG_PAD_X = 6;
 const FLAG_CHAR_W = 6.2; // ~width of the pill font at 10px
+const FLAG_ICON_W = 16;  // footprint of a collapsed goal's icon
 
 const FLAG_TONES = {
   now: { fill: '#15151a', stroke: '#d4af37', text: '#ddc06c' },
@@ -461,7 +494,7 @@ const FLAG_TONES = {
  * line opens the flag's detail card (rendered as HTML by the chart, see
  * {@link FlagCard}). The pill grows toward whichever side keeps it on-screen.
  */
-function MarkerFlag({ viewBox, id, label, tone, slot, chartWidth, onHover }: MarkerFlagProps) {
+function MarkerFlag({ viewBox, id, label, tone, slot, collapsed, chartWidth, onHover }: MarkerFlagProps) {
   const [hover, setHover] = useState(false);
   const x = viewBox?.x;
   const top = viewBox?.y ?? 0;
@@ -470,14 +503,26 @@ function MarkerFlag({ viewBox, id, label, tone, slot, chartWidth, onHover }: Mar
 
   const colors = FLAG_TONES[tone];
   const y = top + FLAG_BAND_TOP + slot * FLAG_ROW_H;
+  const enter = () => { setHover(true); onHover?.({ id, x, y }); };
+  const leave = () => { setHover(false); onHover?.(null); };
+
+  // Crowded goal: show a small icon (a goal "target" dot) until hovered.
+  if (collapsed && !hover) {
+    const cy = y + FLAG_H / 2;
+    return (
+      <g onMouseEnter={enter} onMouseLeave={leave}>
+        <rect x={x - 7} y={top} width={14} height={lineHeight} fill="transparent" />
+        <circle cx={x} cy={cy} r={6} fill={colors.fill} stroke={colors.stroke} />
+        <circle cx={x} cy={cy} r={2.2} fill={colors.stroke} />
+      </g>
+    );
+  }
+
   const pillW = label.length * FLAG_CHAR_W + FLAG_PAD_X * 2;
   const leftSide = chartWidth > 0 && x > chartWidth * 0.62;
   const textAnchor = leftSide ? 'end' : 'start';
   const textX = leftSide ? x - FLAG_PAD_X : x + FLAG_PAD_X;
   const boxX = leftSide ? x - pillW : x;
-
-  const enter = () => { setHover(true); onHover?.({ id, x, y }); };
-  const leave = () => { setHover(false); onHover?.(null); };
 
   return (
     <g onMouseEnter={enter} onMouseLeave={leave}>
