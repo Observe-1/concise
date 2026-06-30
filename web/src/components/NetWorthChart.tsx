@@ -115,10 +115,11 @@ export function NetWorthChart({
   // side keeps it on-screen, which needs the rendered chart width.
   const containerRef = useRef<HTMLDivElement>(null);
   const [chartWidth, setChartWidth] = useState(0);
-  // While a marker flag is hovered its own panel is the focus, so the general
-  // net-worth/assets/debts tooltip is suppressed to avoid two overlapping
-  // overlays fighting for the same spot.
-  const [flagHovered, setFlagHovered] = useState(false);
+  // While a marker flag is hovered its own detail card is the focus, so the
+  // general net-worth/assets/debts tooltip is suppressed to avoid two
+  // overlapping overlays fighting for the same spot.
+  const [hoveredFlag, setHoveredFlag] = useState<HoveredFlag | null>(null);
+  const flagHovered = hoveredFlag !== null;
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return undefined;
@@ -149,6 +150,20 @@ export function NetWorthChart({
     }
     return best;
   }, [data, nowLine]);
+  // Detail panels (assets / liabilities / net worth, today vs predicted) for
+  // every flag, keyed by id. Today's portfolio comes from the projection's
+  // boundary point; each goal's predicted figures from its ETA point.
+  const flagPanels = useMemo(() => {
+    const panels = new Map<string, FlagPanel>();
+    const todayPoint = nowMarker ? data.find((p) => p.date === nowMarker) : undefined;
+    if (nowMarker) panels.set('now', buildNowPanel(todayPoint, currency));
+    for (const marker of goalLines) {
+      const etaPoint = data.find((p) => p.date === marker.x);
+      panels.set(`goal-${marker.goal.id}`, buildGoalPanel(marker.goal, todayPoint, etaPoint, marker.x, currency));
+    }
+    return panels;
+  }, [data, goalLines, nowMarker, currency]);
+  const hoveredPanel = hoveredFlag ? flagPanels.get(hoveredFlag.id) : undefined;
   // A constant series needs an explicit padded domain — 'auto' would collapse
   // the Y range to a single value and pin the flat line to the plot edge.
   const yDomain = useMemo((): [number | 'auto', number | 'auto'] => {
@@ -253,12 +268,12 @@ export function NetWorthChart({
               label={(props) => (
                 <MarkerFlag
                   {...props}
+                  id="now"
                   label="Now"
-                  detail={['Projection starts here', dateLabel(nowMarker, true)]}
                   tone="now"
                   slot={0}
                   chartWidth={chartWidth}
-                  onHoverChange={setFlagHovered}
+                  onHover={setHoveredFlag}
                 />
               )}
             />
@@ -277,12 +292,12 @@ export function NetWorthChart({
               label={(props) => (
                 <MarkerFlag
                   {...props}
+                  id={`goal-${marker.goal.id}`}
                   label={marker.label}
-                  detail={goalDetailLines(marker.goal, currency)}
                   tone="goal"
                   slot={i % 3}
                   chartWidth={chartWidth}
-                  onHoverChange={setFlagHovered}
+                  onHover={setHoveredFlag}
                 />
               )}
             />
@@ -314,6 +329,13 @@ export function NetWorthChart({
         </ComposedChart>
       </ResponsiveContainer>
       </div>
+
+      {/* Detail card for the hovered marker flag (Now / goal): today vs
+          predicted assets, liabilities, net worth and goal progress. Overlaid
+          as click-through HTML so the SVG line beneath keeps the hover. */}
+      {hoveredFlag && hoveredPanel && (
+        <FlagCard panel={hoveredPanel} x={hoveredFlag.x} y={hoveredFlag.y} chartWidth={chartWidth} />
+      )}
 
       {/* "View as" scrubber, drawn along the X axis so the chart shows a single
           bar (not a separate slider row). Its track spans the plot area and the
@@ -348,29 +370,76 @@ export function NetWorthChart({
   );
 }
 
-/** The two detail lines (progress, ETA) a goal's flag reveals on hover. */
-function goalDetailLines(goal: GoalDto, currency: string): string[] {
-  const pct = `${Math.min(100, Math.max(0, Math.round(goal.progressPct)))}%`;
-  const progress = goal.goalType === 'liability_payoff'
-    ? `${pct} paid · ${formatMinor(goal.currentMinor, currency)} left of ${formatMinor(goal.baselineMinor!, currency)}`
-    : `${pct} · ${formatMinor(goal.currentMinor, currency)} of ${formatMinor(goal.targetMinor, currency)}`;
-  return [progress, goal.etaISO ? `On track for ${goal.etaISO}` : 'Not on track at the current rate'];
+// ---- marker flag hover panels (Now / goals) ----
+
+interface PanelRow { label: string; value: string }
+interface PanelSectionData { heading: string; sub?: string; rows: PanelRow[] }
+interface FlagPanel { title: string; sections: PanelSectionData[] }
+/** The hovered flag's id and the pixel position of its pill, so the HTML
+ *  detail card can be placed over the chart. */
+interface HoveredFlag { id: string; x: number; y: number }
+
+const clampPct = (v: number) => Math.min(100, Math.max(0, Math.round(v)));
+
+/** Assets / liabilities / net worth for a chart point, plus an optional goal
+ *  percentage — the rows shown in each section of a flag's detail card. */
+function portfolioRows(point: HistoryPointDto, currency: string, goalPct?: number): PanelRow[] {
+  const rows: PanelRow[] = [
+    { label: 'Assets', value: formatMinor(point.assetsMinor, currency) },
+    { label: 'Liabilities', value: formatMinor(point.liabilitiesMinor, currency) },
+    { label: 'Net worth', value: formatMinor(point.netWorthMinor, currency) },
+  ];
+  if (goalPct !== undefined) rows.push({ label: 'Goal', value: `${goalPct}%` });
+  return rows;
+}
+
+/**
+ * A goal flag's detail: two sections — the real portfolio "As of today", and
+ * the projected portfolio "Currently predicted" at the goal's ETA — each with
+ * assets, liabilities, net worth and the goal percentage. The predicted goal %
+ * is the projected net worth against the target (a payoff goal is, by
+ * definition of its ETA line, projected complete = 100%).
+ */
+function buildGoalPanel(
+  goal: GoalDto, todayPoint: HistoryPointDto | undefined,
+  etaPoint: HistoryPointDto | undefined, etaDate: string, currency: string,
+): FlagPanel {
+  const todayPct = clampPct(goal.progressPct);
+  const predictedPct = goal.goalType === 'liability_payoff'
+    ? 100
+    : (goal.targetMinor > 0 && etaPoint ? clampPct((etaPoint.netWorthMinor / goal.targetMinor) * 100) : todayPct);
+  const sections: PanelSectionData[] = [];
+  if (todayPoint) sections.push({ heading: 'As of today', rows: portfolioRows(todayPoint, currency, todayPct) });
+  if (etaPoint) {
+    sections.push({
+      heading: 'Currently predicted', sub: dateLabel(etaDate, true), rows: portfolioRows(etaPoint, currency, predictedPct),
+    });
+  }
+  return { title: goal.name, sections };
+}
+
+/** The Now flag's detail: just the real portfolio at the projection boundary. */
+function buildNowPanel(todayPoint: HistoryPointDto | undefined, currency: string): FlagPanel {
+  return {
+    title: 'Now',
+    sections: todayPoint ? [{ heading: 'As of today', rows: portfolioRows(todayPoint, currency) }] : [],
+  };
 }
 
 interface MarkerFlagProps {
   viewBox?: { x?: number; y?: number; width?: number; height?: number };
+  /** Stable id used to look up this flag's detail panel. */
+  id: string;
   /** Short pill label (already trimmed). */
   label: string;
-  /** Extra lines revealed on hover. */
-  detail: string[];
   tone: 'now' | 'goal';
   /** Vertical stagger slot, so flags on nearby dates don't overlap. */
   slot: number;
-  /** Rendered chart width, used to flip the panel to the on-screen side. */
+  /** Rendered chart width, used to flip the pill to the on-screen side. */
   chartWidth: number;
-  /** Notifies the chart when this flag is hovered, so the general tooltip can
-   *  be suppressed while the flag's own panel is shown. */
-  onHoverChange?: (hovered: boolean) => void;
+  /** Reports hover (with the pill's pixel position) so the chart can show the
+   *  detail card and suppress the general tooltip; null when the hover ends. */
+  onHover?: (info: HoveredFlag | null) => void;
 }
 
 // Geometry for the marker flags. They sit in a band BELOW the age-marker
@@ -379,8 +448,7 @@ const FLAG_BAND_TOP = 24;
 const FLAG_ROW_H = 17;
 const FLAG_H = 16;
 const FLAG_PAD_X = 6;
-const FLAG_CHAR_W = 6.2;   // ~width of the pill font at 10px
-const DETAIL_CHAR_W = 5.4; // ~width of the detail font at 9px
+const FLAG_CHAR_W = 6.2; // ~width of the pill font at 10px
 
 const FLAG_TONES = {
   now: { fill: '#15151a', stroke: '#d4af37', text: '#ddc06c' },
@@ -388,14 +456,13 @@ const FLAG_TONES = {
 } as const;
 
 /**
- * A marker line's flag (Now / goal): an opaque rounded pill with the short
- * label that, on hover, expands into a panel with extra detail lines. The pill
- * grows toward whichever side keeps it inside the plot, and carries a
- * full-height transparent hit area so hovering anywhere on the line opens it.
+ * A marker line's flag (Now / goal): an opaque rounded pill carrying the short
+ * label, plus a full-height transparent hit area so hovering anywhere on the
+ * line opens the flag's detail card (rendered as HTML by the chart, see
+ * {@link FlagCard}). The pill grows toward whichever side keeps it on-screen.
  */
-function MarkerFlag({ viewBox, label, detail, tone, slot, chartWidth, onHoverChange }: MarkerFlagProps) {
+function MarkerFlag({ viewBox, id, label, tone, slot, chartWidth, onHover }: MarkerFlagProps) {
   const [hover, setHover] = useState(false);
-  const setH = (v: boolean) => { setHover(v); onHoverChange?.(v); };
   const x = viewBox?.x;
   const top = viewBox?.y ?? 0;
   const lineHeight = viewBox?.height ?? 0;
@@ -404,26 +471,23 @@ function MarkerFlag({ viewBox, label, detail, tone, slot, chartWidth, onHoverCha
   const colors = FLAG_TONES[tone];
   const y = top + FLAG_BAND_TOP + slot * FLAG_ROW_H;
   const pillW = label.length * FLAG_CHAR_W + FLAG_PAD_X * 2;
-  // Near the right edge the flag grows leftward so the expanded panel stays on
-  // screen; elsewhere it grows rightward from the line.
   const leftSide = chartWidth > 0 && x > chartWidth * 0.62;
   const textAnchor = leftSide ? 'end' : 'start';
   const textX = leftSide ? x - FLAG_PAD_X : x + FLAG_PAD_X;
+  const boxX = leftSide ? x - pillW : x;
 
-  const panelW = Math.max(pillW, ...detail.map((d) => d.length * DETAIL_CHAR_W + FLAG_PAD_X * 2));
-  const panelH = FLAG_H + detail.length * 13 + 6;
-  const boxW = hover ? panelW : pillW;
-  const boxX = leftSide ? x - boxW : x;
+  const enter = () => { setHover(true); onHover?.({ id, x, y }); };
+  const leave = () => { setHover(false); onHover?.(null); };
 
   return (
-    <g onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)}>
+    <g onMouseEnter={enter} onMouseLeave={leave}>
       {/* Transparent (not 'none') so the whole line height is hoverable. */}
       <rect x={x - 7} y={top} width={14} height={lineHeight} fill="transparent" />
       <rect
         x={boxX}
         y={y}
-        width={boxW}
-        height={hover ? panelH : FLAG_H}
+        width={pillW}
+        height={FLAG_H}
         rx={5}
         fill={colors.fill}
         stroke={colors.stroke}
@@ -432,19 +496,43 @@ function MarkerFlag({ viewBox, label, detail, tone, slot, chartWidth, onHoverCha
       <text x={textX} y={y + 11} textAnchor={textAnchor} fill={colors.text} fontSize={10} fontWeight={700}>
         {label}
       </text>
-      {hover && detail.map((line, i) => (
-        <text
-          key={line}
-          x={textX}
-          y={y + FLAG_H + 10 + i * 13}
-          textAnchor={textAnchor}
-          fill="#b4b4bd"
-          fontSize={9}
-        >
-          {line}
-        </text>
-      ))}
     </g>
+  );
+}
+
+/**
+ * The HTML detail card for a hovered marker flag, overlaid on the chart at the
+ * pill's position. It is click-through (`pointer-events-none`) so the cursor
+ * stays on the SVG line beneath it and the hover doesn't flicker. It flips to
+ * the line's left near the right edge so it never runs off-screen.
+ */
+function FlagCard({ panel, x, y, chartWidth }: { panel: FlagPanel; x: number; y: number; chartWidth: number }) {
+  const leftSide = chartWidth > 0 && x > chartWidth * 0.62;
+  return (
+    <div
+      className={`pointer-events-none absolute z-20 w-44 ${leftSide ? '-translate-x-full' : ''}`}
+      style={{ left: leftSide ? x - 8 : x + 8, top: y }}
+    >
+      <div className="rounded-lg border border-gold-600/50 bg-ink-950/95 p-2.5 shadow-xl shadow-black/40">
+        <p className="mb-1 truncate text-xs font-semibold text-gold-400">{panel.title}</p>
+        {panel.sections.map((s) => (
+          <div key={s.heading} className="mt-2 first:mt-1">
+            <p className="text-[10px] font-medium uppercase tracking-wider text-ink-400">
+              {s.heading}
+              {s.sub && <span className="ml-1 normal-case tracking-normal text-ink-600">· {s.sub}</span>}
+            </p>
+            <dl className="mt-1 space-y-0.5">
+              {s.rows.map((r) => (
+                <div key={r.label} className="flex items-baseline justify-between gap-3 text-[11px]">
+                  <dt className="text-ink-400">{r.label}</dt>
+                  <dd className="tabular font-medium text-ink-100">{r.value}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
