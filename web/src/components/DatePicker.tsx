@@ -18,6 +18,9 @@ const MONTHS = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
+/** Years shown per page in the year picker (a 4×3 grid). */
+const YEARS_PER_PAGE = 12;
+
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const pad = (n: number) => String(n).padStart(2, '0');
 const isoOf = (year: number, month: number, day: number) => `${year}-${pad(month + 1)}-${pad(day)}`;
@@ -64,6 +67,10 @@ export function DatePicker({
   const inputId = id ?? autoId;
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<ViewMonth>(() => initialView(value, min, max));
+  // The grid flips between picking a day and picking a year; `yearBase` is the
+  // first year shown on the year page (the current year sits mid-page).
+  const [mode, setMode] = useState<'days' | 'years'>('days');
+  const [yearBase, setYearBase] = useState(view.year - 5);
   const wrapRef = useRef<HTMLDivElement>(null);
 
   // Re-centre the grid on the value whenever it changes from outside (or via
@@ -97,6 +104,11 @@ export function DatePicker({
     return { year: next.getUTCFullYear(), month: next.getUTCMonth() };
   });
 
+  const minYear = min ? Number(min.slice(0, 4)) : -Infinity;
+  const maxYear = max ? Number(max.slice(0, 4)) : Infinity;
+  const openYears = () => { setYearBase(view.year - 5); setMode('years'); };
+  const pickYear = (year: number) => { setView((v) => ({ ...v, year })); setMode('days'); };
+
   const total = daysInMonth(view.year, view.month);
   const lead = firstWeekday(view.year, view.month);
   const cells: (number | null)[] = [
@@ -123,7 +135,7 @@ export function DatePicker({
       />
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => { setMode('days'); setOpen((o) => !o); }}
         aria-label={open ? 'Hide calendar' : 'Choose date from calendar'}
         aria-expanded={open}
         className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-ink-400 hover:text-gold-400"
@@ -137,63 +149,131 @@ export function DatePicker({
           aria-label="Choose a date"
           className="mt-2 rounded-xl border border-ink-700 bg-ink-900 p-3 shadow-xl"
         >
-          <div className="mb-2 flex items-center justify-between">
-            <button
-              type="button"
-              onClick={() => shiftMonth(-1)}
-              disabled={prevDisabled}
-              aria-label="Previous month"
-              className="rounded-lg p-1.5 text-ink-400 hover:text-gold-400 disabled:opacity-30"
-            >
-              <Chevron dir="left" />
-            </button>
-            <span className="tabular text-sm font-medium text-ink-100">
-              {MONTHS[view.month]} {view.year}
-            </span>
-            <button
-              type="button"
-              onClick={() => shiftMonth(1)}
-              disabled={nextDisabled}
-              aria-label="Next month"
-              className="rounded-lg p-1.5 text-ink-400 hover:text-gold-400 disabled:opacity-30"
-            >
-              <Chevron dir="right" />
-            </button>
-          </div>
-
-          <div className="grid grid-cols-7 gap-0.5 text-center">
-            {WEEKDAYS.map((w) => (
-              <span key={w} className="py-1 text-[10px] font-medium uppercase tracking-wider text-ink-600">
-                {w}
-              </span>
-            ))}
-            {cells.map((day, i) => {
-              if (day === null) return <span key={`pad-${i}`} />;
-              const iso = isoOf(view.year, view.month, day);
-              const disabled = !inRange(iso);
-              const selected = iso === value;
-              const isToday = iso === today;
-              return (
+          {mode === 'days' ? (
+            <>
+              <div className="mb-2 flex items-center justify-between">
                 <button
-                  key={iso}
                   type="button"
-                  onClick={() => select(iso)}
-                  disabled={disabled}
-                  aria-label={longDate(iso)}
-                  aria-pressed={selected}
-                  className={`tabular h-9 rounded-lg text-sm transition-colors ${
-                    selected
-                      ? 'bg-gold-500 font-semibold text-ink-950'
-                      : disabled
-                        ? 'cursor-not-allowed text-ink-700'
-                        : `text-ink-200 hover:bg-ink-800 ${isToday ? 'ring-1 ring-inset ring-gold-500/50' : ''}`
-                  }`}
+                  onClick={() => shiftMonth(-1)}
+                  disabled={prevDisabled}
+                  aria-label="Previous month"
+                  className="rounded-lg p-1.5 text-ink-400 hover:text-gold-400 disabled:opacity-30"
                 >
-                  {day}
+                  <Chevron dir="left" />
                 </button>
-              );
-            })}
-          </div>
+                {/* Tap the month/year to jump straight to the year picker. */}
+                <button
+                  type="button"
+                  onClick={openYears}
+                  aria-label={`${MONTHS[view.month]} ${view.year} — pick a year`}
+                  className="tabular rounded-lg px-2 py-1 text-sm font-medium text-ink-100 hover:text-gold-400"
+                >
+                  {MONTHS[view.month]} {view.year}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => shiftMonth(1)}
+                  disabled={nextDisabled}
+                  aria-label="Next month"
+                  className="rounded-lg p-1.5 text-ink-400 hover:text-gold-400 disabled:opacity-30"
+                >
+                  <Chevron dir="right" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-7 gap-0.5 text-center">
+                {WEEKDAYS.map((w) => (
+                  <span key={w} className="py-1 text-[10px] font-medium uppercase tracking-wider text-ink-600">
+                    {w}
+                  </span>
+                ))}
+                {cells.map((day, i) => {
+                  if (day === null) return <span key={`pad-${i}`} />;
+                  const iso = isoOf(view.year, view.month, day);
+                  const disabled = !inRange(iso);
+                  const selected = iso === value;
+                  const isToday = iso === today;
+                  return (
+                    <button
+                      key={iso}
+                      type="button"
+                      onClick={() => select(iso)}
+                      disabled={disabled}
+                      aria-label={longDate(iso)}
+                      aria-pressed={selected}
+                      className={`tabular h-9 rounded-lg text-sm transition-colors ${
+                        selected
+                          ? 'bg-gold-500 font-semibold text-ink-950'
+                          : disabled
+                            ? 'cursor-not-allowed text-ink-700'
+                            : `text-ink-200 hover:bg-ink-800 ${isToday ? 'ring-1 ring-inset ring-gold-500/50' : ''}`
+                      }`}
+                    >
+                      {day}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="mb-2 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => setYearBase((y) => y - YEARS_PER_PAGE)}
+                  disabled={yearBase - 1 < minYear}
+                  aria-label="Earlier years"
+                  className="rounded-lg p-1.5 text-ink-400 hover:text-gold-400 disabled:opacity-30"
+                >
+                  <Chevron dir="left" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMode('days')}
+                  aria-label="Back to days"
+                  className="tabular rounded-lg px-2 py-1 text-sm font-medium text-ink-100 hover:text-gold-400"
+                >
+                  {yearBase}–{yearBase + YEARS_PER_PAGE - 1}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setYearBase((y) => y + YEARS_PER_PAGE)}
+                  disabled={yearBase + YEARS_PER_PAGE > maxYear}
+                  aria-label="Later years"
+                  className="rounded-lg p-1.5 text-ink-400 hover:text-gold-400 disabled:opacity-30"
+                >
+                  <Chevron dir="right" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-4 gap-1.5">
+                {Array.from({ length: YEARS_PER_PAGE }, (_, i) => yearBase + i).map((year) => {
+                  const disabled = year < minYear || year > maxYear;
+                  const selected = ISO_RE.test(value) && Number(value.slice(0, 4)) === year;
+                  const isCurrent = year === view.year;
+                  return (
+                    <button
+                      key={year}
+                      type="button"
+                      onClick={() => pickYear(year)}
+                      disabled={disabled}
+                      aria-label={String(year)}
+                      aria-pressed={selected}
+                      className={`tabular h-10 rounded-lg text-sm transition-colors ${
+                        selected
+                          ? 'bg-gold-500 font-semibold text-ink-950'
+                          : disabled
+                            ? 'cursor-not-allowed text-ink-700'
+                            : `text-ink-200 hover:bg-ink-800 ${isCurrent ? 'ring-1 ring-inset ring-gold-500/50' : ''}`
+                      }`}
+                    >
+                      {year}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
 
           <div className="mt-2 flex items-center justify-between border-t border-ink-800 pt-2">
             <button
