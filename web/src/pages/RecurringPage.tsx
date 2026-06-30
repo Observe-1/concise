@@ -4,6 +4,7 @@ import {
   useCreateRecurring, useDeleteRecurring, useHoldings, useMe, useRecurring, useUpdateRecurring,
 } from '../api/queries.js';
 import { Button, Card, EmptyState, ErrorNote, Field, Input, Modal, Select, Spinner } from '../components/ui.js';
+import { DatePicker } from '../components/DatePicker.js';
 import { formatMinor, minorToInput, parseToMinor } from '../lib/money.js';
 
 const CADENCE_LABELS: Record<string, string> = {
@@ -243,16 +244,12 @@ function RecurringForm({ existing, onClose }: { existing?: RecurringDto; onClose
             )}
           </Field>
           <Field label="Next run">
-            {(id) => (
-              <Input id={id} type="date" value={nextRunOn} onChange={(e) => setNextRunOn(e.target.value)} required />
-            )}
+            {(id) => <DatePicker id={id} value={nextRunOn} onChange={setNextRunOn} required />}
           </Field>
         </div>
 
         <Field label="End date" hint="Optional — stops the schedule for good once it's passed, e.g. a promo rate.">
-          {(id) => (
-            <Input id={id} type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-          )}
+          {(id) => <DatePicker id={id} value={endDate} onChange={setEndDate} />}
         </Field>
 
         {formError ? <ErrorNote message={formError} /> : null}

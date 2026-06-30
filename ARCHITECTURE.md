@@ -73,6 +73,7 @@ users 1──* assets 1──* asset_valuations
 users 1──* liabilities 1──* liability_valuations
 users 1──* recurring_transactions ──▶ (exactly one of asset_id | liability_id)
 users 1──* snapshots          (one per user per day; net-worth history)
+users 1──* goals              (net-worth target | liability payoff)
 users 1──* audit_log
 ```
 
@@ -87,6 +88,7 @@ users 1──* audit_log
 | `liability_valuations` | Balance history | Mirrors asset valuations |
 | `recurring_transactions` | Recurring movements | `amount_type` ∈ fixed (signed `amount_minor` delta) \| percent (signed `percent` of current value, compounds), `cadence` ∈ daily, weekly, monthly, quarterly, yearly, `next_run_on` date cursor; CHECKs enforce exactly one target and exactly one of amount/percent |
 | `snapshots` | Daily net-worth | `UNIQUE(user_id, snapshot_date)`; assets/liabilities/net-worth totals; `source` ∈ computed, legacy — legacy rows are user-entered past net-worth points that recomputation never overwrites. Graphs read this table |
+| `goals` | Savings / payoff goals | `goal_type` ∈ net_worth (positive `target_minor`) \| liability_payoff (`liability_id` + captured `baseline_minor`, target 0); optional `target_date`; `show_on_prediction` toggles the goal's gold ETA marker on the prediction graph. Progress, ETA and a monthly-funding suggestion are computed on read (rough linear trend, not the prediction engine) |
 | `audit_log` | Security audit | Auth events + mutations, with IP |
 | `backup_settings` | Database-backup config | A **single global row** (`id = 1` CHECK) — backups cover the whole DB, not one user. Holds the filename prefix, retention count, automatic-backup toggle (on by default) and interval. See [BACKUP.md](BACKUP.md) |
 
@@ -314,6 +316,14 @@ also builds the per-holding detail line graph (§4) so it smooths identically.
   computed once in `projectPortfolioAt` (an extract of the prediction engine's
   per-holding projection), shared by the graph series and the summary/changes
   routes so all three stay consistent.
+- **Goal markers.** While predicting, each enabled goal (`show_on_prediction`)
+  draws a solid **gold** vertical line at its projected ETA — distinct from the
+  dashed grey age lines and dashed gold "Now" line. The pure `goalMarkers` lib
+  (`web/src/lib/goalMarkers.ts`, mirrored on `ageMarkers`) snaps each goal's
+  `etaISO` to the first chart point on or after it and drops goals with no ETA
+  or one past the visible horizon. Each line is labelled with the goal name
+  (trimmed to < 10 chars) and carries a native-tooltip progress summary on
+  hover; goals are toggled on/off per goal in Settings → Goals.
 
 ### "View as" mode (historical view)
 - A red scrubber pins the app to a past date (`asOf`). The scrubber is drawn

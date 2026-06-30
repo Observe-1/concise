@@ -40,9 +40,12 @@ that is a `backups/` folder beside `DB_PATH`:
 
 Override it with the `BACKUP_DIR` environment variable. In Docker the default
 keeps backups on the same persistent `/data` volume as the database, so they
-survive container rebuilds. (For disaster recovery you should still copy the
-volume — or `BACKUP_DIR` — off the host periodically; an on-volume backup does
-not protect against losing the volume itself.)
+survive container rebuilds. The [Unraid template](unraid/README.md) takes this
+further: it sets `BACKUP_DIR=/backups` and exposes a dedicated **Backup
+Directory** path mapping, so you can point backups at a different share or disk
+from the database without touching any environment variable. (For disaster
+recovery you should still copy the backups off the host periodically; an
+on-volume backup does not protect against losing the volume itself.)
 
 Backup files are named `<prefix>-<timestamp>.db`, e.g.
 `concise-backup-2026-06-15T12-00-00-000Z.db`. The prefix is configurable; the

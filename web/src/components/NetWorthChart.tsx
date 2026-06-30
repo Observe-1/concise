@@ -3,8 +3,9 @@ import {
   Area, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer,
   Tooltip, XAxis, YAxis,
 } from 'recharts';
-import type { HistoryPointDto, HistoryRange } from '@api';
+import type { GoalDto, HistoryPointDto, HistoryRange } from '@api';
 import { ageMarkers } from '../lib/ageMarkers.js';
+import { goalMarkers, type GoalMarker } from '../lib/goalMarkers.js';
 import { expandSinglePoint } from '../lib/flatline.js';
 import { formatMinor, formatMinorCompact } from '../lib/money.js';
 
@@ -84,6 +85,11 @@ interface ChartProps {
   /** Prediction mode: draw a dotted "Now" line at this date (the boundary
    *  between real history and projected future). */
   nowLine?: string | null;
+  /**
+   * Prediction mode: gold marker lines for enabled goals, drawn at each goal's
+   * projected ETA. Pass the user's goals only while predicting; omit otherwise.
+   */
+  goals?: GoalDto[] | null;
   /** Hide the trend line (meaningless over projected values). */
   showTrend?: boolean;
   /**
@@ -95,7 +101,7 @@ interface ChartProps {
 
 export function NetWorthChart({
   points, currency, range, birthYear, height = 240, asOf, scrubber, nowLine, showTrend = true,
-  valueLabel,
+  valueLabel, goals,
 }: ChartProps) {
   // A single point in the window is duplicated into a flat full-width series
   // so it draws as the normal gold line rather than a lone dot.
@@ -104,6 +110,7 @@ export function NetWorthChart({
     [points],
   );
   const ages = useMemo(() => ageMarkers(data, birthYear, range), [data, birthYear, range]);
+  const goalLines = useMemo(() => goalMarkers(data, goals), [data, goals]);
   // Historical view marker must sit on an existing x-axis category: use the
   // last chart point on or before the pinned date.
   const asOfMarker = useMemo(() => {
@@ -235,6 +242,21 @@ export function NetWorthChart({
               }}
             />
           )}
+          {/* Goal markers (prediction mode): a solid gold line at each enabled
+              goal's projected ETA — distinct from the dashed "Now"/age lines.
+              The label shows a short name; hovering the line reveals a small
+              progress summary via a native SVG title. */}
+          {goalLines.map((marker, i) => (
+            <ReferenceLine
+              key={`goal-${marker.goal.id}`}
+              x={marker.x}
+              stroke="#d4af37"
+              strokeWidth={1.5}
+              label={(props) => (
+                <GoalLineLabel {...props} marker={marker} index={i} currency={currency} />
+              )}
+            />
+          ))}
           <Area
             type="monotone"
             dataKey="netWorthMinor"
@@ -293,6 +315,47 @@ export function NetWorthChart({
         </>
       )}
     </div>
+  );
+}
+
+/** One-line-per-fact progress summary shown when hovering a goal's marker
+ *  line (a native SVG <title>, so it works without extra chart state). */
+function goalTooltip(goal: GoalDto, currency: string): string {
+  const pct = `${Math.min(100, Math.max(0, Math.round(goal.progressPct)))}%`;
+  const progress = goal.goalType === 'liability_payoff'
+    ? `${pct} paid · ${formatMinor(goal.currentMinor, currency)} left of ${formatMinor(goal.baselineMinor!, currency)}`
+    : `${pct} · ${formatMinor(goal.currentMinor, currency)} of ${formatMinor(goal.targetMinor, currency)}`;
+  const eta = goal.etaISO ? `\nOn track for ${goal.etaISO}` : '';
+  return `${goal.name}\n${progress}${eta}`;
+}
+
+interface GoalLabelProps {
+  viewBox?: { x?: number; y?: number; width?: number; height?: number };
+  marker: GoalMarker;
+  index: number;
+  currency: string;
+}
+
+/**
+ * Custom label for a goal's gold marker line: the short name near the top and a
+ * full-height transparent hit area carrying a native tooltip (current progress).
+ * Names are staggered vertically so goals landing on nearby dates don't overlap.
+ */
+function GoalLineLabel({ viewBox, marker, index, currency }: GoalLabelProps) {
+  const x = viewBox?.x;
+  const top = viewBox?.y ?? 0;
+  const lineHeight = viewBox?.height ?? 0;
+  if (typeof x !== 'number') return null;
+  const labelY = top + 11 + (index % 3) * 12; // stagger to avoid collisions
+  return (
+    <g>
+      <title>{goalTooltip(marker.goal, currency)}</title>
+      {/* Transparent (not 'none') so the line's full height stays hoverable. */}
+      <rect x={x - 6} y={top} width={12} height={lineHeight} fill="transparent" />
+      <text x={x - 4} y={labelY} textAnchor="end" fill="#ddc06c" fontSize={10} fontWeight={600}>
+        {marker.label}
+      </text>
+    </g>
   );
 }
 

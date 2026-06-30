@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { HistoryRange } from '@api';
 import {
-  useCombinedHistory, useCombinedSummary, useDashboardChanges, useHistory, useHoldings, useHouseholdStatus,
-  useMe, usePrediction, useSummary,
+  useCombinedHistory, useCombinedSummary, useDashboardChanges, useGoals, useHistory, useHoldings,
+  useHouseholdStatus, useMe, usePrediction, useSummary,
 } from '../api/queries.js';
 import { CompareCard } from '../components/CompareCard.js';
 import { GoalsCard } from '../components/GoalsCard.js';
@@ -55,6 +55,7 @@ export function DashboardPage() {
   // Debounced so dragging the slider doesn't fire a request per step.
   const history = useHistory(range, useDebouncedValue(trendWindow), showReal);
   const prediction = usePrediction(range, predicting);
+  const goals = useGoals();
   const combinedSummary = useCombinedSummary(combinedView);
   const combinedHistoryQuery = useCombinedHistory(range, combinedView);
   // Portfolio % change shown on the cards: over the graph's selected range, or
@@ -180,6 +181,7 @@ export function DashboardPage() {
         asOf={combinedView ? null : asOf}
         scrubber={combinedView ? undefined : { asOf, setAsOf }}
         nowLine={predicting ? prediction.data?.today ?? null : null}
+        goals={predicting ? goals.data : undefined}
         showTrend={!predicting && !combinedView}
       />
     </>

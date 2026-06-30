@@ -51,6 +51,24 @@ describe('goals', () => {
     expect((await agent.get('/api/goals')).body).toHaveLength(0);
   });
 
+  it('defaults showOnPrediction to true and toggles it via patch', async () => {
+    const created = await csrf(agent.post('/api/goals')).send({ name: 'Grow', targetMinor: 1_000_00 });
+    expect(created.body.showOnPrediction).toBe(true);
+
+    const off = await csrf(agent.patch(`/api/goals/${created.body.id}`)).send({ showOnPrediction: false });
+    expect(off.body.showOnPrediction).toBe(false);
+
+    // Patching unrelated fields leaves the flag untouched.
+    const renamed = await csrf(agent.patch(`/api/goals/${created.body.id}`)).send({ name: 'Renamed' });
+    expect(renamed.body.showOnPrediction).toBe(false);
+  });
+
+  it('honours showOnPrediction:false at creation', async () => {
+    const created = await csrf(agent.post('/api/goals'))
+      .send({ name: 'Hidden', targetMinor: 1_000_00, showOnPrediction: false });
+    expect(created.body.showOnPrediction).toBe(false);
+  });
+
   it('scopes goals to their owner', async () => {
     const created = await csrf(agent.post('/api/goals')).send({ name: 'Mine', targetMinor: 1_000_00 });
 

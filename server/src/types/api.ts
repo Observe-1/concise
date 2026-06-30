@@ -416,6 +416,11 @@ export interface GoalDto {
   /** Optional user-set deadline (YYYY-MM-DD), separate from the computed ETA. */
   targetDate: string | null;
   notes: string | null;
+  /**
+   * Whether this goal is drawn as a gold marker line (at its projected ETA) on
+   * the dashboard's prediction graph. On by default; toggled per goal.
+   */
+  showOnPrediction: boolean;
   /** Current net worth or (for a payoff goal) the liability's current balance. */
   currentMinor: number;
   /** 0–100+, clamped to 100 only by the UI (kept uncapped here for "by how much"). */

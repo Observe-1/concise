@@ -10,6 +10,7 @@ import { ExportSection } from '../components/ExportSection.js';
 import { GoalsSection } from '../components/GoalsSection.js';
 import { HouseholdSection } from '../components/HouseholdSection.js';
 import { Button, Card, EmptyState, ErrorNote, Field, Input, Select, Spinner, SuccessNote } from '../components/ui.js';
+import { DatePicker } from '../components/DatePicker.js';
 import { formatMinor, parseSignedToMinor } from '../lib/money.js';
 
 const CURRENCIES = [
@@ -573,9 +574,7 @@ function LegacyWealthCard() {
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <Field label="Date">
-            {(id) => (
-              <Input id={id} type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
-            )}
+            {(id) => <DatePicker id={id} value={date} onChange={setDate} required />}
           </Field>
           <Field label="Net worth">
             {(id) => (

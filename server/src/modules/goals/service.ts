@@ -15,6 +15,7 @@ interface GoalRow {
   baseline_minor: number | null;
   target_date: string | null;
   notes: string | null;
+  show_on_prediction: number;
   created_at: string;
 }
 
@@ -144,6 +145,7 @@ function toDto(
     baselineMinor: row.baseline_minor,
     targetDate: row.target_date,
     notes: row.notes,
+    showOnPrediction: row.show_on_prediction === 1,
     currentMinor,
     progressPct,
     etaISO,
@@ -200,6 +202,7 @@ export interface GoalInput {
   liabilityId?: number;
   targetDate?: string | null;
   notes?: string | null;
+  showOnPrediction?: boolean;
 }
 
 export function createGoal(ctx: AppContext, userId: number, input: GoalInput): GoalDto {
@@ -220,10 +223,13 @@ export function createGoal(ctx: AppContext, userId: number, input: GoalInput): G
 
   const id = ctx.db
     .prepare(
-      `INSERT INTO goals (user_id, name, goal_type, target_minor, liability_id, baseline_minor, target_date, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO goals (user_id, name, goal_type, target_minor, liability_id, baseline_minor, target_date, notes, show_on_prediction)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
-    .run(userId, input.name, goalType, targetMinor, liabilityId, baselineMinor, input.targetDate ?? null, input.notes ?? null)
+    .run(
+      userId, input.name, goalType, targetMinor, liabilityId, baselineMinor,
+      input.targetDate ?? null, input.notes ?? null, input.showOnPrediction === false ? 0 : 1,
+    )
     .lastInsertRowid as number;
   return getGoal(ctx, userId, id);
 }
@@ -233,6 +239,7 @@ export interface GoalPatch {
   targetMinor?: number;
   targetDate?: string | null;
   notes?: string | null;
+  showOnPrediction?: boolean;
 }
 
 /**
@@ -250,9 +257,12 @@ export function updateGoal(ctx: AppContext, userId: number, id: number, patch: G
     : patch.targetMinor ?? existing.target_minor;
   const targetDate = patch.targetDate !== undefined ? patch.targetDate : existing.target_date;
   const notes = patch.notes !== undefined ? patch.notes : existing.notes;
+  const showOnPrediction = patch.showOnPrediction !== undefined
+    ? (patch.showOnPrediction ? 1 : 0)
+    : existing.show_on_prediction;
   ctx.db
-    .prepare('UPDATE goals SET name = ?, target_minor = ?, target_date = ?, notes = ? WHERE id = ?')
-    .run(name, targetMinor, targetDate, notes, id);
+    .prepare('UPDATE goals SET name = ?, target_minor = ?, target_date = ?, notes = ?, show_on_prediction = ? WHERE id = ?')
+    .run(name, targetMinor, targetDate, notes, showOnPrediction, id);
   return getGoal(ctx, userId, id);
 }
 

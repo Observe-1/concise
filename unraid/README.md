@@ -20,13 +20,16 @@ The template isn't published to Community Applications, so add it manually:
 
 | Setting | Default | Notes |
 |---|---|---|
-| **WebUI Port** | `3000` | Host port. The container always listens on 3000 internally. |
-| **Appdata** | `/mnt/user/appdata/concise-wealth-tracker` → `/data` | Holds the SQLite database and the `backups/` folder. |
-| **PUID / PGID** | `99` / `100` | The user/group that owns your appdata share (Unraid: `nobody:users`). The app writes `/data` as this user. |
+| **WebUI Port** | `3000` | Host port. The container always listens on **3000** internally, serving **both** the web UI and the `/api` REST API from that single port — there is no separate API port. Change only the host (left) side. |
+| **Appdata** | `/mnt/user/appdata/concise-wealth-tracker` → `/data` | Holds the SQLite database (`concise.db`). |
+| **Backup Directory** | `/mnt/user/appdata/concise-wealth-tracker/backups` → `/backups` | Where validated backups are written. Point the host side at any share to keep copies off the database's own folder; the container side is fixed at `/backups` (the `BACKUP_DIR` variable). |
+| **PUID / PGID** | `99` / `100` | The user/group that owns your appdata share (Unraid: `nobody:users`). The app writes `/data` and `/backups` as this user. |
 | **COOKIE_SECURE** | `false` | Leave `false` for plain-HTTP LAN access (`http://tower:3000`) or **login will silently fail**. Set `true` only behind an HTTPS reverse proxy. |
 
-Advanced variables (timezone, rate limits, trusted origins, price provider, log
-level, demo seed) are hidden under **Show more settings…**; defaults are safe.
+Advanced variables (`BACKUP_DIR`, timezone, rate limits, trusted origins, price
+provider, log level, demo seed) are hidden under **Show more settings…**;
+defaults are safe. Leave `BACKUP_DIR` at `/backups` — to relocate backups,
+change the host side of the **Backup Directory** mapping, not this variable.
 
 ## How it works (PUID/PGID)
 
@@ -40,6 +43,8 @@ chown/drop.
 ## Backups & disaster recovery
 
 Concise takes validated SQLite backups itself (automatic + manual; tune them in
-**Settings → Backup**). They live in `<appdata>/backups`. Because that's on your
-array, include the appdata share in your normal Unraid backup routine (e.g. the
-CA Appdata Backup plugin) for off-server copies. See `../BACKUP.md`.
+**Settings → Backup**). They are written to the **Backup Directory** mapping —
+by default `<appdata>/backups`, but you can repoint the host side at a dedicated
+backups share or a second disk. Because the default is on your array, include
+the appdata share in your normal Unraid backup routine (e.g. the CA Appdata
+Backup plugin) for off-server copies. See `../BACKUP.md`.

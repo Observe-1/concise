@@ -216,3 +216,23 @@ Implemented strictly in order; one commit per feature.
       default — or to the view-as date when scrubbed; percentages become
       projected growth vs today, captioned "projected".
 
+## Feature batch (2026-06-30)
+Implemented strictly in order; one commit per feature.
+- [x] 1. Goal markers on the prediction graph: while predicting, each enabled
+      goal draws a solid **gold** vertical line at its projected ETA (snapped to
+      a real chart point), labelled with the goal name (trimmed to < 10 chars)
+      and a progress summary on hover — distinct from the dashed age / "Now"
+      lines. A per-goal `show_on_prediction` flag (migration 0016) toggles each
+      line on/off from Settings → Goals; the placement logic lives in the pure,
+      unit-tested `goalMarkers` lib (mirrors `ageMarkers`).
+- [x] 2. Modern date picker: a themed `DatePicker` (typeable `YYYY-MM-DD` field
+      + inline month-grid calendar matching the black/gold theme) replaces the
+      browser-native `<input type="date">` everywhere a date is chosen (goals,
+      recurring, history editing, compare, legacy wealth, holding backdate /
+      manufacture date), for a consistent cross-platform look.
+- [x] 3. Unraid template: a customisable **Backup Directory** path mapping
+      (host → `/backups`, with `BACKUP_DIR=/backups`) so backups can be steered
+      to any share without editing env vars, and a clearer Overview/Description
+      spelling out that the single internal port 3000 serves both the web UI and
+      the `/api` REST API (no separate API port).
+

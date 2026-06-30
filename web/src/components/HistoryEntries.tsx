@@ -4,6 +4,7 @@ import {
   useDeleteHistoryEntry, useHistoryEntries, useHoldings, useMe, useUpdateHistoryEntry,
 } from '../api/queries.js';
 import { Button, Card, ErrorNote, Field, Input, Modal, Select, Spinner } from './ui.js';
+import { DatePicker } from './DatePicker.js';
 import { categoryDisplay } from '../lib/categories.js';
 import { formatMinor, minorToInput, parseToMinor } from '../lib/money.js';
 
@@ -175,9 +176,8 @@ function EntryEditModal({ entry, onClose }: { entry: HistoryEntryDto; onClose: (
       <form onSubmit={onSubmit} className="space-y-4">
         <Field label="Date">
           {(id) => (
-            <Input id={id} type="date" value={date}
-              max={new Date().toISOString().slice(0, 10)}
-              onChange={(e) => setDate(e.target.value)} required />
+            <DatePicker id={id} value={date} max={new Date().toISOString().slice(0, 10)}
+              onChange={setDate} required />
           )}
         </Field>
         <Field label="Value">

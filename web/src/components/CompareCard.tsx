@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useCompare, useMe } from '../api/queries.js';
-import { ChangeBadge, Field, Input, Spinner } from './ui.js';
+import { DatePicker } from './DatePicker.js';
+import { ChangeBadge, Field, Spinner } from './ui.js';
 import { categoryDisplay } from '../lib/categories.js';
 import { formatMinor } from '../lib/money.js';
 
@@ -23,10 +24,10 @@ export function CompareCard() {
     <div>
       <div className="mb-4 grid grid-cols-2 gap-3">
         <Field label="From">
-          {(id) => <Input id={id} type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} />}
+          {(id) => <DatePicker id={id} value={from} max={to} onChange={setFrom} />}
         </Field>
         <Field label="To">
-          {(id) => <Input id={id} type="date" value={to} min={from} onChange={(e) => setTo(e.target.value)} />}
+          {(id) => <DatePicker id={id} value={to} min={from} onChange={setTo} />}
         </Field>
       </div>
 

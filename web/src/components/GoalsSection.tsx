@@ -4,6 +4,7 @@ import {
   useCreateGoal, useCreateRecurring, useDeleteGoal, useGoals, useHoldings, useMe, useUpdateGoal,
 } from '../api/queries.js';
 import { Button, Card, ErrorNote, Field, Input, Modal, Select, Spinner, SuccessNote } from './ui.js';
+import { DatePicker } from './DatePicker.js';
 import { formatMinor, minorToInput, parseToMinor } from '../lib/money.js';
 
 /** Secondary line under a goal's name: progress framed against the target
@@ -164,6 +165,7 @@ function GoalEditModal({ goal, onClose }: { goal: GoalDto | null; onClose: () =>
   const [liabilityId, setLiabilityId] = useState(goal?.liabilityId ? String(goal.liabilityId) : '');
   const [targetDate, setTargetDate] = useState(goal?.targetDate ?? '');
   const [notes, setNotes] = useState(goal?.notes ?? '');
+  const [showOnPrediction, setShowOnPrediction] = useState(goal?.showOnPrediction ?? true);
   const [error, setError] = useState<string | null>(null);
   const pending = create.isPending || update.isPending;
   const isPayoff = goalType === 'liability_payoff';
@@ -179,7 +181,7 @@ function GoalEditModal({ goal, onClose }: { goal: GoalDto | null; onClose: () =>
     if (goal) {
       // Type, target and liability are fixed at creation — only these fields are editable.
       update.mutate(
-        { id: goal.id, name: name.trim(), targetDate: targetDate || null, notes: notes.trim() || null },
+        { id: goal.id, name: name.trim(), targetDate: targetDate || null, notes: notes.trim() || null, showOnPrediction },
         { onSuccess: onClose, onError },
       );
       return;
@@ -192,7 +194,7 @@ function GoalEditModal({ goal, onClose }: { goal: GoalDto | null; onClose: () =>
       create.mutate(
         {
           name: name.trim(), goalType: 'liability_payoff', liabilityId: Number(liabilityId),
-          targetDate: targetDate || null, notes: notes.trim() || null,
+          targetDate: targetDate || null, notes: notes.trim() || null, showOnPrediction,
         },
         { onSuccess: onClose, onError },
       );
@@ -206,7 +208,7 @@ function GoalEditModal({ goal, onClose }: { goal: GoalDto | null; onClose: () =>
     create.mutate(
       {
         name: name.trim(), goalType: 'net_worth', targetMinor,
-        targetDate: targetDate || null, notes: notes.trim() || null,
+        targetDate: targetDate || null, notes: notes.trim() || null, showOnPrediction,
       },
       { onSuccess: onClose, onError },
     );
@@ -255,13 +257,25 @@ function GoalEditModal({ goal, onClose }: { goal: GoalDto | null; onClose: () =>
           </Field>
         )}
         <Field label="Target date" hint="Optional — a deadline you're aiming for, separate from the projected ETA.">
-          {(id) => (
-            <Input id={id} type="date" value={targetDate ?? ''} onChange={(e) => setTargetDate(e.target.value)} />
-          )}
+          {(id) => <DatePicker id={id} value={targetDate ?? ''} onChange={setTargetDate} />}
         </Field>
         <Field label="Notes" hint="Optional.">
           {(id) => <Input id={id} value={notes ?? ''} onChange={(e) => setNotes(e.target.value)} maxLength={2000} />}
         </Field>
+        <label className="flex items-start gap-3 rounded-xl border border-ink-800 p-3.5">
+          <input
+            type="checkbox"
+            checked={showOnPrediction}
+            onChange={(e) => setShowOnPrediction(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-gold-500"
+          />
+          <span className="min-w-0">
+            <span className="block text-sm font-medium text-ink-100">Show on prediction graph</span>
+            <span className="block text-xs text-ink-400">
+              Draws a gold line at this goal’s projected date when the dashboard is in prediction mode.
+            </span>
+          </span>
+        </label>
         {error ? <ErrorNote message={error} /> : null}
         <Button type="submit" className="w-full" disabled={pending}>
           {pending ? 'Saving…' : 'Save goal'}

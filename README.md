@@ -48,6 +48,14 @@ all in a fast, private, self-hostable app.
 - **Recurring movements** — scheduled fixed or percentage changes (salary
   into savings, mortgage payments, compounding interest, …) on daily,
   weekly, monthly, quarterly or yearly cadences, applied automatically.
+- **Goals & prediction** — set a target net worth or pick a liability to pay
+  off; each goal tracks progress, a projected ETA, and a suggested monthly
+  contribution (one click turns a payoff goal's suggestion into a recurring
+  payment). **Prediction mode** projects the whole portfolio forward to a
+  chosen horizon — the cards, breakdowns and graph all reflect the future —
+  and draws a gold marker line at each enabled goal's projected date, labelled
+  with the goal name and a progress hover (toggle a goal's line on or off in
+  Settings → Goals).
 - **Multi-user** — self-service account creation, session auth, rate
   limiting, and audit logging. A "not financial advice" disclaimer appears on
   sign-up and in Settings → Legal.

@@ -340,6 +340,7 @@ export interface GoalInput {
   liabilityId?: number;
   targetDate?: string | null;
   notes?: string | null;
+  showOnPrediction?: boolean;
 }
 
 export function useCreateGoal() {

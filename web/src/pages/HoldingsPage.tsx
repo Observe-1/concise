@@ -12,6 +12,7 @@ import {
 import { NetWorthChart, RANGES, RangePicker } from '../components/NetWorthChart.js';
 import { CompositionPie } from '../components/PieCharts.js';
 import { Button, Card, ChangeBadge, EmptyState, ErrorNote, Field, Input, Modal, Select, Spinner } from '../components/ui.js';
+import { DatePicker } from '../components/DatePicker.js';
 import { useHistoricalView } from '../contexts/HistoricalView.js';
 import { categoryDisplay, categoryLabel, type HoldingSide } from '../lib/categories.js';
 import { formatMinor, minorToInput, parseToMinor } from '../lib/money.js';
@@ -711,12 +712,11 @@ function HoldingForm({
             hint="Depreciation steepens for newer vehicles — the age determines the rate applied."
           >
             {(id) => (
-              <Input
+              <DatePicker
                 id={id}
-                type="date"
                 value={manufactureDate}
                 max={new Date().toISOString().slice(0, 10)}
-                onChange={(e) => setManufactureDate(e.target.value)}
+                onChange={setManufactureDate}
                 required
               />
             )}
@@ -856,12 +856,11 @@ function HoldingForm({
             hint={`Record this ${kind === 'assets' ? 'asset' : 'liability'} as starting on a past date; your history is recalculated from there.`}
           >
             {(id) => (
-              <Input
+              <DatePicker
                 id={id}
-                type="date"
                 value={asOf}
                 max={new Date().toISOString().slice(0, 10)}
-                onChange={(e) => setAsOf(e.target.value)}
+                onChange={setAsOf}
               />
             )}
           </Field>

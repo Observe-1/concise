@@ -9,7 +9,7 @@
   <Privileged>false</Privileged>
   <Support/>
   <Project/>
-  <Overview>Concise is a minimalist, self-hosted personal finance / net-worth tracker. One small Node.js process serves the API and web UI; all state is a single SQLite file plus validated backups, stored on the mapped /data volume. Set PUID/PGID to the user that owns your appdata share (Unraid: 99 / 100). Access over plain HTTP on your LAN requires COOKIE_SECURE=false (the template default); set it to true only when serving Concise behind an HTTPS reverse proxy.</Overview>
+  <Overview>Concise is a minimalist, self-hosted personal finance / net-worth tracker. One small Node.js process serves BOTH the web UI and the REST API from a single internal port — 3000 inside the container (there is no separate API port; the UI calls /api on the same port). Map a host port to container 3000 with "WebUI Port" below. All state is a single SQLite file; validated backups are written to the mapped backup directory. Set PUID/PGID to the user that owns your appdata share (Unraid: 99 / 100). Access over plain HTTP on your LAN requires COOKIE_SECURE=false (the template default); set it to true only when serving Concise behind an HTTPS reverse proxy.</Overview>
   <Category>Productivity:</Category>
   <WebUI>http://[IP]:[PORT:3000]/</WebUI>
   <TemplateURL/>
@@ -20,7 +20,7 @@
   <DateInstalled/>
   <DonateText/>
   <DonateLink/>
-  <Description>Minimalist self-hosted personal finance / net-worth tracker (SQLite, no external database). Data and automatic backups live on /data — map it to your appdata share and set PUID/PGID to that share's owner.</Description>
+  <Description>Minimalist self-hosted personal finance / net-worth tracker (SQLite, no external database). The container listens on a single internal port, 3000, which serves both the web UI and the /api REST API (no separate API port) — publish it via "WebUI Port". The SQLite database lives on /data; validated backups are written to a separate, customisable "Backup Directory" mapping (defaults to a backups folder under appdata). Map both to your appdata share and set PUID/PGID to that share's owner.</Description>
   <Networking>
     <Mode>bridge</Mode>
     <Publish>
@@ -35,6 +35,11 @@
     <Volume>
       <HostDir>/mnt/user/appdata/concise-wealth-tracker</HostDir>
       <ContainerDir>/data</ContainerDir>
+      <Mode>rw</Mode>
+    </Volume>
+    <Volume>
+      <HostDir>/mnt/user/appdata/concise-wealth-tracker/backups</HostDir>
+      <ContainerDir>/backups</ContainerDir>
       <Mode>rw</Mode>
     </Volume>
   </Data>
@@ -54,16 +59,23 @@
       <Name>COOKIE_SECURE</Name>
       <Mode/>
     </Variable>
+    <Variable>
+      <Value>/backups</Value>
+      <Name>BACKUP_DIR</Name>
+      <Mode/>
+    </Variable>
   </Environment>
 
   <!-- Visible (basic) settings -->
-  <Config Name="WebUI Port" Target="3000" Default="3000" Mode="tcp" Description="Host port for the Concise web UI and API. The container always listens on 3000 internally." Type="Port" Display="always" Required="true" Mask="false">3000</Config>
-  <Config Name="Appdata" Target="/data" Default="/mnt/user/appdata/concise-wealth-tracker" Mode="rw" Description="Persistent storage: the SQLite database (concise.db) and the backups/ folder. Must be writable by PUID:PGID." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/concise-wealth-tracker</Config>
+  <Config Name="WebUI Port" Target="3000" Default="3000" Mode="tcp" Description="Host port published for Concise. The container always listens on 3000 internally, serving BOTH the web UI and the /api REST API from that one port (there is no separate API port). Change the host (left) side only — leave the container side as 3000." Type="Port" Display="always" Required="true" Mask="false">3000</Config>
+  <Config Name="Appdata" Target="/data" Default="/mnt/user/appdata/concise-wealth-tracker" Mode="rw" Description="Persistent storage for the SQLite database (concise.db). Must be writable by PUID:PGID. Backups go to the separate 'Backup Directory' mapping below." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/concise-wealth-tracker</Config>
+  <Config Name="Backup Directory" Target="/backups" Default="/mnt/user/appdata/concise-wealth-tracker/backups" Mode="rw" Description="Where validated database backups are written (automatic + manual). Point the host (left) side at any share you like — e.g. a dedicated backups share or a second disk — to keep copies off the database's own folder. The container side is fixed at /backups (the BACKUP_DIR variable points here). Must be writable by PUID:PGID." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/concise-wealth-tracker/backups</Config>
   <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="User ID that owns the appdata share. Unraid default is 99 (nobody). Files in /data are created as this user." Type="Variable" Display="always" Required="true" Mask="false">99</Config>
   <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="Group ID that owns the appdata share. Unraid default is 100 (users)." Type="Variable" Display="always" Required="true" Mask="false">100</Config>
   <Config Name="COOKIE_SECURE" Target="COOKIE_SECURE" Default="false" Mode="" Description="Send session cookies only over HTTPS. Leave 'false' for plain-HTTP LAN access (e.g. http://tower:3000) or login will silently fail. Set 'true' ONLY when Concise is behind an HTTPS reverse proxy." Type="Variable" Display="always" Required="true" Mask="false">false</Config>
 
   <!-- Advanced settings -->
+  <Config Name="BACKUP_DIR" Target="BACKUP_DIR" Default="/backups" Mode="" Description="Container path Concise writes backups to. Leave this as /backups — it must match the container side of the 'Backup Directory' volume above; change the HOST folder there to relocate backups, not this. (If left unset, Concise falls back to a backups/ folder beside the database.)" Type="Variable" Display="advanced" Required="false" Mask="false">/backups</Config>
   <Config Name="TZ" Target="TZ" Default="Etc/UTC" Mode="" Description="Timezone for log timestamps. Concise's own date calculations are always UTC, so this is cosmetic." Type="Variable" Display="advanced" Required="false" Mask="false">Etc/UTC</Config>
   <Config Name="UMASK" Target="UMASK" Default="022" Mode="" Description="File-creation mask for the database and backups." Type="Variable" Display="advanced" Required="false" Mask="false">022</Config>
   <Config Name="TRUST_PROXY" Target="TRUST_PROXY" Default="0" Mode="" Description="Number of reverse-proxy hops to trust for client IPs (rate limiting, audit log). Set to 1 behind a single proxy; 0 when exposed directly." Type="Variable" Display="advanced" Required="false" Mask="false">0</Config>

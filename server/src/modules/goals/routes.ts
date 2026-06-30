@@ -18,6 +18,7 @@ const createSchema = z.object({
   liabilityId: z.number().int().positive().optional(),
   targetDate: dateSchema.nullable().optional(),
   notes: z.string().max(2000).nullable().optional(),
+  showOnPrediction: z.boolean().optional(),
 }).refine(
   (d) => (d.goalType === 'net_worth' && d.targetMinor !== undefined && d.liabilityId === undefined)
     || (d.goalType === 'liability_payoff' && d.liabilityId !== undefined && d.targetMinor === undefined),
@@ -29,6 +30,7 @@ const updateSchema = z.object({
   targetMinor: z.number().int().positive().max(MAX_TARGET_MINOR).optional(),
   targetDate: dateSchema.nullable().optional(),
   notes: z.string().max(2000).nullable().optional(),
+  showOnPrediction: z.boolean().optional(),
 });
 
 export function goalsRoutes(ctx: AppContext): Router {
