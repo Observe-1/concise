@@ -1,11 +1,11 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Area, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer,
   Tooltip, XAxis, YAxis,
 } from 'recharts';
 import type { GoalDto, HistoryPointDto, HistoryRange } from '@api';
 import { ageMarkers } from '../lib/ageMarkers.js';
-import { goalMarkers, type GoalMarker } from '../lib/goalMarkers.js';
+import { goalMarkers } from '../lib/goalMarkers.js';
 import { expandSinglePoint } from '../lib/flatline.js';
 import { formatMinor, formatMinorCompact } from '../lib/money.js';
 
@@ -111,6 +111,18 @@ export function NetWorthChart({
   );
   const ages = useMemo(() => ageMarkers(data, birthYear, range), [data, birthYear, range]);
   const goalLines = useMemo(() => goalMarkers(data, goals), [data, goals]);
+  // Marker flags (Now / goals) flip their expand-on-hover panel to whichever
+  // side keeps it on-screen, which needs the rendered chart width.
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [chartWidth, setChartWidth] = useState(0);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return undefined;
+    setChartWidth(el.clientWidth);
+    const ro = new ResizeObserver(() => setChartWidth(el.clientWidth));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   // Historical view marker must sit on an existing x-axis category: use the
   // last chart point on or before the pinned date.
   const asOfMarker = useMemo(() => {
@@ -168,7 +180,7 @@ export function NetWorthChart({
     );
   }
   return (
-    <div className="relative" style={{ height }}>
+    <div ref={containerRef} className="relative" style={{ height }}>
       <div className="h-full" aria-label="Net worth history chart" role="img">
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={data} margin={CHART_MARGIN}>
@@ -234,18 +246,23 @@ export function NetWorthChart({
               stroke="#d4af37"
               strokeWidth={1.5}
               strokeDasharray="3 4"
-              label={{
-                value: 'Now',
-                position: 'insideTopRight',
-                fill: '#ddc06c',
-                fontSize: 10,
-              }}
+              label={(props) => (
+                <MarkerFlag
+                  {...props}
+                  label="Now"
+                  detail={['Projection starts here', dateLabel(nowMarker, true)]}
+                  tone="now"
+                  slot={0}
+                  chartWidth={chartWidth}
+                />
+              )}
             />
           )}
           {/* Goal markers (prediction mode): a solid gold line at each enabled
               goal's projected ETA — distinct from the dashed "Now"/age lines.
-              The label shows a short name; hovering the line reveals a small
-              progress summary via a native SVG title. */}
+              Each carries a labelled flag that expands on hover with the goal's
+              progress and ETA. Flags sit below the age labels and stagger so
+              goals landing on nearby dates don't overlap. */}
           {goalLines.map((marker, i) => (
             <ReferenceLine
               key={`goal-${marker.goal.id}`}
@@ -253,7 +270,14 @@ export function NetWorthChart({
               stroke="#d4af37"
               strokeWidth={1.5}
               label={(props) => (
-                <GoalLineLabel {...props} marker={marker} index={i} currency={currency} />
+                <MarkerFlag
+                  {...props}
+                  label={marker.label}
+                  detail={goalDetailLines(marker.goal, currency)}
+                  tone="goal"
+                  slot={i % 3}
+                  chartWidth={chartWidth}
+                />
               )}
             />
           ))}
@@ -318,43 +342,98 @@ export function NetWorthChart({
   );
 }
 
-/** One-line-per-fact progress summary shown when hovering a goal's marker
- *  line (a native SVG <title>, so it works without extra chart state). */
-function goalTooltip(goal: GoalDto, currency: string): string {
+/** The two detail lines (progress, ETA) a goal's flag reveals on hover. */
+function goalDetailLines(goal: GoalDto, currency: string): string[] {
   const pct = `${Math.min(100, Math.max(0, Math.round(goal.progressPct)))}%`;
   const progress = goal.goalType === 'liability_payoff'
     ? `${pct} paid · ${formatMinor(goal.currentMinor, currency)} left of ${formatMinor(goal.baselineMinor!, currency)}`
     : `${pct} · ${formatMinor(goal.currentMinor, currency)} of ${formatMinor(goal.targetMinor, currency)}`;
-  const eta = goal.etaISO ? `\nOn track for ${goal.etaISO}` : '';
-  return `${goal.name}\n${progress}${eta}`;
+  return [progress, goal.etaISO ? `On track for ${goal.etaISO}` : 'Not on track at the current rate'];
 }
 
-interface GoalLabelProps {
+interface MarkerFlagProps {
   viewBox?: { x?: number; y?: number; width?: number; height?: number };
-  marker: GoalMarker;
-  index: number;
-  currency: string;
+  /** Short pill label (already trimmed). */
+  label: string;
+  /** Extra lines revealed on hover. */
+  detail: string[];
+  tone: 'now' | 'goal';
+  /** Vertical stagger slot, so flags on nearby dates don't overlap. */
+  slot: number;
+  /** Rendered chart width, used to flip the panel to the on-screen side. */
+  chartWidth: number;
 }
+
+// Geometry for the marker flags. They sit in a band BELOW the age-marker
+// labels (which hug the very top), so the two never overlap.
+const FLAG_BAND_TOP = 24;
+const FLAG_ROW_H = 17;
+const FLAG_H = 16;
+const FLAG_PAD_X = 6;
+const FLAG_CHAR_W = 6.2;   // ~width of the pill font at 10px
+const DETAIL_CHAR_W = 5.4; // ~width of the detail font at 9px
+
+const FLAG_TONES = {
+  now: { fill: '#15151a', stroke: '#d4af37', text: '#ddc06c' },
+  goal: { fill: '#15151a', stroke: '#b3922c', text: '#ecd9a0' },
+} as const;
 
 /**
- * Custom label for a goal's gold marker line: the short name near the top and a
- * full-height transparent hit area carrying a native tooltip (current progress).
- * Names are staggered vertically so goals landing on nearby dates don't overlap.
+ * A marker line's flag (Now / goal): an opaque rounded pill with the short
+ * label that, on hover, expands into a panel with extra detail lines. The pill
+ * grows toward whichever side keeps it inside the plot, and carries a
+ * full-height transparent hit area so hovering anywhere on the line opens it.
  */
-function GoalLineLabel({ viewBox, marker, index, currency }: GoalLabelProps) {
+function MarkerFlag({ viewBox, label, detail, tone, slot, chartWidth }: MarkerFlagProps) {
+  const [hover, setHover] = useState(false);
   const x = viewBox?.x;
   const top = viewBox?.y ?? 0;
   const lineHeight = viewBox?.height ?? 0;
   if (typeof x !== 'number') return null;
-  const labelY = top + 11 + (index % 3) * 12; // stagger to avoid collisions
+
+  const colors = FLAG_TONES[tone];
+  const y = top + FLAG_BAND_TOP + slot * FLAG_ROW_H;
+  const pillW = label.length * FLAG_CHAR_W + FLAG_PAD_X * 2;
+  // Near the right edge the flag grows leftward so the expanded panel stays on
+  // screen; elsewhere it grows rightward from the line.
+  const leftSide = chartWidth > 0 && x > chartWidth * 0.62;
+  const textAnchor = leftSide ? 'end' : 'start';
+  const textX = leftSide ? x - FLAG_PAD_X : x + FLAG_PAD_X;
+
+  const panelW = Math.max(pillW, ...detail.map((d) => d.length * DETAIL_CHAR_W + FLAG_PAD_X * 2));
+  const panelH = FLAG_H + detail.length * 13 + 6;
+  const boxW = hover ? panelW : pillW;
+  const boxX = leftSide ? x - boxW : x;
+
   return (
-    <g>
-      <title>{goalTooltip(marker.goal, currency)}</title>
-      {/* Transparent (not 'none') so the line's full height stays hoverable. */}
-      <rect x={x - 6} y={top} width={12} height={lineHeight} fill="transparent" />
-      <text x={x - 4} y={labelY} textAnchor="end" fill="#ddc06c" fontSize={10} fontWeight={600}>
-        {marker.label}
+    <g onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+      {/* Transparent (not 'none') so the whole line height is hoverable. */}
+      <rect x={x - 7} y={top} width={14} height={lineHeight} fill="transparent" />
+      <rect
+        x={boxX}
+        y={y}
+        width={boxW}
+        height={hover ? panelH : FLAG_H}
+        rx={5}
+        fill={colors.fill}
+        stroke={colors.stroke}
+        strokeOpacity={hover ? 1 : 0.7}
+      />
+      <text x={textX} y={y + 11} textAnchor={textAnchor} fill={colors.text} fontSize={10} fontWeight={700}>
+        {label}
       </text>
+      {hover && detail.map((line, i) => (
+        <text
+          key={line}
+          x={textX}
+          y={y + FLAG_H + 10 + i * 13}
+          textAnchor={textAnchor}
+          fill="#b4b4bd"
+          fontSize={9}
+        >
+          {line}
+        </text>
+      ))}
     </g>
   );
 }
