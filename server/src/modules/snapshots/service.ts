@@ -24,7 +24,7 @@ export function totalsAsOf(db: DatabaseSync, userId: number, dateISO: string): T
          WHERE v2.asset_id = a.id AND v2.recorded_at <= ?
          ORDER BY v2.recorded_at DESC, v2.id DESC LIMIT 1
        )
-       WHERE a.user_id = ?`,
+       WHERE a.user_id = ? AND a.exclude_from_totals = 0`,
     )
     .get(cutoff, userId) as { total: number };
   const liabilityRow = db
@@ -36,7 +36,7 @@ export function totalsAsOf(db: DatabaseSync, userId: number, dateISO: string): T
          WHERE v2.liability_id = l.id AND v2.recorded_at <= ?
          ORDER BY v2.recorded_at DESC, v2.id DESC LIMIT 1
        )
-       WHERE l.user_id = ?`,
+       WHERE l.user_id = ? AND l.exclude_from_totals = 0`,
     )
     .get(cutoff, userId) as { total: number };
   return { assetsMinor: assetRow.total, liabilitiesMinor: liabilityRow.total };
@@ -135,13 +135,13 @@ export function recomputeSnapshotRange(
   const assetSeries = groupByHolding(db.prepare(
     `SELECT v.asset_id AS hid, v.value_minor, v.recorded_at, v.source
      FROM asset_valuations v JOIN assets a ON a.id = v.asset_id
-     WHERE a.user_id = ? AND v.recorded_at <= ?
+     WHERE a.user_id = ? AND a.exclude_from_totals = 0 AND v.recorded_at <= ?
      ORDER BY v.recorded_at, v.id`,
   ).all(userId, cutoff) as unknown as ValuationRow[]);
   const liabilitySeries = groupByHolding(db.prepare(
     `SELECT v.liability_id AS hid, v.value_minor, v.recorded_at, v.source
      FROM liability_valuations v JOIN liabilities l ON l.id = v.liability_id
-     WHERE l.user_id = ? AND v.recorded_at <= ?
+     WHERE l.user_id = ? AND l.exclude_from_totals = 0 AND v.recorded_at <= ?
      ORDER BY v.recorded_at, v.id`,
   ).all(userId, cutoff) as unknown as ValuationRow[]);
 

@@ -26,9 +26,13 @@ const createSchema = z.object({
   percent: percentSchema.optional(),
   cadence: cadenceSchema,
   nextRunOn: dateSchema,
+  endDate: dateSchema.nullable().optional(),
 }).refine(
   (d) => (d.amountMinor !== undefined) !== (d.percent !== undefined),
   { message: 'Provide exactly one of amountMinor or percent' },
+).refine(
+  (d) => !d.endDate || d.endDate >= d.nextRunOn,
+  { message: 'End date cannot be before the next run date', path: ['endDate'] },
 );
 
 const updateSchema = z.object({
@@ -37,6 +41,7 @@ const updateSchema = z.object({
   percent: percentSchema.optional(),
   cadence: cadenceSchema.optional(),
   nextRunOn: dateSchema.optional(),
+  endDate: dateSchema.nullable().optional(),
   active: z.boolean().optional(),
 }).refine(
   (d) => d.amountMinor === undefined || d.percent === undefined,

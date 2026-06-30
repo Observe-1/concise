@@ -171,4 +171,145 @@ describe('RealPriceProvider', () => {
     expect(real.lookupSymbol('vusa')).toMatchObject({ symbol: 'VUSA', exchange: 'London Stock Exchange' });
     expect(real.listInstruments().length).toBeGreaterThanOrEqual(30);
   });
+
+  it('a registered (ISIN-discovered) symbol is fetched directly, not via YAHOO_SYMBOLS', async () => {
+    let url = '';
+    const fetchFn: QuoteFetch = async (u) => {
+      url = u;
+      return { ok: true, status: 200, json: async () => aaplChart };
+    };
+    const real = new RealPriceProvider({ fetchFn });
+    real.registerInstrument('0P00018XAR.L', { name: 'Some Fund', currency: 'GBP', exchange: 'London' });
+    await real.prime(['0P00018XAR.L'], '2026-06-15', '2026-06-19');
+    expect(url).toContain('/v8/finance/chart/0P00018XAR.L?');
+    expect(real.getPriceMinor('0P00018XAR.L', '2026-06-17')).toBe(12000);
+    expect(real.instrumentCurrency('0P00018XAR.L')).toBe('GBP');
+  });
+});
+
+describe('RealPriceProvider FX rates', () => {
+  it('fetches a live rate via the {CCY}=X chart symbol and caches it', async () => {
+    let url = '';
+    const fetchFn: QuoteFetch = async (u) => {
+      url = u;
+      return { ok: true, status: 200, json: async () => chart('USD', [], { price: 1.316, date: '2026-06-25' }) };
+    };
+    const real = new RealPriceProvider({ fetchFn });
+    expect(real.fxRateLive('GBP')).toBeNull(); // not primed yet
+    await real.primeFxRates(['GBP']);
+    expect(url).toContain('/v8/finance/chart/GBP%3DX?');
+    expect(real.fxRateLive('GBP')).toBe(1.316);
+    expect(real.fxRateLive('gbp')).toBe(1.316); // case-insensitive
+  });
+
+  it('never fetches USD — it is trivially 1', async () => {
+    const fetchFn = stubFetch(chart('USD', [], { price: 1, date: '2026-06-25' }));
+    const real = new RealPriceProvider({ fetchFn });
+    await real.primeFxRates(['USD']);
+    expect(fetchFn.calls).toBe(0);
+    expect(real.fxRateLive('USD')).toBe(1);
+  });
+
+  it('does not re-fetch a fresh rate within the TTL, but does after it', async () => {
+    let now = 1_000_000;
+    const fetchFn = stubFetch(chart('USD', [], { price: 1.3, date: '2026-06-25' }));
+    const real = new RealPriceProvider({ fetchFn, nowMs: () => now, ttlMs: 60_000 });
+    await real.primeFxRates(['GBP']);
+    expect(fetchFn.calls).toBe(1);
+    await real.primeFxRates(['GBP']);
+    expect(fetchFn.calls).toBe(1); // still fresh
+    now += 120_000;
+    await real.primeFxRates(['GBP']);
+    expect(fetchFn.calls).toBe(2);
+  });
+
+  it('never throws on a failed fetch — falls back to null (the static table)', async () => {
+    const failing: QuoteFetch = async () => { throw new Error('network down'); };
+    const real = new RealPriceProvider({ fetchFn: failing });
+    await expect(real.primeFxRates(['GBP'])).resolves.toBeUndefined();
+    expect(real.fxRateLive('GBP')).toBeNull();
+  });
+
+  it('keeps a prior cached rate when a refresh fetch fails', async () => {
+    let shouldFail = false;
+    const fetchFn: QuoteFetch = async () => {
+      if (shouldFail) throw new Error('network down');
+      return { ok: true, status: 200, json: async () => chart('USD', [], { price: 1.32, date: '2026-06-25' }) };
+    };
+    let now = 0;
+    const real = new RealPriceProvider({ fetchFn, nowMs: () => now, ttlMs: 1000 });
+    await real.primeFxRates(['GBP']);
+    expect(real.fxRateLive('GBP')).toBe(1.32);
+    now += 2000; // past TTL
+    shouldFail = true;
+    await real.primeFxRates(['GBP']);
+    expect(real.fxRateLive('GBP')).toBe(1.32); // stale cache kept, not wiped
+  });
+});
+
+describe('RealPriceProvider.resolveIsin', () => {
+  function searchPayload(quotes: { symbol: string; quoteType: string; longname?: string; exchDisp?: string }[]): unknown {
+    return { quotes };
+  }
+  function chartMeta(currency: string, longName?: string, exchangeName?: string): unknown {
+    return {
+      chart: {
+        result: [{ meta: { currency, ...(longName ? { longName } : {}), ...(exchangeName ? { exchangeName } : {}) } }],
+        error: null,
+      },
+    };
+  }
+  function isinFetch(search: unknown, meta: unknown): QuoteFetch & { calls: string[] } {
+    const fn = Object.assign(
+      async (url: string) => {
+        fn.calls.push(url);
+        const payload = url.includes('/v1/finance/search') ? search : meta;
+        return { ok: true, status: 200, json: async () => payload };
+      },
+      { calls: [] as string[] },
+    );
+    return fn;
+  }
+
+  it('resolves a fund ISIN via search, then confirms currency via a chart-meta fetch', async () => {
+    const fetchFn = isinFetch(
+      searchPayload([{ symbol: '0P00018XAR.L', quoteType: 'MUTUALFUND', longname: 'Vanguard FTSE Global All Cp Idx £ Acc', exchDisp: 'London' }]),
+      chartMeta('GBP', 'Vanguard FTSE Global All Cp Idx £ Acc', 'LSE'),
+    );
+    const real = new RealPriceProvider({ fetchFn });
+    const result = await real.resolveIsin('GB00BD3RZ582');
+    expect(result).toEqual({
+      symbol: '0P00018XAR.L', name: 'Vanguard FTSE Global All Cp Idx £ Acc', currency: 'GBP', exchange: 'LSE',
+    });
+    expect(fetchFn.calls[0]).toContain('/v1/finance/search?q=GB00BD3RZ582');
+    expect(fetchFn.calls[1]).toContain('/v8/finance/chart/0P00018XAR.L');
+  });
+
+  it('returns null without any network call for a malformed ISIN', async () => {
+    const fetchFn = isinFetch(searchPayload([]), chartMeta('GBP'));
+    const real = new RealPriceProvider({ fetchFn });
+    expect(await real.resolveIsin('not-an-isin')).toBeNull();
+    expect(fetchFn.calls).toHaveLength(0);
+  });
+
+  it('returns null when the search has no priceable quote', async () => {
+    const fetchFn = isinFetch(searchPayload([]), chartMeta('GBP'));
+    const real = new RealPriceProvider({ fetchFn });
+    expect(await real.resolveIsin('GB00BD3RZ582')).toBeNull();
+  });
+
+  it('returns null when the chart-meta fetch has no currency', async () => {
+    const fetchFn = isinFetch(
+      searchPayload([{ symbol: '0P00018XAR.L', quoteType: 'MUTUALFUND' }]),
+      { chart: { result: [{ meta: {} }], error: null } },
+    );
+    const real = new RealPriceProvider({ fetchFn });
+    expect(await real.resolveIsin('GB00BD3RZ582')).toBeNull();
+  });
+
+  it('never throws when the search fetch fails', async () => {
+    const failing: QuoteFetch = async () => { throw new Error('network down'); };
+    const real = new RealPriceProvider({ fetchFn: failing });
+    await expect(real.resolveIsin('GB00BD3RZ582')).resolves.toBeNull();
+  });
 });

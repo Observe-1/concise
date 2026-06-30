@@ -5,7 +5,7 @@ import type {
   HistoryRange, HoldingDto,
 } from '../../types/api.js';
 import { addDays, HISTORY_RANGES, isHistoryRange, rangeStart, todayISO } from '../../lib/dates.js';
-import { asOfParam, badRequest } from '../../lib/http.js';
+import { asOfParam, badRequest, dateQueryParam } from '../../lib/http.js';
 import { realFactor } from '../../lib/inflation.js';
 import {
   computeTrend, downsample, MAX_GRAPH_POINTS,
@@ -14,6 +14,7 @@ import {
 import { ASSET_KIND, LIABILITY_KIND } from '../holdings/kind.js';
 import { listHoldings } from '../holdings/service.js';
 import { primeUserMarketPrices } from '../market/service.js';
+import { buildComparison } from './compare.js';
 import { buildPrediction, predictionTarget, projectPortfolioAt } from './prediction.js';
 
 // Re-exported so existing importers (and the unit tests) keep their paths.
@@ -73,8 +74,10 @@ export function dashboardRoutes(ctx: AppContext): Router {
     }
 
     // Historical view: totals and breakdowns as the portfolio stood on asOf.
-    const assets = listHoldings(ctx, ASSET_KIND, userId, asOf);
-    const liabilities = listHoldings(ctx, LIABILITY_KIND, userId, asOf);
+    // Holdings list pages still show excluded entries — only the totals here
+    // (and their category breakdown, so the two stay consistent) leave them out.
+    const assets = listHoldings(ctx, ASSET_KIND, userId, asOf).filter((a) => !a.excludeFromTotals);
+    const liabilities = listHoldings(ctx, LIABILITY_KIND, userId, asOf).filter((l) => !l.excludeFromTotals);
     const assetsMinor = assets.reduce((sum, a) => sum + a.currentValueMinor, 0);
     const liabilitiesMinor = liabilities.reduce((sum, l) => sum + l.currentValueMinor, 0);
     const summary: DashboardSummaryDto = {
@@ -235,6 +238,16 @@ export function dashboardRoutes(ctx: AppContext): Router {
       points: downsample(points, MAX_GRAPH_POINTS),
     };
     res.json(dto);
+  });
+
+  // Per-holding and totals delta between two arbitrary dates (the dashboard's
+  // "Compare" mode), e.g. to see what changed since last year.
+  router.get('/compare', (req, res) => {
+    const from = dateQueryParam(req, 'from');
+    const to = dateQueryParam(req, 'to');
+    if (!from || !to) throw badRequest('Both from and to are required (YYYY-MM-DD)');
+    if (from > to) throw badRequest('from must be on or before to');
+    res.json(buildComparison(ctx, req.user!.id, from, to, req.user!.currency));
   });
 
   return router;

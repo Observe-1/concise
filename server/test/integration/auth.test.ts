@@ -54,8 +54,13 @@ describe('auth API', () => {
   });
 
   it('expires sessions after the TTL', async () => {
-    const agent = await loginAgent(world.app);
-    world.advanceDays(15); // TTL is 14 days
+    // A short, explicit TTL — makeTestWorld()'s default is deliberately long
+    // (see helpers.ts) so it doesn't collide with the cookie's real-world
+    // Expires attribute; this test exercises real short-TTL expiry instead.
+    const shortTtlWorld = makeTestWorld({ sessionTtlHours: 24 * 14 });
+    createUser(shortTtlWorld.ctx, 'alice', 'password123');
+    const agent = await loginAgent(shortTtlWorld.app);
+    shortTtlWorld.advanceDays(15); // TTL is 14 days
     await agent.get('/api/auth/me').expect(401);
   });
 

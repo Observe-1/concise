@@ -60,6 +60,12 @@ export interface HoldingDto {
    * history — the UI flags the entry as historically incomplete.
    */
   historicalPriceMissing: boolean;
+  /**
+   * When true, this holding is left out of every summed total (net worth,
+   * dashboard summary, snapshots/history, predictions) while still being
+   * tracked normally — still listed, still valued, still has its own chart.
+   */
+  excludeFromTotals: boolean;
   currentValueMinor: number;
   lastValuedAt: string;
   createdAt: string;
@@ -139,6 +145,9 @@ export interface RecurringDto {
   cadence: Cadence;
   nextRunOn: string;
   lastRunOn: string | null;
+  /** Optional cutoff — once passed, the schedule stops and deactivates
+   *  itself. null means it runs forever. */
+  endDate: string | null;
   active: boolean;
 }
 
@@ -376,4 +385,98 @@ export interface DetailedHealthDto {
     database: HealthCheck;
     ui: HealthCheck;
   };
+}
+
+/**
+ * 'net_worth' targets a net-worth figure; 'liability_payoff' targets paying a
+ * specific liability down to zero. Fixed at creation — a goal never changes
+ * type.
+ */
+export type GoalType = 'net_worth' | 'liability_payoff';
+
+/**
+ * A user-set goal, tracked against the portfolio's actual totals (net worth)
+ * or a specific liability's balance (payoff). `etaISO` is a rough
+ * linear-trend projection (like the FX/inflation tables, not the prediction
+ * engine) — `null` means "not on track" (net worth flat/shrinking while below
+ * target, or a liability balance flat/growing instead of being paid down).
+ */
+export interface GoalDto {
+  id: number;
+  name: string;
+  goalType: GoalType;
+  /** The net-worth target; always 0 for a liability-payoff goal (implicit). */
+  targetMinor: number;
+  /** Set only for goalType 'liability_payoff'. */
+  liabilityId: number | null;
+  /** Set only for goalType 'liability_payoff' — the liability's name, for display. */
+  liabilityName: string | null;
+  /** Set only for goalType 'liability_payoff' — the balance when the goal was created. */
+  baselineMinor: number | null;
+  /** Optional user-set deadline (YYYY-MM-DD), separate from the computed ETA. */
+  targetDate: string | null;
+  notes: string | null;
+  /** Current net worth or (for a payoff goal) the liability's current balance. */
+  currentMinor: number;
+  /** 0–100+, clamped to 100 only by the UI (kept uncapped here for "by how much"). */
+  progressPct: number;
+  etaISO: string | null;
+  /**
+   * Rough "save/pay this much per month" to hit `targetDate` — null when
+   * there's no target date, it isn't in the future, or the goal is already
+   * met. Same rough/non-advice posture as `etaISO`.
+   */
+  suggestedMonthlyMinor: number | null;
+  createdAt: string;
+}
+
+/** Per-holding delta between two dates, for the dashboard's date comparison view. */
+export interface CompareHoldingDto {
+  id: number;
+  kind: 'asset' | 'liability';
+  category: string;
+  name: string;
+  fromMinor: number;
+  toMinor: number;
+  deltaMinor: number;
+  deltaPct: number | null;
+}
+
+export interface CompareTotalsDto {
+  fromMinor: number;
+  toMinor: number;
+  deltaMinor: number;
+  deltaPct: number | null;
+}
+
+export interface CompareDto {
+  from: string;
+  to: string;
+  currency: string;
+  holdings: CompareHoldingDto[];
+  netWorth: CompareTotalsDto;
+  assets: CompareTotalsDto;
+  liabilities: CompareTotalsDto;
+}
+
+/**
+ * Pairwise household link status for the current user. At most one active
+ * (pending or accepted) link exists per user at a time.
+ */
+export interface HouseholdStatusDto {
+  state: 'none' | 'pending-sent' | 'pending-received' | 'accepted';
+  linkId: number | null;
+  partnerUsername: string | null;
+}
+
+/**
+ * Combined totals across both members of an accepted household link, in the
+ * viewer's currency. Deliberately has no holding-level fields — individual
+ * holdings are never shared, only aggregate totals (see SECURITY.md).
+ */
+export interface CombinedSummaryDto {
+  assetsMinor: number;
+  liabilitiesMinor: number;
+  netWorthMinor: number;
+  currency: string;
 }

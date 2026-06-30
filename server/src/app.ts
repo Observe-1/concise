@@ -11,10 +11,13 @@ import { requestLogger } from './middleware/requestLogger.js';
 import { authRoutes } from './modules/auth/routes.js';
 import { backupRoutes } from './modules/backup/routes.js';
 import { dashboardRoutes } from './modules/dashboard/routes.js';
+import { exportRoutes } from './modules/export/routes.js';
+import { goalsRoutes } from './modules/goals/routes.js';
 import { healthRoutes } from './modules/health/routes.js';
 import { historyRoutes } from './modules/history/routes.js';
 import { ASSET_KIND, LIABILITY_KIND } from './modules/holdings/kind.js';
 import { holdingsRoutes } from './modules/holdings/routes.js';
+import { householdRoutes } from './modules/household/routes.js';
 import { marketRoutes } from './modules/market/routes.js';
 import { recurringRoutes } from './modules/recurring/routes.js';
 import { settingsRoutes } from './modules/settings/routes.js';
@@ -23,6 +26,11 @@ export function buildApp(ctx: AppContext): express.Express {
   const app = express();
   app.disable('x-powered-by');
   if (ctx.config.trustProxy > 0) app.set('trust proxy', ctx.config.trustProxy);
+  // HSTS and CSP's upgrade-insecure-requests both assume the app is served
+  // over HTTPS — true in production behind a TLS-terminating reverse proxy,
+  // but not for the documented "plain-HTTP testing" path (COOKIE_SECURE=false
+  // on loopback or LAN). Without this, the browser silently rewrites every
+  // asset request to https:// and they all fail, leaving a blank page.
   app.use(
     helmet({
       contentSecurityPolicy: {
@@ -34,8 +42,10 @@ export function buildApp(ctx: AppContext): express.Express {
           connectSrc: ["'self'"],
           objectSrc: ["'none'"],
           frameAncestors: ["'none'"],
+          ...(ctx.config.cookieSecure ? {} : { upgradeInsecureRequests: null }),
         },
       },
+      hsts: ctx.config.cookieSecure,
     }),
   );
 
@@ -67,6 +77,9 @@ export function buildApp(ctx: AppContext): express.Express {
   api.use('/market', requireAuth, marketRoutes(ctx));
   api.use('/settings', requireAuth, settingsRoutes(ctx));
   api.use('/backup', requireAuth, backupRoutes(ctx));
+  api.use('/goals', requireAuth, goalsRoutes(ctx));
+  api.use('/export', requireAuth, exportRoutes(ctx));
+  api.use('/household', requireAuth, householdRoutes(ctx));
 
   app.use('/api', api);
 

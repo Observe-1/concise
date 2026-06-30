@@ -537,10 +537,10 @@ describe('assets & liabilities API', () => {
         category: 'loan', name: 'Loan', valueMinor: 1_000_00, interestRatePct: 10,
       });
       // No accrual yet on the day it was created.
-      expect(runDueRecurring(world.ctx)).toBe(0);
+      expect(await runDueRecurring(world.ctx)).toBe(0);
 
       world.advanceDays(370);
-      runDueRecurring(world.ctx);
+      await runDueRecurring(world.ctx);
       agent = await loginAgent(world.app); // previous session expired with the clock jump
       const loan = await agent.get(`/api/liabilities/${res.body.id}`);
       expect(loan.body.currentValueMinor).toBe(1_100_00); // +10%
@@ -632,7 +632,7 @@ describe('assets & liabilities API', () => {
         amountMinor: 50_00, cadence: 'monthly', nextRunOn: '2026-06-10',
       });
       const { runDueRecurring } = await import('../../src/modules/recurring/service.js');
-      runDueRecurring(world.ctx);
+      await runDueRecurring(world.ctx);
 
       expect(snap(world, '2026-06-05')).toBe(100_00); // unchanged until payday
       expect(snap(world, '2026-06-09')).toBe(100_00);
@@ -662,6 +662,80 @@ describe('assets & liabilities API', () => {
     expect(snap.assets_minor).toBe(100);
     expect(snap.liabilities_minor).toBe(40);
     expect(snap.net_worth_minor).toBe(60);
+  });
+
+  describe('exclude from totals', () => {
+    it('stays listed and tracked but drops out of the dashboard total', async () => {
+      const a = await csrf(agent.post('/api/assets'))
+        .send({ category: 'cash', name: 'Tracked but excluded', valueMinor: 1_000_00 });
+      await csrf(agent.post('/api/assets')).send({ category: 'cash', name: 'Counted', valueMinor: 500_00 });
+
+      const before = await agent.get('/api/dashboard/summary');
+      expect(before.body.assetsMinor).toBe(1_500_00);
+
+      const patched = await csrf(agent.patch(`/api/assets/${a.body.id}`)).send({ excludeFromTotals: true });
+      expect(patched.body.excludeFromTotals).toBe(true);
+      expect(patched.body.currentValueMinor).toBe(1_000_00); // still tracked
+
+      const list = await agent.get('/api/assets');
+      expect(list.body).toHaveLength(2); // still listed
+
+      const after = await agent.get('/api/dashboard/summary');
+      expect(after.body.assetsMinor).toBe(500_00); // dropped from the total
+    });
+
+    it('works the same way for liabilities', async () => {
+      const l = await csrf(agent.post('/api/liabilities'))
+        .send({ category: 'loan', name: 'Excluded loan', valueMinor: 200_00 });
+      await csrf(agent.post('/api/liabilities')).send({ category: 'loan', name: 'Counted loan', valueMinor: 100_00 });
+
+      await csrf(agent.patch(`/api/liabilities/${l.body.id}`)).send({ excludeFromTotals: true });
+      const summary = await agent.get('/api/dashboard/summary');
+      expect(summary.body.liabilitiesMinor).toBe(100_00);
+
+      const list = await agent.get('/api/liabilities');
+      expect(list.body).toHaveLength(2);
+    });
+
+    it('retroactively recomputes past snapshot history when toggled', async () => {
+      const a = await csrf(agent.post('/api/assets'))
+        .send({ category: 'cash', name: 'Old savings', valueMinor: 100_00, asOf: '2026-01-01' });
+      const snap = (d: string) => (world.ctx.db
+        .prepare('SELECT assets_minor FROM snapshots WHERE snapshot_date = ?')
+        .get(d) as { assets_minor: number }).assets_minor;
+      expect(snap('2026-01-01')).toBe(100_00);
+      expect(snap('2026-06-11')).toBe(100_00);
+
+      await csrf(agent.patch(`/api/assets/${a.body.id}`)).send({ excludeFromTotals: true });
+      expect(snap('2026-01-01')).toBe(0); // past history now excludes it too
+      expect(snap('2026-06-11')).toBe(0);
+
+      await csrf(agent.patch(`/api/assets/${a.body.id}`)).send({ excludeFromTotals: false });
+      expect(snap('2026-01-01')).toBe(100_00); // restored
+      expect(snap('2026-06-11')).toBe(100_00);
+    });
+
+    it('is left out of the projected (prediction-mode) totals too', async () => {
+      const a = await csrf(agent.post('/api/assets'))
+        .send({ category: 'cash', name: 'Excluded', valueMinor: 1_000_00 });
+      await csrf(agent.post('/api/assets')).send({ category: 'cash', name: 'Counted', valueMinor: 500_00 });
+      await csrf(agent.patch(`/api/assets/${a.body.id}`)).send({ excludeFromTotals: true });
+
+      const projected = await agent.get('/api/dashboard/summary?predict=1&range=1Y');
+      expect(projected.body.assetsMinor).toBe(500_00); // manual holdings with no schedule don't grow
+    });
+
+    it('leaves an unrelated holding unaffected', async () => {
+      const a = await csrf(agent.post('/api/assets'))
+        .send({ category: 'cash', name: 'Excluded', valueMinor: 1_000_00 });
+      const b = await csrf(agent.post('/api/assets'))
+        .send({ category: 'cash', name: 'Untouched', valueMinor: 500_00 });
+      await csrf(agent.patch(`/api/assets/${a.body.id}`)).send({ excludeFromTotals: true });
+
+      const other = await agent.get(`/api/assets/${b.body.id}`);
+      expect(other.body.excludeFromTotals).toBe(false);
+      expect(other.body.currentValueMinor).toBe(500_00);
+    });
   });
 
   it('enforces ownership boundaries (404 for other users data)', async () => {

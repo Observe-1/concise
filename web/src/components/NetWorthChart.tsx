@@ -151,6 +151,7 @@ export function NetWorthChart({
     return i;
   }, [data, scrubber?.asOf]);
   const onScrub = (i: number) => scrubber!.setAsOf(i >= data.length - 1 ? null : data[i]!.date);
+  const scrubberDateLabel = showScrubber ? dateLabel(data[scrubberIdx]!.date, true) : undefined;
 
   if (data.length === 0) {
     return (
@@ -274,6 +275,7 @@ export function NetWorthChart({
             value={scrubberIdx}
             onChange={(e) => onScrub(Number(e.target.value))}
             aria-label="View as date"
+            aria-valuetext={scrubberDateLabel}
             title="Drag along the timeline to view your finances as they were on a past date"
             className="scrubber absolute z-10 cursor-pointer"
             style={{

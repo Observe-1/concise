@@ -55,6 +55,107 @@ describe('assets page', () => {
     expect(await screen.findByLabelText(/total assets/i)).toHaveTextContent(/34,?440\.97/);
   });
 
+  describe('exclude from totals', () => {
+    const excludedAssets = [
+      assets[0]!,
+      { ...assets[1]!, excludeFromTotals: true },
+    ];
+
+    it('still lists an excluded holding but drops it from the page total', async () => {
+      mockFetch([
+        [/\/api\/auth\/me/, { user: demoUser }],
+        [/\/api\/assets$/, excludedAssets],
+      ]);
+      renderWithProviders(<App />, { route: '/assets' });
+
+      expect(await screen.findByText('Bitcoin')).toBeInTheDocument(); // still listed
+      // Only Checking (4,250.00) counts now.
+      expect(screen.getByLabelText(/total assets/i)).toHaveTextContent(/4,?250\.00/);
+      expect(screen.getByText('Excluded')).toBeInTheDocument();
+    });
+
+    it('toggles a holding off via the Hide button', async () => {
+      const calls = mockFetch([
+        [/\/api\/auth\/me/, { user: demoUser }],
+        [/\/api\/assets$/, assets],
+      ]);
+      renderWithProviders(<App />, { route: '/assets' });
+
+      await screen.findByText('Bitcoin');
+      const user = userEvent.setup();
+      await user.click(screen.getByRole('button', { name: /hide bitcoin from totals/i }));
+
+      await waitFor(() => {
+        const patch = calls.find((c) => c.method === 'PATCH' && /\/api\/assets\/2$/.test(c.url));
+        expect(patch!.body).toEqual({ excludeFromTotals: true });
+      });
+    });
+
+    it('toggles a holding back on via the Show button', async () => {
+      const calls = mockFetch([
+        [/\/api\/auth\/me/, { user: demoUser }],
+        [/\/api\/assets$/, excludedAssets],
+      ]);
+      renderWithProviders(<App />, { route: '/assets' });
+
+      await screen.findByText('Bitcoin');
+      const user = userEvent.setup();
+      await user.click(screen.getByRole('button', { name: /show bitcoin in totals/i }));
+
+      await waitFor(() => {
+        const patch = calls.find((c) => c.method === 'PATCH' && /\/api\/assets\/2$/.test(c.url));
+        expect(patch!.body).toEqual({ excludeFromTotals: false });
+      });
+    });
+
+    // jsdom can't simulate real touch physics, but the gesture only reads
+    // event.clientX, so firing synthetic PointerEvents exercises the same
+    // logic a real swipe would.
+    function swipe(target: Element, deltaX: number) {
+      fireEvent.pointerDown(target, { clientX: 200, clientY: 100, pointerId: 1 });
+      fireEvent.pointerMove(target, { clientX: 200 + deltaX, clientY: 100, pointerId: 1 });
+      fireEvent.pointerUp(target, { clientX: 200 + deltaX, clientY: 100, pointerId: 1 });
+    }
+
+    it('commits the hide when swiped past the threshold', async () => {
+      const calls = mockFetch([
+        [/\/api\/auth\/me/, { user: demoUser }],
+        [/\/api\/assets$/, assets],
+      ]);
+      renderWithProviders(<App />, { route: '/assets' });
+
+      await screen.findByText('Bitcoin');
+      const iconBtn = screen.getByRole('button', { name: /hide bitcoin from totals/i });
+      swipe(iconBtn.parentElement!, -70); // past COMMIT_THRESHOLD (56px)
+
+      await waitFor(() => {
+        const patch = calls.find((c) => c.method === 'PATCH' && /\/api\/assets\/2$/.test(c.url));
+        expect(patch!.body).toEqual({ excludeFromTotals: true });
+      });
+    });
+
+    it('snaps back without committing when swiped short of the threshold, and stays clickable', async () => {
+      const calls = mockFetch([
+        [/\/api\/auth\/me/, { user: demoUser }],
+        [/\/api\/assets$/, assets],
+      ]);
+      renderWithProviders(<App />, { route: '/assets' });
+
+      await screen.findByText('Bitcoin');
+      const iconBtn = screen.getByRole('button', { name: /hide bitcoin from totals/i });
+      swipe(iconBtn.parentElement!, -20); // short of COMMIT_THRESHOLD (56px)
+
+      await new Promise((r) => setTimeout(r, 50));
+      expect(calls.find((c) => c.method === 'PATCH')).toBeUndefined();
+
+      // A fresh tap right after still opens the edit modal — the cancelled
+      // swipe doesn't leave the row stuck suppressing clicks.
+      const user = userEvent.setup();
+      await user.click(screen.getByText('Bitcoin'));
+      expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    });
+  });
+
   it('shows a recurring indicator badge with the schedule detail', async () => {
     mockFetch([
       [/\/api\/auth\/me/, { user: demoUser }],
@@ -293,6 +394,36 @@ describe('assets page', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/not recognised/i);
   });
 
+  it('saves the resolved provider symbol (not the typed ISIN) for a fund with no ticker', async () => {
+    const calls = mockFetch([
+      [/\/api\/auth\/me/, { user: demoUser }],
+      [/\/api\/market\/lookup\?symbol=GB00BD3RZ582/, {
+        symbol: '0P00018XAR.L', name: 'Vanguard FTSE Global All Cp Idx £ Acc', currency: 'GBP',
+        exchange: 'LSE', priceMinor: 28_916,
+      }],
+      [/\/api\/assets$/, []],
+    ]);
+    renderWithProviders(<App />, { route: '/assets' });
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /add asset/i }));
+    await user.selectOptions(screen.getByLabelText(/category/i), 'investments');
+    await user.type(screen.getByLabelText(/^name$/i), 'Global All Cap');
+    await user.selectOptions(screen.getByLabelText(/valuation/i), 'market');
+    await user.type(await screen.findByLabelText(/symbol/i), 'gb00bd3rz582');
+    await user.type(screen.getByLabelText(/quantity/i), '10');
+
+    await user.click(screen.getByRole('button', { name: /^verify$/i }));
+    expect(await screen.findByRole('status'))
+      .toHaveTextContent(/0P00018XAR\.L — Vanguard FTSE Global All Cp Idx £ Acc/);
+
+    await user.click(screen.getByRole('button', { name: /^add$/i }));
+    await waitFor(() => {
+      const post = calls.find((c) => c.method === 'POST' && /\/api\/assets$/.test(c.url));
+      expect(post!.body).toMatchObject({ valuationMode: 'market', marketSymbol: '0P00018XAR.L', quantity: 10 });
+    });
+  });
+
   it('shows an empty state when there is no data', async () => {
     mockFetch([
       [/\/api\/auth\/me/, { user: demoUser }],
@@ -348,7 +479,7 @@ describe('assets page', () => {
     renderWithProviders(<App />, { route: '/assets' });
 
     const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: /home/i }));
+    await user.click(await screen.findByRole('button', { name: /^home/i }));
 
     // The value field is offered when editing a model asset (so it can be re-anchored).
     const valueInput = await screen.findByLabelText(/current value/i);

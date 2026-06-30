@@ -25,3 +25,6 @@ data/
 # misc
 .DS_Store
 npm-debug.log*
+
+# personal Claude Code settings (project-level settings.json is shared)
+.claude/settings.local.json

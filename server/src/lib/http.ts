@@ -36,18 +36,23 @@ export function idParam(req: Request, name = 'id'): number {
   return id;
 }
 
+/** Optional ?<name>=YYYY-MM-DD query param. Returns undefined when absent. */
+export function dateQueryParam(req: Request, name: string): string | undefined {
+  const raw = req.query[name];
+  if (raw === undefined) return undefined;
+  const s = String(raw);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s) || Number.isNaN(Date.parse(`${s}T00:00:00Z`))) {
+    throw badRequest(`Invalid ${name}; expected YYYY-MM-DD`);
+  }
+  return s;
+}
+
 /**
  * Optional ?asOf=YYYY-MM-DD query param (historical view mode): read data as
  * of the end of that day. Returns undefined when absent.
  */
 export function asOfParam(req: Request): string | undefined {
-  const raw = req.query.asOf;
-  if (raw === undefined) return undefined;
-  const s = String(raw);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s) || Number.isNaN(Date.parse(`${s}T00:00:00Z`))) {
-    throw badRequest('Invalid asOf; expected YYYY-MM-DD');
-  }
-  return s;
+  return dateQueryParam(req, 'asOf');
 }
 
 /** Minimal cookie header parser (we only ever read one cookie). */

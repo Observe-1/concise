@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import {
+  useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent,
+} from 'react';
 import type { AssetCategory, HistoryRange, HoldingDto, RecurringDto, SymbolLookupDto } from '@api';
 import { ASSET_CATEGORIES, ASSET_VALUATION_MODES, LIABILITY_CATEGORIES, METALS } from '@api';
 import {
@@ -73,6 +75,218 @@ const COPY: Record<HoldingKind, PageCopy> = {
   },
 };
 
+/** Eye / eye-with-a-slash, matching the hand-rolled stroke-icon style used
+ *  elsewhere in this app (see Layout.tsx's nav icons) — no icon library. */
+function EyeIcon({ off = false }: { off?: boolean }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path d="M1.5 10S4.5 4 10 4s8.5 6 8.5 6-3 6-8.5 6-8.5-6-8.5-6z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+      <circle cx="10" cy="10" r="2.25" stroke="currentColor" strokeWidth="1.5" />
+      {off && <path d="M3 3l14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />}
+    </svg>
+  );
+}
+
+// How far a row can be dragged, and how far counts as a committed swipe —
+// release past the threshold and it toggles immediately, short of it snaps
+// back. No gesture library in this codebase (icons/animation are all
+// hand-rolled), so this is plain Pointer Events + a CSS transform.
+const MAX_DRAG = 80;
+const COMMIT_THRESHOLD = 56;
+// Minimum movement before a touch/click is treated as a drag rather than a
+// tap — below this, a vertical scroll or a normal row tap proceeds untouched.
+const SWIPE_CLAIM_PX = 8;
+
+interface HoldingRowProps {
+  h: HoldingDto;
+  side: HoldingSide;
+  tone: 'gain' | 'loss';
+  currency: string;
+  historical: boolean;
+  recurringByTarget: Map<number, RecurringDto[]>;
+  changeById: Map<number, number | null>;
+  onEdit: () => void;
+  onToggleExclude: () => void;
+  togglePending: boolean;
+}
+
+/**
+ * One asset/liability row. Swipe left past COMMIT_THRESHOLD and release to
+ * toggle excludeFromTotals immediately (no confirmation tap); short of that
+ * it snaps back. The small eye-icon button is the non-touch/keyboard/screen-
+ * reader equivalent — swiping has no analogue for mouse-and-keyboard use.
+ */
+function HoldingRow({
+  h, side, tone, currency, historical, recurringByTarget, changeById, onEdit, onToggleExclude, togglePending,
+}: HoldingRowProps) {
+  const [dragX, setDragX] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const gesture = useRef<{ startX: number; startY: number; axis: 'x' | 'y' | null } | null>(null);
+  const suppressClick = useRef(false);
+
+  const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (historical) return;
+    gesture.current = { startX: e.clientX, startY: e.clientY, axis: null };
+    // Reset here, not just on click: each new gesture starts clean, so a
+    // tap right after an earlier cancelled swipe isn't wrongly suppressed.
+    suppressClick.current = false;
+    // Deliberately no setPointerCapture: it would retarget the eventual
+    // click event to this container instead of whichever button the pointer
+    // actually came up over, silently breaking both buttons' onClick.
+  };
+
+  const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const g = gesture.current;
+    if (!g) return;
+    const dx = e.clientX - g.startX;
+    const dy = e.clientY - g.startY;
+    if (g.axis === null) {
+      if (Math.abs(dx) < SWIPE_CLAIM_PX && Math.abs(dy) < SWIPE_CLAIM_PX) return;
+      // Whichever axis moved further wins — a mostly-vertical drag is a page
+      // scroll, not a swipe, and is left alone from here on.
+      g.axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+      if (g.axis === 'x') setIsDragging(true);
+    }
+    if (g.axis !== 'x') return;
+    suppressClick.current = true;
+    setDragX(Math.max(-MAX_DRAG, Math.min(0, dx)));
+  };
+
+  const endGesture = () => {
+    const wasSwiping = gesture.current?.axis === 'x';
+    gesture.current = null;
+    if (wasSwiping && Math.abs(dragX) > COMMIT_THRESHOLD) onToggleExclude();
+    setDragX(0);
+    setIsDragging(false);
+  };
+
+  const revealOpacity = Math.min(1, Math.abs(dragX) / COMMIT_THRESHOLD);
+
+  return (
+    <li className="relative overflow-hidden">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 flex items-center justify-end bg-ink-700 px-5"
+        style={{ opacity: revealOpacity }}
+      >
+        <span className="text-xs font-medium uppercase tracking-wider text-ink-200">
+          {h.excludeFromTotals ? 'Show' : 'Hide'}
+        </span>
+      </div>
+      <div
+        className="relative flex items-stretch bg-ink-900 [touch-action:pan-y]"
+        style={{
+          transform: `translateX(${dragX}px)`,
+          transition: isDragging ? 'none' : 'transform 200ms ease-out',
+        }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={endGesture}
+        onPointerCancel={endGesture}
+      >
+        <button
+          type="button"
+          onClick={() => {
+            if (suppressClick.current) {
+              suppressClick.current = false;
+              return;
+            }
+            if (!historical) onEdit();
+          }}
+          disabled={historical}
+          title={historical ? 'Read-only while viewing a past date — exit “view as” to edit.' : undefined}
+          className={`flex flex-1 min-w-0 items-center justify-between gap-3 px-4 py-3.5 text-left hover:bg-ink-800/50 disabled:hover:bg-transparent ${h.excludeFromTotals ? 'opacity-60' : ''}`}
+        >
+          <span className="min-w-0">
+            <span className="block truncate text-sm text-ink-100">{h.name}</span>
+            <span className="flex items-center gap-1.5">
+              {h.excludeFromTotals && (
+                <span
+                  className="mt-0.5 inline-block rounded bg-ink-700/60 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-ink-300"
+                  title="Tracked, but left out of net worth and other totals."
+                >
+                  Excluded
+                </span>
+              )}
+              {side === 'liability' && h.currentValueMinor === 0 && (
+                <span className="mt-0.5 inline-block rounded bg-gain-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-gain-400">
+                  ✓ Paid off
+                </span>
+              )}
+              {h.metal && (
+                <span className="mt-0.5 inline-block rounded bg-ink-700/60 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-ink-300">
+                  {METAL_LABELS[h.metal] ?? h.metal}
+                </span>
+              )}
+              {h.valuationMode === 'market' ? (
+                <span className="mt-0.5 inline-block rounded bg-gold-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-gold-400">
+                  {h.marketSymbol} × {h.quantity}
+                  {h.quantity
+                    ? ` @ ${formatMinor(Math.round(h.currentValueMinor / h.quantity), currency)}`
+                    : ''}
+                </span>
+              ) : h.valuationMode === 'property_index' ? (
+                <span className="mt-0.5 inline-block rounded bg-gold-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-gold-400">
+                  {h.country} property index
+                </span>
+              ) : h.valuationMode === 'depreciation' ? (
+                <span className="mt-0.5 inline-block rounded bg-gold-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-gold-400">
+                  Depreciating · built {h.manufactureDate?.slice(0, 4)}
+                </span>
+              ) : !h.metal && h.notes ? (
+                <span className="block truncate text-xs text-ink-400">{h.notes}</span>
+              ) : null}
+              {h.historicalPriceMissing && (
+                <span
+                  className="mt-0.5 inline-block rounded bg-loss-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-loss-400"
+                  title={`Accurate historical price information could not be found about this ${side}.`}
+                >
+                  ⚠ Incomplete history
+                </span>
+              )}
+              {(recurringByTarget.get(h.id) ?? []).map((r) => {
+                const b = recurringBadge(r, currency);
+                return (
+                  <span
+                    key={r.id}
+                    title={b.title}
+                    className="mt-0.5 inline-block rounded bg-gold-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-gold-400"
+                  >
+                    ↻ {b.text}
+                  </span>
+                );
+              })}
+            </span>
+          </span>
+          <span className="flex shrink-0 flex-col items-end">
+            <span className={`tabular text-sm font-semibold ${tone === 'gain' ? 'text-gain-400' : 'text-loss-400'}`}>
+              {formatMinor(h.currentValueMinor, currency)}
+            </span>
+            {changeById.has(h.id) && <ChangeBadge pct={changeById.get(h.id)!} />}
+          </span>
+        </button>
+        {!historical && (
+          <button
+            type="button"
+            aria-label={h.excludeFromTotals ? `Show ${h.name} in totals` : `Hide ${h.name} from totals`}
+            onClick={() => {
+              if (suppressClick.current) {
+                suppressClick.current = false;
+                return;
+              }
+              onToggleExclude();
+            }}
+            disabled={togglePending}
+            className="flex w-11 shrink-0 items-center justify-center text-ink-400 hover:text-gold-400 disabled:opacity-50"
+          >
+            <EyeIcon off={h.excludeFromTotals} />
+          </button>
+        )}
+      </div>
+    </li>
+  );
+}
+
 export function HoldingsPage({ kind }: { kind: HoldingKind }) {
   const copy = COPY[kind];
   const side: HoldingSide = kind === 'assets' ? 'asset' : 'liability';
@@ -83,6 +297,10 @@ export function HoldingsPage({ kind }: { kind: HoldingKind }) {
   const historical = asOf !== null;
   const holdings = useHoldings(kind, asOf);
   const marketRefresh = useMarketRefresh();
+  // Separate from the edit-modal form's own mutation instance (HoldingForm),
+  // so this inline toggle's pending/error state never cross-talks with it.
+  const toggleExclude = useUpdateHolding(kind);
+  const [toggleError, setToggleError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<HoldingDto | null>(null);
   // Quick-select range driving the per-holding % change column.
@@ -104,9 +322,19 @@ export function HoldingsPage({ kind }: { kind: HoldingKind }) {
   }, [holdings.data]);
 
   const total = useMemo(
-    () => (holdings.data ?? []).reduce((sum, h) => sum + h.currentValueMinor, 0),
+    () => (holdings.data ?? [])
+      .filter((h) => !h.excludeFromTotals)
+      .reduce((sum, h) => sum + h.currentValueMinor, 0),
     [holdings.data],
   );
+
+  const onToggleExclude = (h: HoldingDto) => {
+    setToggleError(null);
+    toggleExclude.mutate(
+      { id: h.id, excludeFromTotals: !h.excludeFromTotals },
+      { onError: (err) => setToggleError(err instanceof Error ? err.message : 'Could not update') },
+    );
+  };
 
   // Active recurring schedules grouped by the holding they target, so each
   // entry can show an indicator of the increase/decrease applied to it.
@@ -159,6 +387,8 @@ export function HoldingsPage({ kind }: { kind: HoldingKind }) {
         </p>
       )}
 
+      {toggleError && <ErrorNote message={toggleError} />}
+
       {groups.length > 0 && (
         <div className="flex items-center justify-between gap-2">
           <span className="shrink-0 text-xs font-medium uppercase tracking-wider text-ink-400">
@@ -178,81 +408,28 @@ export function HoldingsPage({ kind }: { kind: HoldingKind }) {
                 {categoryDisplay(side, category)}
               </h2>
               <span className={`tabular text-xs font-medium ${copy.tone === 'gain' ? 'text-gain-400' : 'text-loss-400'}`}>
-                {formatMinor(items.reduce((s, i) => s + i.currentValueMinor, 0), currency)}
+                {formatMinor(
+                  items.filter((i) => !i.excludeFromTotals).reduce((s, i) => s + i.currentValueMinor, 0),
+                  currency,
+                )}
               </span>
             </div>
             <Card>
               <ul className="divide-y divide-ink-800">
                 {items.map((h) => (
-                  <li key={h.id}>
-                    <button
-                      type="button"
-                      onClick={() => !historical && setEditing(h)}
-                      disabled={historical}
-                      title={historical ? 'Read-only while viewing a past date — exit “view as” to edit.' : undefined}
-                      className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left hover:bg-ink-800/50 disabled:hover:bg-transparent"
-                    >
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm text-ink-100">{h.name}</span>
-                        <span className="flex items-center gap-1.5">
-                          {side === 'liability' && h.currentValueMinor === 0 && (
-                            <span className="mt-0.5 inline-block rounded bg-gain-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-gain-400">
-                              ✓ Paid off
-                            </span>
-                          )}
-                          {h.metal && (
-                            <span className="mt-0.5 inline-block rounded bg-ink-700/60 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-ink-300">
-                              {METAL_LABELS[h.metal] ?? h.metal}
-                            </span>
-                          )}
-                          {h.valuationMode === 'market' ? (
-                            <span className="mt-0.5 inline-block rounded bg-gold-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-gold-400">
-                              {h.marketSymbol} × {h.quantity}
-                              {h.quantity
-                                ? ` @ ${formatMinor(Math.round(h.currentValueMinor / h.quantity), currency)}`
-                                : ''}
-                            </span>
-                          ) : h.valuationMode === 'property_index' ? (
-                            <span className="mt-0.5 inline-block rounded bg-gold-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-gold-400">
-                              {h.country} property index
-                            </span>
-                          ) : h.valuationMode === 'depreciation' ? (
-                            <span className="mt-0.5 inline-block rounded bg-gold-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-gold-400">
-                              Depreciating · built {h.manufactureDate?.slice(0, 4)}
-                            </span>
-                          ) : !h.metal && h.notes ? (
-                            <span className="block truncate text-xs text-ink-400">{h.notes}</span>
-                          ) : null}
-                          {h.historicalPriceMissing && (
-                            <span
-                              className="mt-0.5 inline-block rounded bg-loss-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-loss-400"
-                              title={`Accurate historical price information could not be found about this ${side}.`}
-                            >
-                              ⚠ Incomplete history
-                            </span>
-                          )}
-                          {(recurringByTarget.get(h.id) ?? []).map((r) => {
-                            const b = recurringBadge(r, currency);
-                            return (
-                              <span
-                                key={r.id}
-                                title={b.title}
-                                className="mt-0.5 inline-block rounded bg-gold-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-gold-400"
-                              >
-                                ↻ {b.text}
-                              </span>
-                            );
-                          })}
-                        </span>
-                      </span>
-                      <span className="flex shrink-0 flex-col items-end">
-                        <span className={`tabular text-sm font-semibold ${copy.tone === 'gain' ? 'text-gain-400' : 'text-loss-400'}`}>
-                          {formatMinor(h.currentValueMinor, currency)}
-                        </span>
-                        {changeById.has(h.id) && <ChangeBadge pct={changeById.get(h.id)!} />}
-                      </span>
-                    </button>
-                  </li>
+                  <HoldingRow
+                    key={h.id}
+                    h={h}
+                    side={side}
+                    tone={copy.tone}
+                    currency={currency}
+                    historical={historical}
+                    recurringByTarget={recurringByTarget}
+                    changeById={changeById}
+                    onEdit={() => setEditing(h)}
+                    onToggleExclude={() => onToggleExclude(h)}
+                    togglePending={toggleExclude.isPending}
+                  />
                 ))}
               </ul>
             </Card>
@@ -302,6 +479,10 @@ function HoldingForm({
   // Symbol the user has confirmed via lookup. Editing an existing market
   // asset without touching the symbol needs no re-verification.
   const [verified, setVerified] = useState<SymbolLookupDto | null>(null);
+  // The raw input value at the moment of a successful lookup — for an ISIN,
+  // `verified.symbol` is the *resolved* provider code, not what was typed, so
+  // verification can't be gated by comparing it back to the input directly.
+  const [verifiedInput, setVerifiedInput] = useState<string | null>(null);
 
   // ---- detail charts (editing an existing holding only) ----
   // Self-contained modes, independent of the global "view as": the line graph
@@ -338,7 +519,7 @@ function HoldingForm({
   const instruments = useInstruments(kind === 'assets');
   const symbolUpper = symbol.trim().toUpperCase();
   const symbolUnchanged = existing?.marketSymbol === symbolUpper;
-  const symbolVerified = verified?.symbol === symbolUpper;
+  const symbolVerified = verified !== null && verifiedInput === symbolUpper;
   const needsVerification = isMarket && !symbolUnchanged && !symbolVerified;
   // A present-day value can be added only when creating a backdated, non-market
   // holding (market values are provider-derived).
@@ -347,9 +528,12 @@ function HoldingForm({
   const onVerifySymbol = () => {
     setFormError(null);
     lookup.mutate(symbolUpper, {
-      onSuccess: (result) => setVerified(result),
+      onSuccess: (result) => {
+        setVerified(result);
+        setVerifiedInput(symbolUpper);
+      },
       onError: () =>
-        setFormError(`Symbol "${symbolUpper}" was not recognised — check the ticker and try again.`),
+        setFormError(`"${symbolUpper}" was not recognised — check the ticker or ISIN and try again.`),
     });
   };
 
@@ -397,8 +581,12 @@ function HoldingForm({
       setFormError(err instanceof Error ? err.message : 'Something went wrong');
 
     const metalField = category === 'precious_metals' ? { metal } : { metal: null };
+    // For an ISIN, `verified.symbol` is the resolved provider code, not what
+    // was typed — save that, not the raw input. Falls back to the typed value
+    // when unchanged from an existing holding (already a resolved symbol).
+    const resolvedMarketSymbol = symbolVerified ? verified!.symbol : symbolUpper;
     const modeFields = isMarket
-      ? { valuationMode: 'market' as const, marketSymbol: symbolUpper, quantity: Number(quantity) }
+      ? { valuationMode: 'market' as const, marketSymbol: resolvedMarketSymbol, quantity: Number(quantity) }
       : mode === 'property_index'
         ? { valuationMode: 'property_index' as const, country, valueMinor: valueMinor! }
         : mode === 'depreciation'
@@ -429,7 +617,7 @@ function HoldingForm({
           ? {
               ...metalField,
               ...(isMarket
-                ? { valuationMode: 'market' as const, marketSymbol: symbolUpper, quantity: Number(quantity) }
+                ? { valuationMode: 'market' as const, marketSymbol: resolvedMarketSymbol, quantity: Number(quantity) }
                 : mode === 'property_index'
                   ? { valuationMode: 'property_index' as const, country }
                   : mode === 'depreciation'
@@ -556,7 +744,10 @@ function HoldingForm({
         {isMarket ? (
           <>
             <div className="grid grid-cols-[1fr_auto] items-end gap-2">
-              <Field label="Symbol" hint="Search across London, US and EU exchanges, crypto and metals.">
+              <Field
+                label="Symbol"
+                hint="Search across London, US and EU exchanges, crypto and metals — or paste a fund's ISIN if it has no ordinary ticker."
+              >
                 {(id) => (
                   <>
                     <Input id={id} value={symbol} list="market-instruments"

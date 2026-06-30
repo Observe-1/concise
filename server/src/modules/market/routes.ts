@@ -5,7 +5,8 @@ import { audit } from '../../lib/audit.js';
 import { todayISO } from '../../lib/dates.js';
 import { badRequest, notFound } from '../../lib/http.js';
 import { PROPERTY_COUNTRIES } from './models.js';
-import { refreshMarketValuations } from './service.js';
+import { isIsin } from './provider.js';
+import { refreshMarketValuations, resolveIsinCached } from './service.js';
 
 export function marketRoutes(ctx: AppContext): Router {
   const router = Router();
@@ -23,13 +24,20 @@ export function marketRoutes(ctx: AppContext): Router {
     res.json(ctx.prices.listInstruments());
   });
 
-  // Resolve a ticker to its instrument (asset-creation verification step),
-  // including the current per-unit price in the instrument's own currency.
+  // Resolve a ticker — or a fund's ISIN, for funds with no ordinary exchange
+  // ticker — to its instrument (asset-creation verification step), including
+  // the current per-unit price in the instrument's own currency.
   router.get('/lookup', async (req, res) => {
-    const symbol = String(req.query.symbol ?? '').trim();
-    if (!symbol || symbol.length > 20) throw badRequest('symbol query parameter required');
-    const result = ctx.prices.lookupSymbol(symbol);
-    if (!result) throw notFound(`Unknown symbol: ${symbol.toUpperCase()}`);
+    const raw = String(req.query.symbol ?? '').trim();
+    if (!raw) throw badRequest('symbol query parameter required');
+    let result;
+    if (isIsin(raw)) {
+      result = await resolveIsinCached(ctx, raw.toUpperCase());
+    } else {
+      if (raw.length > 20) throw badRequest('symbol query parameter required');
+      result = ctx.prices.lookupSymbol(raw);
+    }
+    if (!result) throw notFound(`Unknown symbol or ISIN: ${raw.toUpperCase()}`);
     const today = todayISO(ctx.now);
     await ctx.prices.prime([result.symbol], today, today); // fetch the live price (no-op when simulated)
     res.json({ ...result, priceMinor: ctx.prices.getPriceMinor(result.symbol, today) });

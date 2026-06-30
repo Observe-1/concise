@@ -26,6 +26,7 @@ interface HoldingRow {
   country?: string | null;
   manufacture_date?: string | null;
   history_price_missing?: number;
+  exclude_from_totals: number;
   created_at: string;
   current_value_minor: number | null;
   last_valued_at: string | null;
@@ -63,6 +64,7 @@ export interface UpdateHoldingInput {
   quantity?: number | null;
   country?: string | null;
   manufactureDate?: string | null;
+  excludeFromTotals?: boolean;
 }
 
 /** With `withCutoff`, the value subqueries each take a cutoff timestamp
@@ -73,7 +75,7 @@ function selectColumns(k: HoldingKind, withCutoff = false): string {
     : '';
   const cutoff = withCutoff ? ' AND v.recorded_at <= ?' : '';
   return `
-    SELECT h.id, h.category, h.name, h.notes, ${marketCols} h.created_at,
+    SELECT h.id, h.category, h.name, h.notes, h.exclude_from_totals, ${marketCols} h.created_at,
       (SELECT v.value_minor FROM ${k.valuationTable} v WHERE v.${k.fk} = h.id${cutoff}
        ORDER BY v.recorded_at DESC, v.id DESC LIMIT 1) AS current_value_minor,
       (SELECT v.recorded_at FROM ${k.valuationTable} v WHERE v.${k.fk} = h.id${cutoff}
@@ -94,6 +96,7 @@ function toDto(row: HoldingRow): HoldingDto {
     country: row.country ?? null,
     manufactureDate: row.manufacture_date ?? null,
     historicalPriceMissing: row.history_price_missing === 1,
+    excludeFromTotals: row.exclude_from_totals === 1,
     currentValueMinor: row.current_value_minor ?? 0,
     lastValuedAt: row.last_valued_at ?? row.created_at,
     createdAt: row.created_at,
@@ -268,7 +271,7 @@ function insertValuation(
 }
 
 /** The user's display currency (everything stored is denominated in it). */
-function userCurrency(ctx: AppContext, userId: number): string {
+export function userCurrency(ctx: AppContext, userId: number): string {
   const row = ctx.db
     .prepare('SELECT currency FROM settings WHERE user_id = ?')
     .get(userId) as { currency: string } | undefined;
@@ -352,7 +355,10 @@ function marketValue(ctx: AppContext, symbol: string, quantity: number, currency
   const date = dateISO ?? todayISO(ctx.now);
   const price = ctx.prices.getPriceMinor(symbol, date);
   if (price === null) throw badRequest(`No price available for ${symbol.toUpperCase()} on ${date}`);
-  return convertMinor(holdingValueMinor(price, quantity), ctx.prices.instrumentCurrency(symbol), currency);
+  return convertMinor(
+    holdingValueMinor(price, quantity), ctx.prices.instrumentCurrency(symbol), currency,
+    (c) => ctx.prices.fxRateLive(c),
+  );
 }
 
 /**
@@ -381,7 +387,7 @@ function backfillMarketValuations(
       missing = true;
       continue;
     }
-    const value = convertMinor(holdingValueMinor(price, quantity), instrumentCcy, currency);
+    const value = convertMinor(holdingValueMinor(price, quantity), instrumentCcy, currency, (c) => ctx.prices.fxRateLive(c));
     insertValuation(ctx, k, holdingId, value, 'market', `${d}T12:00:00.000Z`);
     inserted++;
   }
@@ -401,7 +407,9 @@ export async function createHolding(
   // Priming must run outside the transaction; it is a no-op for the simulation.
   if (k.supportsMarket && input.valuationMode === 'market' && input.marketSymbol) {
     const from = input.asOf && input.asOf < today ? input.asOf : today;
-    await ctx.prices.prime([input.marketSymbol.toUpperCase()], from, today);
+    const symbol = input.marketSymbol.toUpperCase();
+    await ctx.prices.prime([symbol], from, today);
+    await ctx.prices.primeFxRates([ctx.prices.instrumentCurrency(symbol), userCurrency(ctx, userId)]);
   }
   return withTransaction(ctx.db, () => {
     const mode: ValuationMode = k.supportsMarket ? input.valuationMode ?? 'manual' : 'manual';
@@ -518,6 +526,7 @@ export async function updateHolding(
     if (mode === 'market' && symbol) {
       const today = todayISO(ctx.now);
       await ctx.prices.prime([symbol], today, today);
+      await ctx.prices.primeFxRates([ctx.prices.instrumentCurrency(symbol), userCurrency(ctx, userId)]);
     }
   }
   return withTransaction(ctx.db, () => {
@@ -527,6 +536,9 @@ export async function updateHolding(
     const name = patch.name ?? existing.name;
     const category = patch.category ?? existing.category;
     const notes = patch.notes !== undefined ? patch.notes : existing.notes;
+    const excludeFromTotals = patch.excludeFromTotals !== undefined
+      ? patch.excludeFromTotals
+      : existing.exclude_from_totals === 1;
 
     if (k.supportsMarket) {
       const mode = patch.valuationMode ?? existing.valuation_mode ?? 'manual';
@@ -550,7 +562,7 @@ export async function updateHolding(
       ctx.db
         .prepare(
           `UPDATE assets SET name = ?, category = ?, notes = ?, metal = ?, valuation_mode = ?,
-             market_symbol = ?, quantity = ?, country = ?, manufacture_date = ?, updated_at = ?
+             market_symbol = ?, quantity = ?, country = ?, manufacture_date = ?, exclude_from_totals = ?, updated_at = ?
            WHERE id = ?`,
         )
         .run(name, category, notes,
@@ -560,6 +572,7 @@ export async function updateHolding(
           mode === 'market' ? quantity : null,
           country,
           manufactureDate,
+          excludeFromTotals ? 1 : 0,
           nowIso, id);
       const marketInputsChanged =
         mode === 'market' &&
@@ -591,8 +604,23 @@ export async function updateHolding(
       }
     } else {
       ctx.db
-        .prepare(`UPDATE liabilities SET name = ?, category = ?, notes = ?, updated_at = ? WHERE id = ?`)
-        .run(name, category, notes, nowIso, id);
+        .prepare(
+          `UPDATE liabilities SET name = ?, category = ?, notes = ?, exclude_from_totals = ?, updated_at = ?
+           WHERE id = ?`,
+        )
+        .run(name, category, notes, excludeFromTotals ? 1 : 0, nowIso, id);
+    }
+    // A plain flag flip (no new valuation) needs its own explicit recompute so
+    // PAST snapshot history reflects the new in/out state too, not just future
+    // snapshots — the holding's earliest valuation is enough; before that date
+    // it contributed 0 either way.
+    if (excludeFromTotals !== (existing.exclude_from_totals === 1)) {
+      const first = ctx.db
+        .prepare(`SELECT recorded_at FROM ${k.valuationTable} WHERE ${k.fk} = ? ORDER BY recorded_at, id LIMIT 1`)
+        .get(id) as { recorded_at: string } | undefined;
+      if (first) {
+        recomputeSnapshotRange(ctx.db, userId, first.recorded_at.slice(0, 10), todayISO(ctx.now));
+      }
     }
     return toDto(getRow(ctx, k, userId, id));
   });

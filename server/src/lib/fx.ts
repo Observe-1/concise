@@ -33,19 +33,30 @@ export function isSupportedCurrency(code: string): boolean {
 }
 
 /**
+ * Optional live-rate lookup (units of a currency per 1 USD), e.g.
+ * `(c) => ctx.prices.fxRateLive(c)`. Returns null for a currency that isn't
+ * (yet) known live, in which case the static table is used for THAT
+ * currency only — a live EUR rate and a stale-fallback GBP rate can combine
+ * in the same conversion.
+ */
+export type LiveRateLookup = (code: string) => number | null;
+
+/**
  * Rate to convert an amount FROM `from` currency TO `to` currency. Unknown
  * currencies fall back to 1 (no conversion) so a typo can never zero a
- * portfolio out.
+ * portfolio out. Pass `liveRate` to prefer a freshly-fetched rate per
+ * currency over the static table — omit it (as demo-data generation does)
+ * to keep today's fully-static, network-free behaviour.
  */
-export function fxRate(from: string, to: string): number {
-  const f = RATES_PER_USD[from.toUpperCase()];
-  const t = RATES_PER_USD[to.toUpperCase()];
+export function fxRate(from: string, to: string, liveRate?: LiveRateLookup): number {
+  const f = liveRate?.(from.toUpperCase()) ?? RATES_PER_USD[from.toUpperCase()];
+  const t = liveRate?.(to.toUpperCase()) ?? RATES_PER_USD[to.toUpperCase()];
   if (f === undefined || t === undefined || f === 0) return 1;
   return t / f;
 }
 
 /** Convert an integer minor-unit amount between currencies (rounded). */
-export function convertMinor(amountMinor: number, from: string, to: string): number {
+export function convertMinor(amountMinor: number, from: string, to: string, liveRate?: LiveRateLookup): number {
   if (from.toUpperCase() === to.toUpperCase()) return amountMinor;
-  return Math.round(amountMinor * fxRate(from, to));
+  return Math.round(amountMinor * fxRate(from, to, liveRate));
 }

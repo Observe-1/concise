@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import type { HoldingCompositionDto } from '@api';
+import { useViewportHeight } from '../hooks/useViewportHeight.js';
 import { formatMinor } from '../lib/money.js';
 
 // Net-worth pie palette. The selected holding is gold; assets green, debts red —
@@ -161,6 +162,7 @@ export function NetWorthPie({
   const [fullscreen, setFullscreen] = useState(false);
   const [activeInner, setActiveInner] = useState<number | undefined>(undefined);
   const [activeOuter, setActiveOuter] = useState<number | undefined>(undefined);
+  const viewportHeight = useViewportHeight();
 
   const assetsTotal = assets.reduce((s, a) => s + a.value, 0);
   const liabilitiesTotal = liabilities.reduce((s, l) => s + l.value, 0);
@@ -189,7 +191,7 @@ export function NetWorthPie({
 
   const chart = (large: boolean) => (
     <div
-      style={{ height: large ? Math.max(320, window.innerHeight - 220) : 240 }}
+      style={{ height: large ? Math.max(320, viewportHeight - 220) : 240 }}
       role="img"
       aria-label="Net worth composition by asset and liability"
     >

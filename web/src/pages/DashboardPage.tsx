@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { HistoryRange } from '@api';
 import {
-  useDashboardChanges, useHistory, useHoldings, useMe, usePrediction, useSummary,
+  useCombinedHistory, useCombinedSummary, useDashboardChanges, useHistory, useHoldings, useHouseholdStatus,
+  useMe, usePrediction, useSummary,
 } from '../api/queries.js';
+import { CompareCard } from '../components/CompareCard.js';
+import { GoalsCard } from '../components/GoalsCard.js';
 import { NetWorthChart, RANGES, RangePicker } from '../components/NetWorthChart.js';
 import { NetWorthPie } from '../components/PieCharts.js';
 import { Card, ChangeBadge, Spinner } from '../components/ui.js';
 import { useHistoricalView } from '../contexts/HistoricalView.js';
 import { useDebouncedValue } from '../hooks/useDebouncedValue.js';
+import { useViewportHeight } from '../hooks/useViewportHeight.js';
 import { categoryDisplay, type HoldingSide } from '../lib/categories.js';
 import { formatMinor } from '../lib/money.js';
 
@@ -31,8 +35,13 @@ export function DashboardPage() {
   const [range, setRange] = useState<HistoryRange>('6M');
   const [fullscreen, setFullscreen] = useState(false);
   const [predicting, setPredicting] = useState(false);
+  const [comparing, setComparing] = useState(false);
+  const [combinedView, setCombinedView] = useState(false);
   const [real, setReal] = useState(false);
   const [trendWindow, setTrendWindow] = useState(TREND_WINDOW_DEFAULT);
+  const viewportHeight = useViewportHeight();
+  const householdStatus = useHouseholdStatus();
+  const isLinked = householdStatus.data?.state === 'accepted';
   // In prediction mode every surrounding number reflects the projected
   // portfolio (the cards, breakdowns and percentages), not just the graph.
   // ALL has no bounded future, so it can't drive a projection.
@@ -46,20 +55,25 @@ export function DashboardPage() {
   // Debounced so dragging the slider doesn't fire a request per step.
   const history = useHistory(range, useDebouncedValue(trendWindow), showReal);
   const prediction = usePrediction(range, predicting);
+  const combinedSummary = useCombinedSummary(combinedView);
+  const combinedHistoryQuery = useCombinedHistory(range, combinedView);
   // Portfolio % change shown on the cards: over the graph's selected range, or
-  // projected growth vs today while predicting, in nominal or real terms.
-  const changes = useDashboardChanges(range, asOf, predict, showReal).data;
+  // projected growth vs today while predicting, in nominal or real terms. No
+  // combined equivalent exists, so it's dropped in combined view.
+  const rawChanges = useDashboardChanges(range, asOf, predict, showReal).data;
+  const changes = combinedView ? undefined : rawChanges;
   // Individual holdings drive the two-level composition pie (as of the view-as
-  // date when one is pinned).
+  // date when one is pinned) — never fetched/shown in combined view, since
+  // only aggregate totals are ever shared between linked accounts.
   const pieAssets = useHoldings('assets', asOf);
   const pieLiabilities = useHoldings('liabilities', asOf);
   const pieAssetData = useMemo(
-    () => (pieAssets.data ?? []).map((h) => ({ id: h.id, name: h.name, value: h.currentValueMinor })),
-    [pieAssets.data],
+    () => (combinedView ? [] : (pieAssets.data ?? []).map((h) => ({ id: h.id, name: h.name, value: h.currentValueMinor }))),
+    [pieAssets.data, combinedView],
   );
   const pieLiabilityData = useMemo(
-    () => (pieLiabilities.data ?? []).map((h) => ({ id: h.id, name: h.name, value: h.currentValueMinor })),
-    [pieLiabilities.data],
+    () => (combinedView ? [] : (pieLiabilities.data ?? []).map((h) => ({ id: h.id, name: h.name, value: h.currentValueMinor }))),
+    [pieLiabilities.data, combinedView],
   );
 
   // MAX has no bounded future — leaving it selected on entering prediction
@@ -68,13 +82,26 @@ export function DashboardPage() {
     if (predicting && range === 'ALL') setRange('1Y');
   }, [predicting, range]);
 
-  const chartPoints = predicting ? prediction.data?.points ?? [] : history.data?.points ?? [];
+  // The partner may unlink while combined view is open — fall back to "Me"
+  // rather than show a stuck error state.
+  useEffect(() => {
+    if (combinedView && !isLinked && householdStatus.data) setCombinedView(false);
+  }, [combinedView, isLinked, householdStatus.data]);
 
-  if (summary.isLoading) return <Spinner label="Loading dashboard" />;
-  if (summary.isError || !summary.data) {
+  const chartPoints = predicting
+    ? prediction.data?.points ?? []
+    : combinedView
+      ? combinedHistoryQuery.data?.points ?? []
+      : history.data?.points ?? [];
+
+  const activeSummary = combinedView ? combinedSummary : summary;
+  if (activeSummary.isLoading) return <Spinner label="Loading dashboard" />;
+  if (activeSummary.isError || !activeSummary.data) {
     return <p role="alert" className="py-10 text-center text-sm text-loss-400">Could not load your dashboard.</p>;
   }
-  const s = summary.data;
+  const s = combinedView
+    ? { ...combinedSummary.data!, assetsByCategory: [], liabilitiesByCategory: [] }
+    : summary.data!;
   const currency = s.currency;
 
   const chartSection = (
@@ -87,9 +114,10 @@ export function DashboardPage() {
         />
         <div className="flex shrink-0 items-center gap-2">
           {/* Nominal vs real (inflation-adjusted) terms. A live-view lens, so
-              hidden in prediction mode (projections are nominal) and while a
-              past "view as" date is pinned. */}
-          {!predicting && !asOf && (
+              hidden in prediction mode (projections are nominal), while a
+              past "view as" date is pinned, or in combined view (no real-terms
+              equivalent is computed for the combined series). */}
+          {!predicting && !asOf && !combinedView && (
             <div role="group" aria-label="Value basis" className="flex shrink-0 rounded-lg bg-ink-800/60 p-0.5">
               {([['nominal', 'Nominal'], ['real', 'Real']] as const).map(([key, label]) => {
                 const active = (key === 'real') === real;
@@ -112,8 +140,9 @@ export function DashboardPage() {
               })}
             </div>
           )}
-          {/* The trend line is hidden in prediction mode, so its slider is too. */}
-          {!predicting && (
+          {/* The trend line is hidden in prediction mode and combined view (the
+              combined series has no separate smoothing), so its slider is too. */}
+          {!predicting && !combinedView && (
             <label
               className="flex items-center gap-2"
               title="Rolling-average window of the trend line"
@@ -147,11 +176,11 @@ export function DashboardPage() {
         currency={currency}
         range={range}
         birthYear={me?.birthYear}
-        height={fullscreen ? Math.max(300, window.innerHeight - 200) : 240}
-        asOf={asOf}
-        scrubber={{ asOf, setAsOf }}
+        height={fullscreen ? Math.max(300, viewportHeight - 200) : 240}
+        asOf={combinedView ? null : asOf}
+        scrubber={combinedView ? undefined : { asOf, setAsOf }}
         nowLine={predicting ? prediction.data?.today ?? null : null}
-        showTrend={!predicting}
+        showTrend={!predicting && !combinedView}
       />
     </>
   );
@@ -170,16 +199,38 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-5">
-      <header>
+      <header className="flex items-baseline justify-between gap-2">
         <p className="text-sm text-ink-400">
           Welcome back{me ? `, ${me.displayName}` : ''}
         </p>
         <h1 className="sr-only">Dashboard</h1>
+        {isLinked && !predicting && !comparing && (
+          <div role="group" aria-label="Net worth scope" className="flex shrink-0 rounded-lg bg-ink-800/60 p-0.5">
+            {([[false, 'Me'], [true, 'Combined']] as const).map(([value, label]) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => {
+                  setAsOf(null);
+                  setCombinedView(value);
+                }}
+                aria-pressed={combinedView === value}
+                className={`rounded-md px-2 py-1 text-[10px] font-medium uppercase tracking-wider transition-colors ${
+                  combinedView === value ? 'bg-gold-500 text-ink-950' : 'text-ink-400 hover:text-ink-100'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
       </header>
 
       <Card className="p-5">
         <div className="flex items-baseline justify-between gap-2">
-          <p className="text-xs font-medium uppercase tracking-widest text-ink-400">Net worth</p>
+          <p className="text-xs font-medium uppercase tracking-widest text-ink-400">
+            Net worth{combinedView ? ' · combined' : ''}
+          </p>
           {changes && (
             <span className="flex items-baseline gap-1.5">
               <ChangeBadge pct={changes.netWorthChangePct} />
@@ -215,7 +266,18 @@ export function DashboardPage() {
         </div>
       </Card>
 
-      <Card className="p-4 sm:p-5">{chartSection}</Card>
+      <GoalsCard />
+
+      <Card className="p-4 sm:p-5">
+        {comparing ? (
+          <>
+            <h2 className="mb-3 text-xs font-medium uppercase tracking-widest text-ink-400">Compare</h2>
+            <CompareCard />
+          </>
+        ) : (
+          chartSection
+        )}
+      </Card>
 
       {(s.assetsByCategory.length > 0 || s.liabilitiesByCategory.length > 0) && (
         <div className="grid gap-5 sm:grid-cols-2">
@@ -236,16 +298,29 @@ export function DashboardPage() {
       {/* Prediction mode: a golden button at the bottom projects the graph into
           the future. While active a matching golden exit button floats; it
           shifts up when the red "view as" exit button is also showing so they
-          don't overlap. */}
-      {!predicting ? (
-        <button
-          type="button"
-          onClick={() => setPredicting(true)}
-          className="w-full rounded-xl bg-gold-500 px-4 py-3 text-sm font-semibold text-ink-950 transition-colors hover:bg-gold-400"
-        >
-          ✨ Prediction mode
-        </button>
-      ) : (
+          don't overlap. Compare and combined view are mutually exclusive with
+          prediction and with each other. */}
+      {combinedView ? null : !predicting && !comparing ? (
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              setAsOf(null);
+              setComparing(true);
+            }}
+            className="flex-1 rounded-xl border border-ink-700 px-4 py-3 text-sm font-semibold text-ink-100 transition-colors hover:border-gold-500 hover:text-gold-400"
+          >
+            Compare dates
+          </button>
+          <button
+            type="button"
+            onClick={() => setPredicting(true)}
+            className="flex-1 rounded-xl bg-gold-500 px-4 py-3 text-sm font-semibold text-ink-950 transition-colors hover:bg-gold-400"
+          >
+            ✨ Prediction mode
+          </button>
+        </div>
+      ) : predicting ? (
         <button
           type="button"
           onClick={() => setPredicting(false)}
@@ -254,6 +329,14 @@ export function DashboardPage() {
           }`}
         >
           ✨ Exit prediction
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setComparing(false)}
+          className="fixed bottom-20 right-4 z-50 rounded-full border border-ink-700 bg-ink-900 px-4 py-2.5 text-sm font-semibold text-ink-100 shadow-lg transition-colors hover:border-gold-500 hover:text-gold-400 md:bottom-6"
+        >
+          Exit compare
         </button>
       )}
     </div>

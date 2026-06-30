@@ -60,6 +60,7 @@ function buildSchemas(k: HoldingKind) {
     category: base.category.optional(),
     name: base.name.optional(),
     notes: base.notes,
+    excludeFromTotals: z.boolean().optional(),
     ...(k.supportsMarket
       ? {
           metal: z.enum(METALS).nullable().optional(),

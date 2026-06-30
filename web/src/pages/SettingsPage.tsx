@@ -6,6 +6,9 @@ import {
 } from '../api/queries.js';
 import { HistoryEntries } from '../components/HistoryEntries.js';
 import { FinancialDisclaimer } from '../components/Disclaimer.js';
+import { ExportSection } from '../components/ExportSection.js';
+import { GoalsSection } from '../components/GoalsSection.js';
+import { HouseholdSection } from '../components/HouseholdSection.js';
 import { Button, Card, EmptyState, ErrorNote, Field, Input, Select, Spinner, SuccessNote } from '../components/ui.js';
 import { formatMinor, parseSignedToMinor } from '../lib/money.js';
 
@@ -18,6 +21,9 @@ const SECTIONS = [
   { key: 'account', label: 'User account' },
   { key: 'history', label: 'History' },
   { key: 'calculation', label: 'Calculation' },
+  { key: 'goals', label: 'Goals' },
+  { key: 'export', label: 'Export' },
+  { key: 'household', label: 'Household' },
   { key: 'backup', label: 'Backup' },
   { key: 'legal', label: 'Legal' },
 ] as const;
@@ -53,6 +59,9 @@ export function SettingsPage() {
       {active === 'account' && <AccountSection />}
       {active === 'history' && <HistorySection />}
       {active === 'calculation' && <CalculationSection />}
+      {active === 'goals' && <GoalsSection />}
+      {active === 'export' && <ExportSection />}
+      {active === 'household' && <HouseholdSection />}
       {active === 'backup' && <BackupSection />}
       {active === 'legal' && <LegalSection />}
 

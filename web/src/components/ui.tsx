@@ -60,8 +60,10 @@ export function Field({
   );
 }
 
+// text-base (16px), not text-sm: iOS Safari zooms the whole page in on focus
+// whenever the focused field computes to under 16px.
 const inputClass =
-  'w-full rounded-xl border border-ink-700 bg-ink-900 px-3.5 py-2.5 text-sm text-ink-100 ' +
+  'w-full rounded-xl border border-ink-700 bg-ink-900 px-3.5 py-2.5 text-base text-ink-100 ' +
   'placeholder:text-ink-600 focus:border-gold-500 focus:outline-none min-h-11';
 
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {

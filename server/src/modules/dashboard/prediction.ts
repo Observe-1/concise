@@ -23,6 +23,7 @@ interface AssetRow {
   quantity: number | null;
   country: string | null;
   manufacture_date: string | null;
+  exclude_from_totals: number;
 }
 
 interface ScheduleRow {
@@ -33,11 +34,12 @@ interface ScheduleRow {
   percent: number | null;
   cadence: Cadence;
   next_run_on: string;
+  end_date: string | null;
 }
 
 /** A holding plus its current (latest, as of today) value, ready to project. */
 interface AssetState { row: AssetRow; current: number; }
-interface LiabilityState { id: number; category: string; current: number; }
+interface LiabilityState { id: number; category: string; current: number; excludeFromTotals: boolean; }
 
 /**
  * Average annualised return for a symbol over the last ~10 years (or the
@@ -78,6 +80,10 @@ function projectManual(
     let c = s.next_run_on;
     while (c <= today) c = advanceCadence(c, s.cadence); // skip overdue (the live engine applies those)
     while (c <= last) {
+      // Mirrors the live engine's own cutoff — a schedule past its end date
+      // generates no further occurrences (including none at all here, if it
+      // had already expired by `today`).
+      if (s.end_date && c > s.end_date) break;
       occ.push({ date: c, type: s.amount_type, amount: s.amount_minor, percent: s.percent });
       c = advanceCadence(c, s.cadence);
     }
@@ -132,17 +138,17 @@ function buildProjector(ctx: AppContext, userId: number, today: string) {
 
   const assetRows = ctx.db
     .prepare(
-      `SELECT id, category, valuation_mode, market_symbol, quantity, country, manufacture_date
+      `SELECT id, category, valuation_mode, market_symbol, quantity, country, manufacture_date, exclude_from_totals
        FROM assets WHERE user_id = ?`,
     )
     .all(userId) as unknown as AssetRow[];
   const liabilityRows = ctx.db
-    .prepare('SELECT id, category FROM liabilities WHERE user_id = ?')
-    .all(userId) as { id: number; category: string }[];
+    .prepare('SELECT id, category, exclude_from_totals FROM liabilities WHERE user_id = ?')
+    .all(userId) as { id: number; category: string; exclude_from_totals: number }[];
 
   const schedules = ctx.db
     .prepare(
-      `SELECT asset_id, liability_id, amount_type, amount_minor, percent, cadence, next_run_on
+      `SELECT asset_id, liability_id, amount_type, amount_minor, percent, cadence, next_run_on, end_date
        FROM recurring_transactions WHERE user_id = ? AND active = 1`,
     )
     .all(userId) as unknown as ScheduleRow[];
@@ -161,6 +167,7 @@ function buildProjector(ctx: AppContext, userId: number, today: string) {
     id: l.id,
     category: l.category,
     current: (liabValueAt.get(l.id, cutoff) as { value_minor: number } | undefined)?.value_minor ?? 0,
+    excludeFromTotals: l.exclude_from_totals === 1,
   }));
 
   const returnCache = new Map<string, number>();
@@ -243,8 +250,14 @@ export function buildPrediction(ctx: AppContext, userId: number, range: HistoryR
   // --- projected future (today+1 .. futureEnd) ---
   const proj = buildProjector(ctx, userId, today);
   const dates = futureDates(today, futureEnd);
-  const assetSeries = proj.assets.map((st) => proj.projectAssetSeries(st, dates));
-  const liabilitySeries = proj.liabilities.map((st) => proj.projectLiabilitySeries(st, dates));
+  // Excluded holdings still project (their own line graph stays correct) but
+  // are left out of this graph's totals, same as the live snapshot history.
+  const assetSeries = proj.assets
+    .filter((st) => !st.row.exclude_from_totals)
+    .map((st) => proj.projectAssetSeries(st, dates));
+  const liabilitySeries = proj.liabilities
+    .filter((st) => !st.excludeFromTotals)
+    .map((st) => proj.projectLiabilitySeries(st, dates));
 
   dates.forEach((date, i) => {
     let assetsMinor = 0;
@@ -283,13 +296,16 @@ export function projectPortfolioAt(
   const dates = futureDates(today, target);
   const last = (series: number[], current: number) =>
     (dates.length ? series[series.length - 1]! : current);
+  // Shared by /summary, /changes and composition.ts's prediction branches —
+  // all three just sum/categorize this, so excluded holdings are dropped here
+  // once rather than in every caller.
   return {
-    assets: proj.assets.map((st) => ({
+    assets: proj.assets.filter((st) => !st.row.exclude_from_totals).map((st) => ({
       category: st.row.category,
       currentMinor: st.current,
       projectedMinor: last(proj.projectAssetSeries(st, dates), st.current),
     })),
-    liabilities: proj.liabilities.map((st) => ({
+    liabilities: proj.liabilities.filter((st) => !st.excludeFromTotals).map((st) => ({
       category: st.category,
       currentMinor: st.current,
       projectedMinor: last(proj.projectLiabilitySeries(st, dates), st.current),

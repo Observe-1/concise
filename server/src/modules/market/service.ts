@@ -1,10 +1,58 @@
 import type { AppContext } from '../../context.js';
+import type { SymbolLookupDto } from '../../types/api.js';
 import { withTransaction } from '../../db/connection.js';
 import { todayISO } from '../../lib/dates.js';
 import { convertMinor } from '../../lib/fx.js';
 import { upsertSnapshot } from '../snapshots/service.js';
 import { PROPERTY_COUNTRIES, propertyValueMinor, vehicleValueMinor } from './models.js';
 import { holdingValueMinor } from './provider.js';
+
+interface DiscoveredInstrumentRow {
+  symbol: string;
+  isin: string;
+  name: string;
+  currency: string;
+  exchange: string;
+}
+
+/**
+ * Resolve an ISIN to its instrument, checking the shared `discovered_instruments`
+ * cache first so a fund only ever costs one provider round-trip across all
+ * users. On a fresh resolution, persists the result and registers it with the
+ * price provider so it's immediately priceable.
+ */
+export async function resolveIsinCached(ctx: AppContext, isin: string): Promise<SymbolLookupDto | null> {
+  const cached = ctx.db
+    .prepare('SELECT * FROM discovered_instruments WHERE isin = ?')
+    .get(isin) as DiscoveredInstrumentRow | undefined;
+  if (cached) {
+    ctx.prices.registerInstrument(cached.symbol, {
+      name: cached.name, currency: cached.currency, exchange: cached.exchange,
+    });
+    return { symbol: cached.symbol, name: cached.name, currency: cached.currency, exchange: cached.exchange };
+  }
+  const resolved = await ctx.prices.resolveIsin(isin);
+  if (!resolved) return null;
+  ctx.db
+    .prepare(
+      `INSERT INTO discovered_instruments (symbol, isin, name, currency, exchange) VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(symbol) DO NOTHING`,
+    )
+    .run(resolved.symbol, isin, resolved.name, resolved.currency, resolved.exchange);
+  ctx.prices.registerInstrument(resolved.symbol, {
+    name: resolved.name, currency: resolved.currency, exchange: resolved.exchange,
+  });
+  return resolved;
+}
+
+/** Restore the price provider's in-memory registry of previously-discovered
+ *  (ISIN-resolved) instruments after a restart. Call once at startup. */
+export function hydrateDiscoveredInstruments(ctx: AppContext): void {
+  const rows = ctx.db.prepare('SELECT * FROM discovered_instruments').all() as unknown as DiscoveredInstrumentRow[];
+  for (const row of rows) {
+    ctx.prices.registerInstrument(row.symbol, { name: row.name, currency: row.currency, exchange: row.exchange });
+  }
+}
 
 interface AutoValuedRow {
   id: number;
@@ -37,6 +85,16 @@ export async function refreshMarketValuations(ctx: AppContext, userId?: number):
   // reads from a warm cache. Must happen outside the transaction.
   const symbols = rows.filter((r) => r.valuation_mode === 'market' && r.market_symbol).map((r) => r.market_symbol!);
   if (symbols.length > 0) await ctx.prices.prime(symbols, today, today);
+
+  // Likewise prime live FX rates for every currency the conversions below
+  // might need: each instrument's quote currency, plus every affected user's
+  // display currency.
+  const instrumentCurrencies = symbols.map((s) => ctx.prices.instrumentCurrency(s));
+  const affectedUserIds = [...new Set(rows.map((r) => r.user_id))];
+  const userCurrencyRows = ctx.db
+    .prepare(`SELECT DISTINCT currency FROM settings WHERE user_id IN (${affectedUserIds.map(() => '?').join(',')})`)
+    .all(...affectedUserIds) as { currency: string }[];
+  await ctx.prices.primeFxRates([...instrumentCurrencies, ...userCurrencyRows.map((r) => r.currency)]);
 
   let updated = 0;
   const touchedUsers = new Set<number>();
@@ -86,6 +144,7 @@ export async function refreshMarketValuations(ctx: AppContext, userId?: number):
               holdingValueMinor(price, row.quantity!),
               ctx.prices.instrumentCurrency(row.market_symbol!),
               userCcy(row.user_id),
+              (c) => ctx.prices.fxRateLive(c),
             );
       }
       const base = (latestManual.get(row.id) ?? earliest.get(row.id)) as

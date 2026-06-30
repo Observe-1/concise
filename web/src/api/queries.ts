@@ -2,9 +2,9 @@ import {
   keepPreviousData, useMutation, useQuery, useQueryClient,
 } from '@tanstack/react-query';
 import type {
-  BackupOverviewDto, BackupRunResultDto, BackupSettingsDto,
-  DashboardChangesDto, DashboardSummaryDto, HistoryDto, HistoryEntryDto, HistoryRange,
-  HoldingChangeDto, HoldingCompositionDto, HoldingDetailDto, HoldingDto, LegacySnapshotDto,
+  BackupOverviewDto, BackupRunResultDto, BackupSettingsDto, CombinedSummaryDto, CompareDto,
+  DashboardChangesDto, DashboardSummaryDto, GoalDto, HistoryDto, HistoryEntryDto, HistoryRange,
+  HoldingChangeDto, HoldingCompositionDto, HoldingDetailDto, HoldingDto, HouseholdStatusDto, LegacySnapshotDto,
   PredictionDto, PropertyCountryDto,
   RecurringDto, SessionUser, SettingsDto, SymbolLookupDto, ValuationMode,
 } from '@api';
@@ -127,6 +127,16 @@ export function useHistory(range: HistoryRange, trendWindow?: number, real = fal
   });
 }
 
+/** Per-holding and totals delta between two dates (the dashboard's "Compare" mode). */
+export function useCompare(from: string | null, to: string | null) {
+  return useQuery({
+    queryKey: ['dashboard', 'compare', from, to],
+    queryFn: () => api<CompareDto>(`/api/dashboard/compare?from=${from}&to=${to}`),
+    enabled: Boolean(from && to),
+    placeholderData: keepPreviousData,
+  });
+}
+
 // ---------- holdings (assets / liabilities) ----------
 
 export function useHoldings(kind: HoldingKind, asOf?: string | null) {
@@ -231,6 +241,7 @@ export interface HoldingInput {
   presentValueMinor?: number;
   /** Liabilities only: auto-creates a yearly percent interest schedule. */
   interestRatePct?: number;
+  excludeFromTotals?: boolean;
 }
 
 export function useCreateHolding(kind: HoldingKind) {
@@ -285,6 +296,7 @@ export interface RecurringInput {
   percent?: number;
   cadence: string;
   nextRunOn: string;
+  endDate?: string | null;
 }
 
 export function useCreateRecurring() {
@@ -309,6 +321,113 @@ export function useDeleteRecurring() {
   return useMutation({
     mutationFn: (id: number) => api<void>(`/api/recurring/${id}`, { method: 'DELETE' }),
     onSuccess: invalidate,
+  });
+}
+
+// ---------- goals ----------
+
+export function useGoals() {
+  return useQuery({
+    queryKey: ['goals'],
+    queryFn: () => api<GoalDto[]>('/api/goals'),
+  });
+}
+
+export interface GoalInput {
+  name: string;
+  goalType?: 'net_worth' | 'liability_payoff';
+  targetMinor?: number;
+  liabilityId?: number;
+  targetDate?: string | null;
+  notes?: string | null;
+}
+
+export function useCreateGoal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: GoalInput) => api<GoalDto>('/api/goals', { method: 'POST', body: input }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['goals'] }),
+  });
+}
+
+export function useUpdateGoal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...patch }: Partial<GoalInput> & { id: number }) =>
+      api<GoalDto>(`/api/goals/${id}`, { method: 'PATCH', body: patch }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['goals'] }),
+  });
+}
+
+export function useDeleteGoal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api<void>(`/api/goals/${id}`, { method: 'DELETE' }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['goals'] }),
+  });
+}
+
+// ---------- household ----------
+
+export function useHouseholdStatus() {
+  return useQuery({
+    queryKey: ['household', 'status'],
+    queryFn: () => api<HouseholdStatusDto>('/api/household/status'),
+  });
+}
+
+function useInvalidateHousehold() {
+  const qc = useQueryClient();
+  return () => void qc.invalidateQueries({ queryKey: ['household'] });
+}
+
+export function useInviteHousehold() {
+  const invalidate = useInvalidateHousehold();
+  return useMutation({
+    mutationFn: (username: string) =>
+      api<HouseholdStatusDto>('/api/household/invite', { method: 'POST', body: { username } }),
+    onSuccess: invalidate,
+  });
+}
+
+export function useAcceptHousehold() {
+  const invalidate = useInvalidateHousehold();
+  return useMutation({
+    mutationFn: (id: number) => api<HouseholdStatusDto>(`/api/household/${id}/accept`, { method: 'POST' }),
+    onSuccess: invalidate,
+  });
+}
+
+export function useDeclineHousehold() {
+  const invalidate = useInvalidateHousehold();
+  return useMutation({
+    mutationFn: (id: number) => api<void>(`/api/household/${id}/decline`, { method: 'POST' }),
+    onSuccess: invalidate,
+  });
+}
+
+export function useUnlinkHousehold() {
+  const invalidate = useInvalidateHousehold();
+  return useMutation({
+    mutationFn: (id: number) => api<void>(`/api/household/${id}`, { method: 'DELETE' }),
+    onSuccess: invalidate,
+  });
+}
+
+export function useCombinedSummary(enabled: boolean) {
+  return useQuery({
+    queryKey: ['household', 'combined', 'summary'],
+    queryFn: () => api<CombinedSummaryDto>('/api/household/combined/summary'),
+    enabled,
+  });
+}
+
+export function useCombinedHistory(range: HistoryRange, enabled: boolean) {
+  return useQuery({
+    queryKey: ['household', 'combined', 'history', range],
+    queryFn: () => api<HistoryDto>(`/api/household/combined/history?range=${range}`),
+    enabled,
+    placeholderData: keepPreviousData,
   });
 }
 

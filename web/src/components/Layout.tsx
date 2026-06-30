@@ -29,7 +29,7 @@ export function Layout() {
         <button
           type="button"
           onClick={() => setAsOf(null)}
-          className="tabular fixed bottom-20 right-4 z-50 rounded-full bg-loss-500 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-loss-500/30 transition-colors hover:bg-loss-400 md:bottom-6"
+          className="tabular fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] right-4 z-50 rounded-full bg-loss-500 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-loss-500/30 transition-colors hover:bg-loss-400 md:bottom-6"
         >
           ⟲ Exit view as · {asOf}
         </button>
@@ -54,7 +54,7 @@ export function Layout() {
         ))}
       </nav>
 
-      <main className="flex-1 px-4 pb-24 pt-5 md:px-8 md:pb-8">
+      <main className="flex-1 px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-[max(1.25rem,env(safe-area-inset-top))] md:px-8 md:pb-8">
         <Outlet />
       </main>
 

@@ -10,6 +10,7 @@ import { migrate } from '../src/db/migrate.js';
 import { createLogger, type Logger } from '../src/lib/logger.js';
 import { hashPassword } from '../src/lib/passwords.js';
 import { SimulatedPriceProvider } from '../src/modules/market/provider.js';
+import { hydrateDiscoveredInstruments } from '../src/modules/market/service.js';
 
 export const TEST_HOST = 'concise.test';
 export const FIXED_NOW = '2026-06-11T12:00:00.000Z';
@@ -30,6 +31,26 @@ export function makeTestWorld(
     /** Inject a capturing logger to assert on emitted log lines; defaults to a
      *  silent one so normal test runs stay quiet. */
     logger?: Logger;
+    /**
+     * Override the session TTL used to compute `expires_at` (app-side) and
+     * the cookie's `Expires` attribute (HTTP-client-side). Defaults to ~10
+     * years: the cookie's `Expires` is calculated from `FIXED_NOW`, a fixed
+     * point in the past, but supertest's cookie jar evaluates `Expires`
+     * against the REAL wall clock — with the production default (14 days),
+     * once enough real calendar time passes since `FIXED_NOW` the jar starts
+     * silently dropping "expired" cookies, failing every test that makes a
+     * second request with a logged-in agent. A long default sidesteps that;
+     * pass a short value (as the "expires after the TTL" test does) to
+     * exercise real expiry behaviour deliberately.
+     */
+    sessionTtlHours?: number;
+    /**
+     * Forced to false by default: tests run over plain HTTP via supertest, and
+     * cookieSecure also gates helmet's HSTS/upgrade-insecure-requests headers
+     * (see app.ts) — those assume HTTPS and break asset loading otherwise.
+     * Pass true to test the HTTPS-deployment behaviour specifically.
+     */
+    cookieSecure?: boolean;
   } = {},
 ): TestWorld {
   let current = new Date(FIXED_NOW);
@@ -39,13 +60,14 @@ export function makeTestWorld(
   const config = {
     ...loadConfig({}),
     env: opts.env ?? 'test',
-    cookieSecure: false,
+    cookieSecure: opts.cookieSecure ?? false,
     dbPath,
     backupDir: opts.backupDir
       ?? path.join(dbPath === ':memory:' ? '.' : path.dirname(dbPath), 'backups'),
     webDistDir: '/nonexistent',
     // 'development' worlds exercise real limits (rate-limit tests)
     loginRateLimit: opts.env === 'development' ? 10 : 1000,
+    sessionTtlHours: opts.sessionTtlHours ?? 24 * 365 * 10,
   };
   const ctx: AppContext = {
     db,
@@ -54,6 +76,7 @@ export function makeTestWorld(
     prices: new SimulatedPriceProvider(),
     log: opts.logger ?? createLogger(config),
   };
+  hydrateDiscoveredInstruments(ctx);
   return {
     app: buildApp(ctx),
     ctx,

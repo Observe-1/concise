@@ -58,6 +58,41 @@ describe('SimulatedPriceProvider', () => {
     expect(exchanges.has('NASDAQ')).toBe(true);
     expect(list.some((i) => i.symbol === 'VUAG')).toBe(true);
   });
+
+  it('resolves a well-formed ISIN to a deterministic synthetic fund', async () => {
+    const a = await provider.resolveIsin('GB00BD3RZ582');
+    const b = await provider.resolveIsin('gb00bd3rz582');
+    expect(a).toEqual(b);
+    expect(a?.currency).toBe('GBP'); // GB prefix
+    expect(a?.symbol).toMatch(/^SIM\d+$/);
+  });
+
+  it('guesses currency from the ISIN country prefix', async () => {
+    expect((await provider.resolveIsin('US0378331005'))?.currency).toBe('USD');
+    expect((await provider.resolveIsin('DE0005140008'))?.currency).toBe('EUR');
+  });
+
+  it('rejects a malformed ISIN', async () => {
+    expect(await provider.resolveIsin('not-an-isin')).toBeNull();
+    expect(await provider.resolveIsin('GB123')).toBeNull();
+  });
+
+  it('makes a registered instrument resolvable via lookupSymbol/instrumentCurrency/listInstruments', () => {
+    provider.registerInstrument('0P00018XAR.L', {
+      name: 'Vanguard FTSE Global All Cp Idx £ Acc', currency: 'GBP', exchange: 'London',
+    });
+    expect(provider.lookupSymbol('0p00018xar.l')).toEqual({
+      symbol: '0P00018XAR.L', name: 'Vanguard FTSE Global All Cp Idx £ Acc', currency: 'GBP', exchange: 'London',
+    });
+    expect(provider.instrumentCurrency('0P00018XAR.L')).toBe('GBP');
+    expect(provider.listInstruments().some((i) => i.symbol === '0P00018XAR.L')).toBe(true);
+  });
+
+  it('has no live FX source — primeFxRates is a no-op and fxRateLive is always null', async () => {
+    await expect(provider.primeFxRates(['GBP', 'EUR'])).resolves.toBeUndefined();
+    expect(provider.fxRateLive('GBP')).toBeNull();
+    expect(provider.fxRateLive('USD')).toBeNull();
+  });
 });
 
 describe('computeTrend', () => {

@@ -8,6 +8,7 @@ import { startScheduler } from './jobs/scheduler.js';
 import { createLogger } from './lib/logger.js';
 import { checkBackupDir } from './modules/backup/service.js';
 import { RealPriceProvider, SimulatedPriceProvider } from './modules/market/provider.js';
+import { hydrateDiscoveredInstruments } from './modules/market/service.js';
 
 const config = loadConfig();
 const log = createLogger(config);
@@ -27,6 +28,7 @@ const ctx: AppContext = {
   log,
 };
 log.info({ priceProvider: config.priceProvider }, 'price provider selected');
+hydrateDiscoveredInstruments(ctx); // restore ISIN-resolved funds discovered before a restart
 
 // Surface a misconfigured/unwritable backup directory loudly at startup rather
 // than letting every backup fail silently in the background (see BACKUP.md).

@@ -51,6 +51,7 @@ export function RecurringPage() {
                   </span>
                   <span className="block truncate text-xs text-ink-400">
                     {CADENCE_LABELS[r.cadence]} · {r.targetName} · next {r.nextRunOn}
+                    {r.endDate ? ` · ends ${r.endDate}` : ''}
                   </span>
                 </button>
                 <span className={`tabular shrink-0 text-sm font-semibold ${signedAmount(r) >= 0 ? 'text-gain-400' : 'text-loss-400'}`}>
@@ -107,10 +108,12 @@ function RecurringForm({ existing, onClose }: { existing?: RecurringDto; onClose
   );
   const [cadence, setCadence] = useState(existing?.cadence ?? 'monthly');
   const [nextRunOn, setNextRunOn] = useState(existing?.nextRunOn ?? defaultNextRun());
+  const [endDate, setEndDate] = useState(existing?.endDate ?? '');
   const [formError, setFormError] = useState<string | null>(null);
 
   const busy = create.isPending || update.isPending || remove.isPending;
   const targets = (targetType === 'asset' ? assets.data : liabilities.data) ?? [];
+  const isMarketTarget = targets.find((t) => String(t.id) === targetId)?.valuationMode === 'market';
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -131,12 +134,16 @@ function RecurringForm({ existing, onClose }: { existing?: RecurringDto; onClose
       }
       movement = { amountMinor: direction === 'subtract' ? -magnitude : magnitude };
     }
+    if (endDate && endDate < nextRunOn) {
+      setFormError('End date cannot be before the next run date.');
+      return;
+    }
     const onError = (err: unknown) =>
       setFormError(err instanceof Error ? err.message : 'Something went wrong');
 
     if (existing) {
       update.mutate(
-        { id: existing.id, name, ...movement, cadence, nextRunOn },
+        { id: existing.id, name, ...movement, cadence, nextRunOn, endDate: endDate || null },
         { onSuccess: onClose, onError },
       );
     } else {
@@ -145,7 +152,7 @@ function RecurringForm({ existing, onClose }: { existing?: RecurringDto; onClose
         return;
       }
       create.mutate(
-        { name, targetType, targetId: Number(targetId), ...movement, cadence, nextRunOn },
+        { name, targetType, targetId: Number(targetId), ...movement, cadence, nextRunOn, endDate: endDate || null },
         { onSuccess: onClose, onError },
       );
     }
@@ -190,7 +197,15 @@ function RecurringForm({ existing, onClose }: { existing?: RecurringDto; onClose
 
         <Field
           label="Amount type"
-          hint={amountType === 'percent' ? "Applied to the target's value at each occurrence — compounds over time." : undefined}
+          hint={
+            isMarketTarget
+              ? amountType === 'percent'
+                ? 'Grows or shrinks the share count directly each occurrence, regardless of price.'
+                : 'Buys or sells that much of the holding at the price on each occurrence date.'
+              : amountType === 'percent'
+                ? "Applied to the target's value at each occurrence — compounds over time."
+                : undefined
+          }
         >
           {(id) => (
             <Select id={id} value={amountType} onChange={(e) => setAmountType(e.target.value as 'fixed' | 'percent')}>
@@ -233,6 +248,12 @@ function RecurringForm({ existing, onClose }: { existing?: RecurringDto; onClose
             )}
           </Field>
         </div>
+
+        <Field label="End date" hint="Optional — stops the schedule for good once it's passed, e.g. a promo rate.">
+          {(id) => (
+            <Input id={id} type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+          )}
+        </Field>
 
         {formError ? <ErrorNote message={formError} /> : null}
 

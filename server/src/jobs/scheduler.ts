@@ -25,7 +25,7 @@ export function startScheduler(ctx: AppContext): { stop: () => void; firstTick: 
 
   const tick = async (): Promise<void> => {
     try {
-      const applied = runDueRecurring(ctx);
+      const applied = await runDueRecurring(ctx);
       if (applied > 0) ctx.log.info({ applied }, 'applied recurring occurrences');
 
       const today = todayISO(ctx.now);

@@ -24,8 +24,9 @@ const updateSchema = z.object({
  * graph is preserved — only the units change. Runs in one transaction with the
  * currency update so a failure can't leave values half-converted.
  */
-function changeCurrency(ctx: AppContext, userId: number, next: string): void {
+async function changeCurrency(ctx: AppContext, userId: number, next: string): Promise<void> {
   const prev = getSettings(ctx, userId).currency;
+  if (next !== prev) await ctx.prices.primeFxRates([prev, next]);
   withTransaction(ctx.db, () => {
     ctx.db
       .prepare(
@@ -34,7 +35,8 @@ function changeCurrency(ctx: AppContext, userId: number, next: string): void {
       )
       .run(userId, next);
     if (next === prev) return;
-    const convert = (v: number) => convertMinor(v, prev, next);
+    const liveRate = (c: string) => ctx.prices.fxRateLive(c);
+    const convert = (v: number) => convertMinor(v, prev, next, liveRate);
 
     const assetVals = ctx.db
       .prepare(
@@ -99,14 +101,14 @@ export function settingsRoutes(ctx: AppContext): Router {
     res.json(getSettings(ctx, req.user!.id));
   });
 
-  router.patch('/', (req, res) => {
+  router.patch('/', async (req, res) => {
     const patch = parseBody(updateSchema, req.body);
     const userId = req.user!.id;
     if (patch.displayName !== undefined) {
       ctx.db.prepare('UPDATE users SET display_name = ? WHERE id = ?').run(patch.displayName, userId);
     }
     if (patch.currency !== undefined) {
-      changeCurrency(ctx, userId, patch.currency.toUpperCase());
+      await changeCurrency(ctx, userId, patch.currency.toUpperCase());
     }
     if (patch.birthYear !== undefined) {
       ctx.db
