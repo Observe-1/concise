@@ -21,12 +21,15 @@ discussion for a suspected vulnerability.**
   privately instead of filing publicly.
 - Include: affected version/commit, a description of the issue and its impact, and
   the minimal steps (or a small proof of concept) needed to reproduce it.
-- Please give a reasonable window to investigate and ship a fix before any public
-  disclosure. We aim to acknowledge a report within a few days.
+- Please give a reasonable window to investigate before any public disclosure.
 
-Because every instance is self-hosted, **the most important mitigation is to run
-a recent version and apply updates** — there is no central service to patch on
-your behalf.
+**No service-level promises.** Concise is a small, self-hosted project maintained
+on a best-endeavours basis. We make **no commitment** to acknowledge, triage,
+prioritise or fix any reported issue, nor to do so within any particular
+timeframe. Reports are handled as time allows, fixes are not guaranteed, and
+there is no warranty (see the licence). Because every instance is self-hosted,
+**the most important mitigation is to run a recent version and apply updates** —
+there is no central service to patch on your behalf.
 
 ## Supported versions
 
