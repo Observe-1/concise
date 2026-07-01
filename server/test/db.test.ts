@@ -98,10 +98,11 @@ describe('seed', () => {
     expect(user).toBeDefined();
 
     const counts = (sql: string) => (db.prepare(sql).get() as { n: number }).n;
-    expect(counts('SELECT COUNT(*) AS n FROM assets')).toBe(8);
-    expect(counts('SELECT COUNT(*) AS n FROM liabilities')).toBe(3);
-    expect(counts('SELECT COUNT(*) AS n FROM recurring_transactions')).toBe(3);
-    expect(counts('SELECT COUNT(*) AS n FROM snapshots')).toBe(2191); // 6 years daily
+    expect(counts('SELECT COUNT(*) AS n FROM assets')).toBe(17);
+    expect(counts('SELECT COUNT(*) AS n FROM liabilities')).toBe(8);
+    expect(counts('SELECT COUNT(*) AS n FROM recurring_transactions')).toBe(10);
+    expect(counts('SELECT COUNT(*) AS n FROM goals')).toBe(4);
+    expect(counts('SELECT COUNT(*) AS n FROM snapshots')).toBe(16437); // 45 years daily
     expect(counts('SELECT COUNT(*) AS n FROM asset_valuations')).toBeGreaterThan(500);
     // precious metals entry with a metal sub-selection
     const gold = db.prepare("SELECT metal FROM assets WHERE category = 'precious_metals'").get() as
@@ -115,6 +116,8 @@ describe('seed', () => {
     expect(snap.net_worth_minor).toBe(snap.assets_minor - snap.liabilities_minor);
     expect(snap.assets_minor).toBeGreaterThan(0);
     expect(snap.liabilities_minor).toBeGreaterThan(0);
+    // The demo user ends up substantially wealthy: net worth over £6M.
+    expect(snap.net_worth_minor).toBeGreaterThan(600_000_000);
 
     // Recurring schedules start in the future (seeded values are current).
     const overdue = db
@@ -131,7 +134,7 @@ describe('seed', () => {
     const n = (db.prepare("SELECT COUNT(*) AS n FROM users WHERE username = 'demo'").get() as { n: number }).n;
     expect(n).toBe(1);
     const assets = (db.prepare('SELECT COUNT(*) AS n FROM assets').get() as { n: number }).n;
-    expect(assets).toBe(8);
+    expect(assets).toBe(17);
   });
 });
 

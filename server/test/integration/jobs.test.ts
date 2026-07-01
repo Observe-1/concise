@@ -58,6 +58,6 @@ describe('scheduler', () => {
          WHERE source = 'market' AND recorded_at >= '2026-06-11T00:00:00.000Z'`,
       )
       .get() as { n: number };
-    expect(marketToday.n).toBe(3); // VWRL + BTC + XAU
+    expect(marketToday.n).toBe(7); // 4 market + 2 property-index + 1 depreciating vehicle
   });
 });

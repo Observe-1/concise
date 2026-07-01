@@ -180,6 +180,18 @@ export function NetWorthChart({
     }
     return best;
   }, [data, nowLine]);
+  // A hovered flag can unmount out from under the cursor — a range switch,
+  // toggling prediction off, or a background refetch all change which lines
+  // render — and React does NOT fire onMouseLeave on unmount. Without this the
+  // grace timer never runs, so the card sticks and (worse) the suppress ref
+  // stays true, killing the general tooltip for the life of the chart. The set
+  // of flags is exactly (goalLines, nowMarker); whenever it changes, drop any
+  // active hover so a vanished flag can't hold that state hostage.
+  useEffect(() => {
+    clearHideTimer();
+    flagSuppressRef.current = false;
+    setHoveredFlag(null);
+  }, [goalLines, nowMarker, clearHideTimer]);
   // Detail panels (assets / liabilities / net worth, today vs predicted) for
   // every flag, keyed by id. Today's portfolio comes from the projection's
   // boundary point; each goal's predicted figures from its ETA point. Both of a
@@ -188,17 +200,18 @@ export function NetWorthChart({
     const panels = new Map<string, FlagPanel>();
     const todayPoint = nowMarker ? data.find((p) => p.date === nowMarker) : undefined;
     if (nowMarker) panels.set('now', buildNowPanel(todayPoint, currency));
-    const last = data[data.length - 1]?.date;
+    // Predicted figures are read at the *same* point the green "achieved" line
+    // sits on, so the card's numbers land exactly on the objective (rather than
+    // at the server's rough ETA, which the plotted projection needn't match).
+    const achievedByGoal = new Map<number, string>();
+    for (const m of goalLines) if (m.kind === 'achieved') achievedByGoal.set(m.goal.id, m.x);
     for (const marker of goalLines) {
       const key = `goal-${marker.goal.id}`;
       if (panels.has(key)) continue;
       const { goal } = marker;
-      // Predicted figures are read at the projected ETA (the achievement
-      // point); omitted when the goal isn't reached within the window.
-      const etaPoint = goal.etaISO && last && goal.etaISO <= last
-        ? data.find((p) => p.date >= goal.etaISO!)
-        : undefined;
-      panels.set(key, buildGoalPanel(goal, todayPoint, etaPoint, etaPoint?.date ?? null, currency));
+      const achievedX = achievedByGoal.get(goal.id);
+      const etaPoint = achievedX ? data.find((p) => p.date === achievedX) : undefined;
+      panels.set(key, buildGoalPanel(goal, todayPoint, etaPoint, achievedX ?? null, currency));
     }
     return panels;
   }, [data, goalLines, nowMarker, currency]);
