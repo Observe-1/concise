@@ -24,11 +24,11 @@ describe('dashboard API', () => {
     expect(categories).toContain('cash');
     expect(categories).toContain('property');
     const cash = assetsByCategory.find((c: { category: string }) => c.category === 'cash');
-    expect(cash.count).toBe(2);
+    expect(cash.count).toBe(3);
 
     const catSum = assetsByCategory.reduce((s: number, c: { totalMinor: number }) => s + c.totalMinor, 0);
     expect(catSum).toBe(assetsMinor);
-    expect(liabilitiesByCategory.length).toBe(3);
+    expect(liabilitiesByCategory.length).toBe(4);
   });
 
   it('summary matches todays snapshot', async () => {
@@ -68,9 +68,12 @@ describe('dashboard API', () => {
     expect(res.body.netWorthChangePct).toBe(expected);
     expect(typeof res.body.assetsChangePct).toBe('number');
 
-    // 20Y reaches before the seeded history → no base snapshot → N/A.
+    // 20Y is well within the 45-year demo history → a real percentage, measured
+    // from that day's snapshot (not N/A).
     const twenty = await agent.get('/api/dashboard/changes?range=20Y');
-    expect(twenty.body.netWorthChangePct).toBeNull();
+    const base20 = snap('2006-06-11').n;
+    const expected20 = base20 > 0 ? Math.round(((end - base20) / base20) * 100 * 100) / 100 : null;
+    expect(twenty.body.netWorthChangePct).toBe(expected20);
 
     // ALL measures from the earliest snapshot (null if its net worth was ≤ 0).
     const all = await agent.get('/api/dashboard/changes?range=ALL');
@@ -343,13 +346,13 @@ describe('market refresh', () => {
 
     const first = await csrf(agent.post('/api/market/refresh'));
     expect(first.status).toBe(200);
-    expect(first.body.updated).toBe(3); // VWRL + BTC + XAU
+    expect(first.body.updated).toBe(7); // 4 market + 2 property-index + 1 depreciating vehicle
 
     const second = await csrf(agent.post('/api/market/refresh'));
     expect(second.body.updated).toBe(0); // already priced today
 
     world.advanceDays(1);
     const nextDay = await csrf(agent.post('/api/market/refresh'));
-    expect(nextDay.body.updated).toBe(3);
+    expect(nextDay.body.updated).toBe(7);
   });
 });
